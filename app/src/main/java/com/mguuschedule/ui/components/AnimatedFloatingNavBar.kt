@@ -1,0 +1,139 @@
+package com.mguuschedule.ui.components
+
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import com.mguuschedule.ui.navigation.Screen
+import com.mguuschedule.util.HapticManager
+
+@Composable
+fun AnimatedFloatingNavBar(
+    items: List<Screen>,
+    currentRoute: String?,
+    onItemClick: (Screen) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val hapticManager = remember { HapticManager.getInstance(context) }
+    val density = LocalDensity.current
+
+    val itemWidths = remember { mutableStateListOf<Dp>().apply { repeat(items.size) { add(0.dp) } } }
+    val itemOffsets = remember { mutableStateListOf<Dp>().apply { repeat(items.size) { add(0.dp) } } }
+    
+    val selectedIndex = items.indexOfFirst { it.route == currentRoute }.coerceAtLeast(0)
+    
+    // Expressive Motion: Spring animation with LowBouncy and StiffnessLow
+    val pillAnimationSpec = spring<Dp>(
+        dampingRatio = Spring.DampingRatioLowBouncy,
+        stiffness = Spring.StiffnessLow
+    )
+
+    val pillOffset by animateDpAsState(
+        targetValue = itemOffsets.getOrElse(selectedIndex) { 0.dp },
+        animationSpec = pillAnimationSpec,
+        label = "pillOffset"
+    )
+    
+    val pillWidth by animateDpAsState(
+        targetValue = itemWidths.getOrElse(selectedIndex) { 0.dp },
+        animationSpec = pillAnimationSpec,
+        label = "pillWidth"
+    )
+
+    Surface(
+        modifier = modifier.height(56.dp),
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shadowElevation = 4.dp,
+        tonalElevation = 2.dp
+    ) {
+        Box(modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)) {
+            // Sliding Active Indicator Pill
+            Box(
+                modifier = Modifier
+                    .offset(x = pillOffset)
+                    .align(Alignment.CenterStart)
+                    .width(pillWidth)
+                    .fillMaxHeight()
+                    .background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
+            )
+
+            Row(
+                modifier = Modifier.fillMaxHeight(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                items.forEachIndexed { index, screen ->
+                    val isSelected = items.indexOfFirst { it.route == currentRoute } == index
+                    val contentColor by animateColorAsState(
+                        targetValue = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow),
+                        label = "contentColor"
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .onGloballyPositioned { coordinates ->
+                                with(density) {
+                                    itemWidths[index] = coordinates.size.width.toDp()
+                                    itemOffsets[index] = coordinates.positionInParent().x.toDp()
+                                }
+                            }
+                            .clip(CircleShape)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                if (!isSelected) {
+                                    hapticManager.lightTick()
+                                }
+                                onItemClick(screen)
+                            }
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = screen.icon,
+                            contentDescription = screen.title,
+                            tint = contentColor,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = screen.title,
+                            color = contentColor,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                        )
+                    }
+                    
+                    if (index < items.size - 1) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
+                }
+            }
+        }
+    }
+}
