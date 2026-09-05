@@ -10,12 +10,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.google.gson.Gson
-import com.google.gson.GsonBuilder
-import com.google.gson.reflect.TypeToken
 import com.mguuschedule.model.Lesson
-import com.mguuschedule.model.LessonEntity
-import com.mguuschedule.model.toEntity
 import com.mguuschedule.model.toLesson
 import com.mguuschedule.repository.AppDatabase
 import com.mguuschedule.repository.ScheduleRepository
@@ -24,7 +19,6 @@ import com.mguuschedule.repository.WeatherRepository
 import com.mguuschedule.util.AppLogger
 import com.mguuschedule.util.NetworkMonitor
 import com.mguuschedule.util.NotificationHelper
-import com.mguuschedule.util.ScheduleParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,10 +30,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.jsoup.Jsoup
-import java.net.URLEncoder
 import java.time.LocalDate
-import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
 sealed class ScheduleUiState {
@@ -102,15 +93,16 @@ class ScheduleViewModel(
 
     init {
         fetchWeather()
-        android.util.Log.e("SCHEDULE_TRACE", ">>> ViewModel инициализирована")
+        AppLogger.d("SCHEDULE_TRACE", ">>> ScheduleViewModel инициализирована")
         viewModelScope.launch(Dispatchers.IO) {
             val savedGroupId = appPrefs.getString("selected_group_id", null)
             if (savedGroupId != null) {
-                android.util.Log.e("SCHEDULE_TRACE", ">>> Найден сохраненный groupId: $savedGroupId, запуск loadSchedule()")
+                AppLogger.d("SCHEDULE_TRACE", ">>> Найден сохраненный groupId: $savedGroupId, запуск loadSchedule()")
                 withContext(Dispatchers.Main) {
                     loadSchedule(savedGroupId)
                 }
             }
+            scheduleUpcomingRemindersFromDb()
         }
     }
 
@@ -156,7 +148,7 @@ class ScheduleViewModel(
                 hasChangesInLastRefresh = if (lessonsForSelectedDay.value.isEmpty()) false else lessonsForSelectedDay.value != newLessons
                 
                 uiState = ScheduleUiState.Success(newLessons)
-                scheduleReminders(newLessons)
+                scheduleUpcomingRemindersFromDb()
                 AppLogger.d("SCHEDULE_TRACE", ">>> 3. Успешно загружено пар: ${newLessons.size}")
             }.onFailure { e ->
                 AppLogger.e("SCHEDULE_TRACE", "ОШИБКА ЗАГРУЗКИ: ${e.message}", e)
@@ -171,23 +163,24 @@ class ScheduleViewModel(
         }
     }
 
-    private fun loadFromCache(groupId: String) {
-        // Теперь загрузка из кэша происходит автоматически через Flow Room
-    }
-
-    private fun saveToCache(groupId: String, lessons: List<Lesson>) {
-        // Теперь сохранение в кэш происходит в репозитории при загрузке по сети
-    }
-
-    private fun scheduleReminders(lessons: List<Lesson>) {
+    fun scheduleUpcomingRemindersFromDb() {
         val enabled = appPrefs.getBoolean("reminders_enabled", true)
         if (!enabled) return
 
-        val minutesBefore = appPrefs.getInt("reminder_time", 15)
-        val today = LocalDate.now()
-        
-        lessons.filter { it.date.isEqual(today) }.forEach { lesson ->
-            NotificationHelper.scheduleClassReminder(getApplication(), lesson, minutesBefore)
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val todayStr = LocalDate.now().toString()
+                val upcomingEntities = scheduleRepository.getUpcomingLessons(todayStr)
+                val minutesBefore = appPrefs.getInt("reminder_time", 15)
+                val upcomingLessons = upcomingEntities.map { it.toLesson() }
+                
+                upcomingLessons.forEach { lesson ->
+                    NotificationHelper.scheduleClassReminder(getApplication(), lesson, minutesBefore)
+                }
+                AppLogger.d("SCHEDULE_TRACE", "Запланированы напоминания для ${upcomingLessons.size} будущих пар из БД")
+            } catch (e: Exception) {
+                AppLogger.e("SCHEDULE_TRACE", "Ошибка автопланирования напоминаний: ${e.message}", e)
+            }
         }
     }
 

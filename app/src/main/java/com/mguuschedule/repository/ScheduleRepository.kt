@@ -9,9 +9,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jsoup.Jsoup
 import java.net.URLEncoder
+import java.security.SecureRandom
+import java.security.cert.X509Certificate
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
 
 class ScheduleRepository(private val context: Context, private val dao: ScheduleDao) {
     private val prefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
@@ -29,13 +34,13 @@ class ScheduleRepository(private val context: Context, private val dao: Schedule
         AppLogger.d("PORTAL_PARSER", "Запрос к URL: $url")
         
         try {
-            val trustAllCerts = arrayOf<javax.net.ssl.TrustManager>(object : javax.net.ssl.X509TrustManager {
-                override fun checkClientTrusted(chain: Array<java.security.cert.X509Certificate>?, authType: String?) {}
-                override fun checkServerTrusted(chain: Array<java.security.cert.X509Certificate>?, authType: String?) {}
-                override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = arrayOf()
+            val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
+                override fun checkClientTrusted(chain: Array<X509Certificate>?, authType: String?) {}
+                override fun checkServerTrusted(chain: Array<X509Certificate>?, authType: String?) {}
+                override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
             })
-            val sslContext = javax.net.ssl.SSLContext.getInstance("SSL").apply {
-                init(null, trustAllCerts, java.security.SecureRandom())
+            val sslContext = SSLContext.getInstance("SSL").apply {
+                init(null, trustAllCerts, SecureRandom())
             }
 
             val doc = Jsoup.connect(url)
@@ -105,6 +110,10 @@ class ScheduleRepository(private val context: Context, private val dao: Schedule
 
     suspend fun getLessonsCount(): Int {
         return dao.getLessonsCount()
+    }
+
+    suspend fun getUpcomingLessons(startDate: String = LocalDate.now().toString()): List<LessonEntity> {
+        return dao.getUpcomingLessons(startDate)
     }
 
     fun getTotalLessonsCountFlow() = dao.getTotalLessonsCountFlow()

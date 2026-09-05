@@ -9,6 +9,9 @@ interface ScheduleDao {
     @Query("SELECT * FROM lessons WHERE date = :date")
     fun getLessonsForDate(date: String): Flow<List<LessonEntity>>
 
+    @Query("SELECT * FROM lessons WHERE date >= :startDate")
+    suspend fun getUpcomingLessons(startDate: String): List<LessonEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertLessons(lessons: List<LessonEntity>): List<Long>
 

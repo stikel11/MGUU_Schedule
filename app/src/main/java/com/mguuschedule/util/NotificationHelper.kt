@@ -1,6 +1,7 @@
 package com.mguuschedule.util
 
 import android.Manifest
+import android.R
 import android.app.AlarmManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -32,11 +33,15 @@ object NotificationHelper {
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
             notificationManager.createNotificationChannel(
-                NotificationChannel(CHANNEL_CLASS_REMINDERS, "Напоминания о парах", NotificationManager.IMPORTANCE_DEFAULT)
+                NotificationChannel(CHANNEL_CLASS_REMINDERS, "Напоминания о парах", NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = "Уведомления перед началом занятий"
+                    enableVibration(true)
+                }
             )
 
             notificationManager.createNotificationChannel(
                 NotificationChannel(CHANNEL_SCHEDULE_CHANGES, "Изменения в расписании", NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = "Уведомления о переносах и заменах"
                     enableVibration(true)
                 }
             )
@@ -49,14 +54,13 @@ object NotificationHelper {
             )
 
             notificationManager.createNotificationChannel(
-                NotificationChannel(CHANNEL_TEST, "Расписание (Тест)", NotificationManager.IMPORTANCE_HIGH)
+                NotificationChannel(CHANNEL_TEST, "Расписание (Тест)", NotificationManager.IMPORTANCE_HIGH).apply {
+                    enableVibration(true)
+                }
             )
         }
     }
 
-    /**
-     * Оптимизированное формирование Live Update для Android 16 (Status Bar Chip).
-     */
     fun showLiveUpdateNotification(
         context: Context,
         title: String,
@@ -66,12 +70,20 @@ object NotificationHelper {
         endTimeMillis: Long,
         notificationId: Int
     ) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ActivityCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            AppLogger.e("NOTIFICATION", "Нет разрешения POST_NOTIFICATIONS для Live Update!")
+            return
+        }
+
+        createNotificationChannels(context)
+
         val intent = Intent(context, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_IMMUTABLE)
 
         val builder = NotificationCompat.Builder(context, CHANNEL_LIVE_UPDATES)
-            // Используем системную иконку расписания (монохромная)
-            .setSmallIcon(android.R.drawable.ic_menu_today) 
+            .setSmallIcon(R.drawable.ic_menu_today)
             .setContentTitle(title)
             .setContentText(message)
             .setOngoing(true)
@@ -85,22 +97,17 @@ object NotificationHelper {
             .setChronometerCountDown(true)
             .setProgress(100, progressPercent, false)
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
-            .extend(NotificationCompat.WearableExtender())
 
-        // 1. Нативный метод для Android 16 (API 36+)
-        if (Build.VERSION.SDK_INT >= 36) {
-            // builder.setRequestPromotedOngoing(true) 
-            // Примечание: Пока используем extras, так как NotificationCompat может не иметь метода в старой версии библиотеки
-        }
-
-        // 2. Обратная совместимость и поддержка Pixel Status Bar Chip
         val extras = Bundle()
         extras.putBoolean("android.requestPromotedOngoing", true)
         extras.putCharSequence("android.shortCriticalText", shortText)
         builder.addExtras(extras)
 
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.notify(notificationId, builder.build())
+        try {
+            NotificationManagerCompat.from(context).notify(notificationId, builder.build())
+        } catch (e: Exception) {
+            AppLogger.e("NOTIFICATION", "Ошибка отправки Live Update: ${e.message}", e)
+        }
     }
 
     fun cancelNotification(context: Context, id: Int) {
@@ -109,21 +116,35 @@ object NotificationHelper {
     }
 
     fun showNotification(context: Context, channelId: String, title: String, message: String, notificationId: Int) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ActivityCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            AppLogger.e("NOTIFICATION", "Нет разрешения POST_NOTIFICATIONS для отправки уведомления!")
+            return
+        }
+
+        createNotificationChannels(context)
+
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
         val pendingIntent = PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_IMMUTABLE)
 
         val builder = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(R.drawable.ic_dialog_info)
             .setContentTitle(title)
             .setContentText(message)
-            .setPriority(if (channelId == CHANNEL_SCHEDULE_CHANGES || channelId == CHANNEL_TEST) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
 
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.notify(notificationId, builder.build())
+        try {
+            NotificationManagerCompat.from(context).notify(notificationId, builder.build())
+            AppLogger.d("NOTIFICATION", "Отправлено уведомление ID $notificationId ($title)")
+        } catch (e: Exception) {
+            AppLogger.e("NOTIFICATION", "Ошибка отправки уведомления: ${e.message}", e)
+        }
     }
 
     fun sendTestNotification(context: Context) {
@@ -131,7 +152,7 @@ object NotificationHelper {
             context,
             CHANNEL_TEST,
             "Тест уведомления",
-            "Через 15 мин пара в Ауд. 423",
+            "Через 15 мин пара в ${formatClassroom("423")}",
             777
         )
     }
@@ -144,47 +165,36 @@ object NotificationHelper {
             return
         }
 
-        val channelId = "debug_notifications_channel"
-        val manager = context.getSystemService(NotificationManager::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(channelId, "Тестовые уведомления", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "Канал для проверки пушей и живых обновлений"
-                enableVibration(true)
-            }
-            manager.createNotificationChannel(channel)
-        }
-
-        val notification = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("Тестовое напоминание о паре")
-            .setContentText("Через 15 мин: Теория организации (Ауд. 423)")
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setAutoCancel(true)
-            .build()
-
-        NotificationManagerCompat.from(context).notify(9991, notification)
+        showNotification(
+            context,
+            CHANNEL_TEST,
+            "Тестовое напоминание о паре",
+            "Через 15 мин: Теория организации (${formatClassroom("423")})",
+            9991
+        )
     }
 
     fun triggerLiveUpdateNotification(context: Context) {
-        val channelId = "live_updates_channel"
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(channelId, "Живые обновления", NotificationManager.IMPORTANCE_LOW).apply {
-                description = "Таймер пары в шторке и на экране блокировки"
-            }
-            context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ActivityCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            Toast.makeText(context, "Нет разрешения на уведомления (POST_NOTIFICATIONS)!", Toast.LENGTH_SHORT).show()
+            return
         }
 
+        val channelId = CHANNEL_LIVE_UPDATES
+        createNotificationChannels(context)
+
         val liveNotification = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(R.drawable.ic_dialog_info)
             .setContentTitle("Идет пара: Теория организации")
-            .setContentText("Ауд. 423 • До конца 45 мин")
+            .setContentText("${formatClassroom("423")} • До конца 45 мин")
             .setSubText("Пара 7")
-            .setOngoing(true) // Закрепленный статус
+            .setOngoing(true)
             .setOnlyAlertOnce(true)
             .addAction(
-                android.R.drawable.ic_menu_close_clear_cancel,
+                R.drawable.ic_menu_close_clear_cancel,
                 "Завершить",
-                // PendingIntent на отмену уведомления 9992
                 PendingIntent.getBroadcast(
                     context,
                     0,
@@ -194,15 +204,20 @@ object NotificationHelper {
             )
             .build()
 
-        NotificationManagerCompat.from(context).notify(9992, liveNotification)
+        try {
+            NotificationManagerCompat.from(context).notify(9992, liveNotification)
+        } catch (e: Exception) {
+            AppLogger.e("NOTIFICATION", "Ошибка запуска Live Update: ${e.message}", e)
+        }
     }
 
     fun scheduleClassReminder(context: Context, lesson: Lesson, minutesBefore: Int) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+        val roomFormatted = formatClassroom(lesson.room)
         val intent = Intent(context, ReminderReceiver::class.java).apply {
             putExtra("title", lesson.title)
             putExtra("time", lesson.startTime.toString())
-            putExtra("room", lesson.room)
+            putExtra("room", roomFormatted)
             putExtra("id", lesson.id.hashCode())
         }
 
@@ -220,14 +235,24 @@ object NotificationHelper {
             .toEpochMilli()
 
         if (triggerTime > System.currentTimeMillis()) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                if (alarmManager.canScheduleExactAlarms()) {
-                    alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    if (alarmManager.canScheduleExactAlarms()) {
+                        alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+                    } else {
+                        alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+                    }
                 } else {
-                    alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+                    alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
                 }
-            } else {
-                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+                AppLogger.d("REMINDER", "Запланировано напоминание для '${lesson.title}' на $lessonDateTime (за $minutesBefore мин)")
+            } catch (e: Exception) {
+                AppLogger.e("REMINDER", "Ошибка установки будильника для '${lesson.title}': ${e.message}", e)
+                try {
+                    alarmManager.set(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+                } catch (e2: Exception) {
+                    AppLogger.e("REMINDER", "Резервный AlarmManager завершился ошибкой: ${e2.message}", e2)
+                }
             }
         }
     }
