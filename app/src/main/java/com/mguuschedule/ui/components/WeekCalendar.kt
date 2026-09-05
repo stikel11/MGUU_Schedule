@@ -1,9 +1,7 @@
 package com.mguuschedule.ui.components
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -23,11 +21,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.mguuschedule.repository.WeatherData
-import com.mguuschedule.util.HapticManager
+import com.mguuschedule.ui.theme.AppMotionScheme
+import com.mguuschedule.util.SemanticHapticFeedback
+import com.mguuschedule.util.rememberHapticFeedback
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.Month
@@ -46,7 +45,6 @@ fun WeekCalendar(
     var showMonthPicker by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState()
     val locale = remember { Locale("ru") }
-    val context = LocalContext.current
     
     val baseMonday = remember {
         val now = LocalDate.now()
@@ -66,7 +64,7 @@ fun WeekCalendar(
         initialPage = initialPage,
         pageCount = { totalWeeks }
     )
-    val hapticManager = remember { HapticManager.getInstance(context) }
+    val haptic = rememberHapticFeedback()
 
     val visibleMonday = remember(pagerState.currentPage) {
         baseMonday.plusWeeks((pagerState.currentPage - centerPage).toLong())
@@ -100,7 +98,10 @@ fun WeekCalendar(
         ) {
             // Month Selector Button - M3 Expressive Pill Badge
             Surface(
-                onClick = { showMonthPicker = true },
+                onClick = { 
+                    haptic.lightTick()
+                    showMonthPicker = true 
+                },
                 shape = CircleShape,
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 modifier = Modifier.height(40.dp)
@@ -126,7 +127,7 @@ fun WeekCalendar(
             }
 
             weatherData?.let { data ->
-                WeatherChip(data = data, hapticManager = hapticManager)
+                WeatherChip(data = data)
             }
         }
 
@@ -163,12 +164,12 @@ fun WeekCalendar(
                             val isSelected = displayDate.month == month
                             Surface(
                                 onClick = {
-                                    hapticManager.lightTick()
+                                    haptic.selection()
                                     val newDate = LocalDate.of(selectedDate.year, month.value, 1)
                                     onDateSelected(newDate)
                                     showMonthPicker = false
                                 },
-                                shape = CircleShape,
+                                shape = RoundedCornerShape(20.dp),
                                 color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
                                 modifier = Modifier.height(52.dp)
                             ) {
@@ -210,7 +211,7 @@ fun WeekCalendar(
                         isSelected = date.isEqual(selectedDate),
                         isSameMonth = isSameMonth,
                         onClick = { 
-                            hapticManager.lightTick()
+                            haptic.selection()
                             onDateSelected(date) 
                         },
                         modifier = Modifier.weight(1f),
@@ -235,7 +236,6 @@ fun WeekCalendar(
 
     val settledPage by remember { derivedStateOf { pagerState.settledPage } }
     LaunchedEffect(settledPage) {
-        hapticManager.lightTick()
         val weekMonday = baseMonday.plusWeeks((settledPage - centerPage).toLong())
         val currentSelectedMonday = selectedDate.minusDays(selectedDate.dayOfWeek.value.toLong() - 1)
         
@@ -246,7 +246,7 @@ fun WeekCalendar(
 }
 
 @Composable
-fun WeatherChip(data: WeatherData, hapticManager: HapticManager) {
+fun WeatherChip(data: WeatherData) {
     val icon = remember(data.weatherCode) {
         when (data.weatherCode) {
             0 -> Icons.Default.WbSunny
@@ -264,9 +264,6 @@ fun WeatherChip(data: WeatherData, hapticManager: HapticManager) {
     }
 
     Surface(
-        onClick = { 
-            hapticManager.lightTick()
-        },
         shape = CircleShape,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         modifier = Modifier.height(40.dp)
@@ -323,28 +320,30 @@ fun DayItem(
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
 
+    // Effects Motion for color transitions (Standard M3 Effects)
     val textColor by animateColorAsState(
         targetValue = targetTextColor,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow),
+        animationSpec = AppMotionScheme.fastEffectsSpec(),
         label = "textColor"
     )
     val labelColor by animateColorAsState(
         targetValue = targetLabelColor,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow),
+        animationSpec = AppMotionScheme.fastEffectsSpec(),
         label = "labelColor"
     )
     val backgroundColor by animateColorAsState(
         targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.5f),
-        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow),
+        animationSpec = AppMotionScheme.fastEffectsSpec(),
         label = "bgColor"
     )
+    
+    // Spatial Motion for scale transition
     val scale by animateFloatAsState(
         targetValue = if (isSelected) 1.02f else 0.96f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        animationSpec = AppMotionScheme.fastSpatialSpec(),
         label = "scale"
     )
 
-    // Expressive high vertical pill shape: RoundedCornerShape(100.dp)
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -354,7 +353,7 @@ fun DayItem(
                 scaleX = scale
                 scaleY = scale
             }
-            .clip(RoundedCornerShape(100.dp))
+            .clip(RoundedCornerShape(22.dp))
             .background(backgroundColor)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },

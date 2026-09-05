@@ -1,30 +1,33 @@
 package com.mguuschedule
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.ObjectAnimator
+import android.app.Application
 import android.content.res.Configuration
+import android.graphics.Color
 import android.os.Bundle
+import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.core.view.WindowCompat
 import androidx.compose.animation.*
 import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -34,19 +37,18 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.mguuschedule.repository.AppDatabase
+import com.mguuschedule.repository.ScheduleRepository
 import com.mguuschedule.ui.components.AnimatedFloatingNavBar
 import com.mguuschedule.ui.components.SearchOverlay
 import com.mguuschedule.ui.navigation.Screen
 import com.mguuschedule.ui.screens.*
-import android.app.Application
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
-import com.mguuschedule.repository.AppDatabase
-import com.mguuschedule.repository.ScheduleRepository
+import com.mguuschedule.ui.theme.AppMotionScheme
 import com.mguuschedule.ui.theme.MGUUScheduleTheme
+import com.mguuschedule.util.CrashHandler
+import com.mguuschedule.util.rememberHapticFeedback
 import com.mguuschedule.util.NotificationHelper
 import com.mguuschedule.util.ShortcutHelper
-import com.mguuschedule.util.CrashHandler
 import java.time.LocalDate
 
 class MainActivity : ComponentActivity() {
@@ -59,13 +61,13 @@ class MainActivity : ComponentActivity() {
         val isDark = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.auto(
-                android.graphics.Color.TRANSPARENT,
-                android.graphics.Color.TRANSPARENT,
+                Color.TRANSPARENT,
+                Color.TRANSPARENT,
                 detectDarkMode = { isDark }
             ),
             navigationBarStyle = SystemBarStyle.auto(
-                android.graphics.Color.TRANSPARENT,
-                android.graphics.Color.TRANSPARENT,
+                Color.TRANSPARENT,
+                Color.TRANSPARENT,
                 detectDarkMode = { isDark }
             )
         )
@@ -76,15 +78,15 @@ class MainActivity : ComponentActivity() {
         
         splashScreen.setOnExitAnimationListener { splashScreenProvider ->
             val splashView = splashScreenProvider.view
-            val alpha = android.animation.ObjectAnimator.ofFloat(
+            val alpha = ObjectAnimator.ofFloat(
                 splashView,
-                android.view.View.ALPHA,
+                View.ALPHA,
                 1f,
                 0f
             )
             alpha.duration = 400L
-            alpha.addListener(object : android.animation.AnimatorListenerAdapter() {
-                override fun onAnimationEnd(animation: android.animation.Animator) {
+            alpha.addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
                     splashScreenProvider.remove()
                 }
             })
@@ -123,7 +125,10 @@ class MainActivity : ComponentActivity() {
             ) {
                 AnimatedContent(
                     targetState = selectedGroup,
-                    transitionSpec = { fadeIn(tween(500)) togetherWith fadeOut(tween(500)) },
+                    transitionSpec = {
+                        fadeIn(animationSpec = AppMotionScheme.defaultEffectsSpec()) togetherWith
+                        fadeOut(animationSpec = AppMotionScheme.defaultEffectsSpec())
+                    },
                     label = "MainAppTransition"
                 ) { group ->
                     if (group == null) {
@@ -146,11 +151,20 @@ fun MainAppScaffold(profileViewModel: ProfileViewModel, scheduleViewModel: Sched
     val navController = rememberNavController()
     val items = listOf(Screen.Schedule, Screen.Profile)
     val selectedGroup = profileViewModel.selectedGroup
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val hapticManager = remember { com.mguuschedule.util.HapticManager.getInstance(context) }
+    val haptic = rememberHapticFeedback()
+
+    val currentContext = LocalContext.current
+    val activity = remember(currentContext) { currentContext as? ComponentActivity }
+    val lessonIdExtra = remember { activity?.intent?.getStringExtra("navigate_to_lesson_id") }
 
     LaunchedEffect(selectedGroup) {
         selectedGroup?.let { scheduleViewModel.loadSchedule(it.id) }
+    }
+
+    LaunchedEffect(lessonIdExtra) {
+        lessonIdExtra?.let { lessonId ->
+            navController.navigate("lesson/$lessonId")
+        }
     }
 
     Scaffold(
@@ -162,16 +176,16 @@ fun MainAppScaffold(profileViewModel: ProfileViewModel, scheduleViewModel: Sched
                 navController,
                 startDestination = Screen.Schedule.route,
                 modifier = Modifier.fillMaxSize(),
-                enterTransition = { fadeIn(tween(200)) },
-                exitTransition = { fadeOut(tween(200)) },
-                popEnterTransition = { fadeIn(tween(200)) },
-                popExitTransition = { fadeOut(tween(200)) }
+                enterTransition = { fadeIn(animationSpec = AppMotionScheme.fastEffectsSpec()) },
+                exitTransition = { fadeOut(animationSpec = AppMotionScheme.fastEffectsSpec()) },
+                popEnterTransition = { fadeIn(animationSpec = AppMotionScheme.fastEffectsSpec()) },
+                popExitTransition = { fadeOut(animationSpec = AppMotionScheme.fastEffectsSpec()) }
             ) {
                 composable(Screen.Schedule.route) {
                     ScheduleScreen(
                         viewModel = scheduleViewModel,
                         onLessonClick = { lesson -> 
-                            hapticManager.click()
+                            haptic.click()
                             navController.navigate("lesson/${lesson.id}") 
                         }
                     )
@@ -207,15 +221,15 @@ fun MainAppScaffold(profileViewModel: ProfileViewModel, scheduleViewModel: Sched
                         scaleIn(
                             initialScale = 0.1f,
                             transformOrigin = TransformOrigin(pivotFractionX = 0.88f, pivotFractionY = 0.95f),
-                            animationSpec = tween(durationMillis = 350, easing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f))
-                        ) + fadeIn()
+                            animationSpec = AppMotionScheme.defaultSpatialSpec()
+                        ) + fadeIn(animationSpec = AppMotionScheme.fastEffectsSpec())
                     },
                     exitTransition = {
                         scaleOut(
                             targetScale = 0.1f,
                             transformOrigin = TransformOrigin(pivotFractionX = 0.88f, pivotFractionY = 0.95f),
-                            animationSpec = tween(durationMillis = 350, easing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f))
-                        ) + fadeOut()
+                            animationSpec = AppMotionScheme.defaultSpatialSpec()
+                        ) + fadeOut(animationSpec = AppMotionScheme.fastEffectsSpec())
                     }
                 ) {
                     SearchOverlay(
@@ -263,7 +277,7 @@ fun MainAppScaffold(profileViewModel: ProfileViewModel, scheduleViewModel: Sched
 
                     Surface(
                         onClick = {
-                            hapticManager.lightTick()
+                            haptic.lightTick()
                             navController.navigate(Screen.Search.route)
                         },
                         shape = CircleShape,

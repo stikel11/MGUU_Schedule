@@ -17,6 +17,7 @@ import com.mguuschedule.repository.ScheduleRepository
 import com.mguuschedule.repository.WeatherData
 import com.mguuschedule.repository.WeatherRepository
 import com.mguuschedule.util.AppLogger
+import com.mguuschedule.util.LiveUpdateManager
 import com.mguuschedule.util.NetworkMonitor
 import com.mguuschedule.util.NotificationHelper
 import kotlinx.coroutines.Dispatchers
@@ -104,6 +105,14 @@ class ScheduleViewModel(
             }
             scheduleUpcomingRemindersFromDb()
         }
+
+        viewModelScope.launch {
+            lessonsForSelectedDay.collect { lessons ->
+                if (_selectedDate.value.isEqual(LocalDate.now())) {
+                    LiveUpdateManager.scheduleLiveUpdatesForDay(getApplication(), lessons)
+                }
+            }
+        }
     }
 
     private fun fetchWeather() {
@@ -165,7 +174,6 @@ class ScheduleViewModel(
 
     fun scheduleUpcomingRemindersFromDb() {
         val enabled = appPrefs.getBoolean("reminders_enabled", true)
-        if (!enabled) return
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -174,10 +182,16 @@ class ScheduleViewModel(
                 val minutesBefore = appPrefs.getInt("reminder_time", 15)
                 val upcomingLessons = upcomingEntities.map { it.toLesson() }
                 
-                upcomingLessons.forEach { lesson ->
-                    NotificationHelper.scheduleClassReminder(getApplication(), lesson, minutesBefore)
+                if (enabled) {
+                    upcomingLessons.forEach { lesson ->
+                        NotificationHelper.scheduleClassReminder(getApplication(), lesson, minutesBefore)
+                    }
                 }
-                AppLogger.d("SCHEDULE_TRACE", "Запланированы напоминания для ${upcomingLessons.size} будущих пар из БД")
+                
+                val todayLessons = upcomingLessons.filter { it.date.isEqual(LocalDate.now()) }
+                LiveUpdateManager.scheduleLiveUpdatesForDay(getApplication(), todayLessons)
+                
+                AppLogger.d("SCHEDULE_TRACE", "Запланированы напоминания и Live Updates для ${upcomingLessons.size} будущих пар из БД")
             } catch (e: Exception) {
                 AppLogger.e("SCHEDULE_TRACE", "Ошибка автопланирования напоминаний: ${e.message}", e)
             }

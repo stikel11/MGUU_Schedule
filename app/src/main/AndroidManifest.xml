@@ -42,6 +42,16 @@
             android:exported="false" />
 
         <receiver
+            android:name=".receiver.LiveUpdateReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.mguuschedule.action.START_UPCOMING" />
+                <action android:name="com.mguuschedule.action.START_ACTIVE" />
+                <action android:name="com.mguuschedule.action.END_LESSON" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
             android:name=".receiver.BootReceiver"
             android:enabled="true"
             android:exported="true">

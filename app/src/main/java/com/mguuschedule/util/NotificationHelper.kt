@@ -3,12 +3,14 @@ package com.mguuschedule.util
 import android.Manifest
 import android.R
 import android.app.AlarmManager
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
@@ -48,7 +50,7 @@ object NotificationHelper {
 
             notificationManager.createNotificationChannel(
                 NotificationChannel(CHANNEL_LIVE_UPDATES, "Live updates", NotificationManager.IMPORTANCE_HIGH).apply {
-                    description = "Активные занятия в строке состояния"
+                    description = "Активные занятия в строке состояния (System Status Chip)"
                     setShowBadge(true)
                 }
             )
@@ -61,14 +63,18 @@ object NotificationHelper {
         }
     }
 
+    /**
+     * Создание системного Live Update уведомления (Android 16 Promoted Ongoing Status Chip).
+     */
     fun showLiveUpdateNotification(
         context: Context,
         title: String,
         message: String,
+        subText: String,
         shortText: String,
-        progressPercent: Int,
-        endTimeMillis: Long,
-        notificationId: Int
+        targetTimeMillis: Long,
+        notificationId: Int = LiveUpdateManager.LIVE_UPDATE_NOTIFICATION_ID,
+        lessonId: String? = null
     ) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ActivityCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -79,34 +85,101 @@ object NotificationHelper {
 
         createNotificationChannels(context)
 
-        val intent = Intent(context, MainActivity::class.java)
-        val pendingIntent = PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_IMMUTABLE)
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            if (lessonId != null) {
+                putExtra("navigate_to_lesson_id", lessonId)
+                action = "com.mguuschedule.ACTION_VIEW_LESSON"
+            }
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            lessonId?.hashCode() ?: 0,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
-        val builder = NotificationCompat.Builder(context, CHANNEL_LIVE_UPDATES)
-            .setSmallIcon(R.drawable.ic_menu_today)
-            .setContentTitle(title)
-            .setContentText(message)
-            .setOngoing(true)
-            .setCategory(NotificationCompat.CATEGORY_EVENT)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setContentIntent(pendingIntent)
-            .setOnlyAlertOnce(true)
-            .setShowWhen(true)
-            .setWhen(endTimeMillis)
-            .setUsesChronometer(true)
-            .setChronometerCountDown(true)
-            .setProgress(100, progressPercent, false)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+        val dismissIntent = Intent(context, NotificationDismissReceiver::class.java)
+        val dismissPendingIntent = PendingIntent.getBroadcast(
+            context,
+            0,
+            dismissIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
-        val extras = Bundle()
-        extras.putBoolean("android.requestPromotedOngoing", true)
-        extras.putCharSequence("android.shortCriticalText", shortText)
-        builder.addExtras(extras)
+        if (Build.VERSION.SDK_INT >= 36) { // Android 16+ API 36 Promoted Ongoing API
+            val builder = Notification.Builder(context, CHANNEL_LIVE_UPDATES)
+                .setSmallIcon(R.drawable.ic_menu_today)
+                .setContentTitle(title)
+                .setContentText(message)
+                .setSubText(subText)
+                .setOngoing(true)
+                .setCategory(Notification.CATEGORY_EVENT)
+                .setContentIntent(pendingIntent)
+                .setOnlyAlertOnce(true)
+                .setShowWhen(true)
+                .setWhen(targetTimeMillis)
+                .setUsesChronometer(true)
+                .setChronometerCountDown(true)
+                .setColorized(false)
+                .addAction(
+                    Notification.Action.Builder(
+                        Icon.createWithResource(context, R.drawable.ic_menu_close_clear_cancel),
+                        "Завершить",
+                        dismissPendingIntent
+                    ).build()
+                )
 
-        try {
-            NotificationManagerCompat.from(context).notify(notificationId, builder.build())
-        } catch (e: Exception) {
-            AppLogger.e("NOTIFICATION", "Ошибка отправки Live Update: ${e.message}", e)
+            try {
+                val setPromotedOngoingMethod = builder.javaClass.getMethod("setRequestPromotedOngoing", Boolean::class.javaPrimitiveType)
+                setPromotedOngoingMethod.invoke(builder, true)
+            } catch (_: Exception) {}
+
+            try {
+                val setShortCriticalTextMethod = builder.javaClass.getMethod("setShortCriticalText", CharSequence::class.java)
+                setShortCriticalTextMethod.invoke(builder, shortText)
+            } catch (_: Exception) {}
+
+            try {
+                val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                manager.notify(notificationId, builder.build())
+                AppLogger.d("NOTIFICATION", "Отправлено нативное LiveUpdate (Android 16 API 36): $title")
+            } catch (e: Exception) {
+                AppLogger.e("NOTIFICATION", "Ошибка отправки LiveUpdate (API 36): ${e.message}", e)
+            }
+        } else { // Fallback for API < 36 using NotificationCompat and System Extras
+            val builder = NotificationCompat.Builder(context, CHANNEL_LIVE_UPDATES)
+                .setSmallIcon(R.drawable.ic_menu_today)
+                .setContentTitle(title)
+                .setContentText(message)
+                .setSubText(subText)
+                .setOngoing(true)
+                .setCategory(NotificationCompat.CATEGORY_EVENT)
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setContentIntent(pendingIntent)
+                .setOnlyAlertOnce(true)
+                .setShowWhen(true)
+                .setWhen(targetTimeMillis)
+                .setUsesChronometer(true)
+                .setChronometerCountDown(true)
+                .setColorized(false)
+                .addAction(
+                    R.drawable.ic_menu_close_clear_cancel,
+                    "Завершить",
+                    dismissPendingIntent
+                )
+
+            val extras = Bundle()
+            extras.putBoolean("android.requestPromotedOngoing", true)
+            extras.putCharSequence("android.shortCriticalText", shortText)
+            builder.addExtras(extras)
+
+            try {
+                NotificationManagerCompat.from(context).notify(notificationId, builder.build())
+                AppLogger.d("NOTIFICATION", "Отправлено LiveUpdate (Compat + Extras): $title")
+            } catch (e: Exception) {
+                AppLogger.e("NOTIFICATION", "Ошибка отправки LiveUpdate (Compat): ${e.message}", e)
+            }
         }
     }
 
@@ -147,16 +220,6 @@ object NotificationHelper {
         }
     }
 
-    fun sendTestNotification(context: Context) {
-        showNotification(
-            context,
-            CHANNEL_TEST,
-            "Тест уведомления",
-            "Через 15 мин пара в ${formatClassroom("423")}",
-            777
-        )
-    }
-
     fun triggerInstantTestPush(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ActivityCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -175,40 +238,16 @@ object NotificationHelper {
     }
 
     fun triggerLiveUpdateNotification(context: Context) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ActivityCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
-            Toast.makeText(context, "Нет разрешения на уведомления (POST_NOTIFICATIONS)!", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val channelId = CHANNEL_LIVE_UPDATES
-        createNotificationChannels(context)
-
-        val liveNotification = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(R.drawable.ic_dialog_info)
-            .setContentTitle("Идет пара: Теория организации")
-            .setContentText("${formatClassroom("423")} • До конца 45 мин")
-            .setSubText("Пара 7")
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .addAction(
-                R.drawable.ic_menu_close_clear_cancel,
-                "Завершить",
-                PendingIntent.getBroadcast(
-                    context,
-                    0,
-                    Intent(context, NotificationDismissReceiver::class.java),
-                    PendingIntent.FLAG_IMMUTABLE
-                )
-            )
-            .build()
-
-        try {
-            NotificationManagerCompat.from(context).notify(9992, liveNotification)
-        } catch (e: Exception) {
-            AppLogger.e("NOTIFICATION", "Ошибка запуска Live Update: ${e.message}", e)
-        }
+        val endTime = System.currentTimeMillis() + 2700000 // +45 min
+        showLiveUpdateNotification(
+            context = context,
+            title = "Идет пара: Теория организации",
+            message = "${formatClassroom("423")} • До конца 45 мин",
+            subText = "7 пара",
+            shortText = "423 • 45м",
+            targetTimeMillis = endTime,
+            notificationId = LiveUpdateManager.LIVE_UPDATE_NOTIFICATION_ID
+        )
     }
 
     fun scheduleClassReminder(context: Context, lesson: Lesson, minutesBefore: Int) {

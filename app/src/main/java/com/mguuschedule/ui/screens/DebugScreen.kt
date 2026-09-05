@@ -24,6 +24,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mguuschedule.util.AppLogger
 import com.mguuschedule.util.NotificationHelper
 import com.mguuschedule.util.CrashHandler
+import com.mguuschedule.util.rememberHapticFeedback
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.core.app.NotificationManagerCompat
@@ -34,6 +35,7 @@ fun DebugScreen(
     viewModel: ProfileViewModel = viewModel(),
     onBack: () -> Unit
 ) {
+    val haptic = rememberHapticFeedback()
     val logs by AppLogger.logs.collectAsState()
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
@@ -45,7 +47,10 @@ fun DebugScreen(
             TopAppBar(
                 title = { Text("Инструменты разработчика") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = {
+                        haptic.lightTick()
+                        onBack()
+                    }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
                     }
                 }
@@ -62,6 +67,7 @@ fun DebugScreen(
             crashReport?.let { crashTrace ->
                 item {
                     Card(
+                        shape = RoundedCornerShape(24.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.errorContainer,
                             contentColor = MaterialTheme.colorScheme.onErrorContainer

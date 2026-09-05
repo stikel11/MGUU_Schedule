@@ -15,6 +15,7 @@ import com.mguuschedule.util.NotificationHelper
 import androidx.lifecycle.viewModelScope
 import androidx.work.*
 import com.mguuschedule.model.Group
+import com.mguuschedule.util.LiveUpdateManager
 import com.mguuschedule.util.ScheduleParser
 import com.mguuschedule.worker.ScheduleUpdateWorker
 import kotlinx.coroutines.Dispatchers
@@ -194,6 +195,9 @@ class ProfileViewModel(
     fun updateLiveUpdatesEnabled(enabled: Boolean) {
         liveUpdatesEnabled = enabled
         prefs.edit().putBoolean("live_updates_enabled", enabled).apply()
+        if (!enabled) {
+            LiveUpdateManager.cancelLiveUpdate(getApplication())
+        }
     }
 
     fun updateThemeMode(mode: Int) {
@@ -246,9 +250,9 @@ class ProfileViewModel(
             context = getApplication(),
             title = "Скоро начнется: Теория организации",
             message = "Ауд. 423 • Пахомов И.Ю.",
+            subText = "1 пара",
             shortText = "423 • 5м",
-            progressPercent = 0,
-            endTimeMillis = System.currentTimeMillis() + 300000, // +5 min
+            targetTimeMillis = System.currentTimeMillis() + 300000,
             notificationId = 999
         )
     }
@@ -258,9 +262,9 @@ class ProfileViewModel(
             context = getApplication(),
             title = "Идет занятие: Теория организации",
             message = "Ауд. 423 • Пахомов И.Ю.",
+            subText = "1 пара",
             shortText = "423 • 45м",
-            progressPercent = 50,
-            endTimeMillis = System.currentTimeMillis() + 2700000, // +45 min
+            targetTimeMillis = System.currentTimeMillis() + 2700000,
             notificationId = 999
         )
     }

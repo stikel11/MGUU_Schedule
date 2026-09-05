@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mguuschedule.model.Lesson
 import com.mguuschedule.util.formatClassroom
+import com.mguuschedule.util.rememberHapticFeedback
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -27,6 +28,7 @@ fun LessonDetailScreen(
     lesson: Lesson?,
     onBack: () -> Unit
 ) {
+    val haptic = rememberHapticFeedback()
     if (lesson == null) {
         Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface), contentAlignment = Alignment.Center) {
             Text("Занятие не найдено")
@@ -47,12 +49,18 @@ fun LessonDetailScreen(
                 TopAppBar(
                     title = { Text("Информация о паре", style = MaterialTheme.typography.titleMedium) },
                     navigationIcon = {
-                        IconButton(onClick = onBack) {
+                        IconButton(onClick = {
+                            haptic.lightTick()
+                            onBack()
+                        }) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
                         }
                     },
                     actions = {
-                        IconButton(onClick = { /* Настроить уведомление */ }) {
+                        IconButton(onClick = {
+                            haptic.lightTick()
+                            /* Настроить уведомление */
+                        }) {
                             Icon(Icons.Default.Notifications, contentDescription = "Уведомление")
                         }
                     }

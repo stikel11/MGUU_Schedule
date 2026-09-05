@@ -26,8 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mguuschedule.model.Group
-import com.mguuschedule.util.HapticManager
-import com.mguuschedule.util.hapticClickable
+import com.mguuschedule.util.rememberHapticFeedback
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -42,8 +41,7 @@ fun ProfileScreen(
     var showReminderTimeSheet by remember { mutableStateOf(false) }
     
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val context = LocalContext.current
-    val hapticManager = remember { HapticManager.getInstance(context) }
+    val haptic = rememberHapticFeedback()
     
     val groupsUiState = viewModel.groupsUiState
     val selectedGroup = viewModel.selectedGroup
@@ -133,7 +131,7 @@ fun ProfileScreen(
                             icon = Icons.Default.NotificationsActive,
                             checked = remindersEnabled,
                             onCheckedChange = { 
-                                hapticManager.click()
+                                haptic.toggle(it)
                                 if (it && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                                     permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                                 }
@@ -149,6 +147,7 @@ fun ProfileScreen(
                             enabled = remindersEnabled,
                             contentAlpha = alpha,
                             onClick = { 
+                                haptic.lightTick()
                                 showReminderTimeSheet = true 
                             }
                         )
@@ -159,7 +158,7 @@ fun ProfileScreen(
                             icon = Icons.Default.Update,
                             checked = changesEnabled,
                             onCheckedChange = { 
-                                hapticManager.click()
+                                haptic.toggle(it)
                                 if (it && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                                     permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                                 }
@@ -182,7 +181,7 @@ fun ProfileScreen(
                             subtitle = themeLabel,
                             icon = Icons.Default.Brightness4,
                             onClick = { 
-                                hapticManager.click()
+                                haptic.lightTick()
                                 showThemeDialog = true 
                             }
                         )
@@ -193,7 +192,7 @@ fun ProfileScreen(
                             icon = Icons.Default.Palette,
                             checked = dynamicColorEnabled,
                             onCheckedChange = { 
-                                hapticManager.click()
+                                haptic.toggle(it)
                                 viewModel.updateDynamicColorEnabled(it) 
                             }
                         )
@@ -208,7 +207,7 @@ fun ProfileScreen(
                             subtitle = selectedGroup?.name ?: "Не выбрана",
                             icon = Icons.Default.Group,
                             onClick = { 
-                                hapticManager.click()
+                                haptic.lightTick()
                                 showGroupSheet = true 
                             }
                         )
@@ -220,7 +219,7 @@ fun ProfileScreen(
                             iconContainerColor = MaterialTheme.colorScheme.errorContainer,
                             iconColor = MaterialTheme.colorScheme.onErrorContainer,
                             onClick = {
-                                hapticManager.click()
+                                haptic.click()
                                 showLogoutDialog = true
                             }
                         )
@@ -234,18 +233,21 @@ fun ProfileScreen(
                             title = "Период кэширования",
                             subtitle = "$cacheDaysCount дней",
                             icon = Icons.Default.History,
-                            onClick = { showCachePeriodSheet = true }
+                            onClick = {
+                                haptic.lightTick()
+                                showCachePeriodSheet = true
+                            }
                         )
 
                         DebugCacheSection(
                             storageState = storageState,
                             isLoading = isForcedLoading,
                             onForceUpdate = { 
-                                hapticManager.success()
+                                haptic.click()
                                 scheduleViewModel.forceUpdate() 
                             },
                             onClearCache = { 
-                                hapticManager.success()
+                                haptic.success()
                                 viewModel.clearStorage(scheduleViewModel)
                             }
                         )
@@ -275,7 +277,10 @@ fun ProfileScreen(
                 text = { Text("Вы уверены, что хотите выйти? Данные о выбранной группе будут сброшены.") },
                 confirmButton = {
                     TextButton(
-                        onClick = { showLogoutDialog = false },
+                        onClick = {
+                            haptic.click()
+                            showLogoutDialog = false
+                        },
                         colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                     ) {
                         Text("Выйти", fontWeight = FontWeight.Bold)
@@ -293,7 +298,7 @@ fun ProfileScreen(
             ThemeSelectionDialog(
                 currentMode = themeMode,
                 onModeSelected = {
-                    hapticManager.click()
+                    haptic.selection()
                     viewModel.updateThemeMode(it)
                     showThemeDialog = false
                 },
@@ -307,7 +312,7 @@ fun ProfileScreen(
                 sheetState = sheetState,
                 selectedGroup = selectedGroup,
                 onGroupSelected = {
-                    hapticManager.click()
+                    haptic.success()
                     viewModel.selectGroup(it)
                     showGroupSheet = false
                     scope.launch {
@@ -322,7 +327,7 @@ fun ProfileScreen(
             CachePeriodBottomSheet(
                 currentValue = cacheDaysCount,
                 onValueSelected = {
-                    hapticManager.click()
+                    haptic.selection()
                     viewModel.updateCacheDaysCount(it)
                     showCachePeriodSheet = false
                 },
@@ -334,7 +339,7 @@ fun ProfileScreen(
             ReminderTimeBottomSheet(
                 currentValue = reminderTime,
                 onValueSelected = {
-                    hapticManager.click()
+                    haptic.selection()
                     viewModel.updateReminderTime(it)
                     showReminderTimeSheet = false
                 },
@@ -576,16 +581,20 @@ fun CachePeriodBottomSheet(
             )
             options.forEach { (days, label) ->
                 val isSelected = days == currentValue
-                ListItem(
-                    headlineContent = { Text(label, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
-                    trailingContent = {
-                        RadioButton(selected = isSelected, onClick = null)
-                    },
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .clickable { onValueSelected(days) },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                )
+                Surface(
+                    onClick = { onValueSelected(days) },
+                    shape = RoundedCornerShape(16.dp),
+                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else Color.Transparent,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                ) {
+                    ListItem(
+                        headlineContent = { Text(label, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
+                        trailingContent = {
+                            RadioButton(selected = isSelected, onClick = null)
+                        },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                    )
+                }
             }
         }
     }
@@ -619,16 +628,20 @@ fun ReminderTimeBottomSheet(
             )
             options.forEach { (mins, label) ->
                 val isSelected = mins == currentValue
-                ListItem(
-                    headlineContent = { Text(label, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
-                    trailingContent = {
-                        RadioButton(selected = isSelected, onClick = null)
-                    },
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .clickable { onValueSelected(mins) },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                )
+                Surface(
+                    onClick = { onValueSelected(mins) },
+                    shape = RoundedCornerShape(16.dp),
+                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else Color.Transparent,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                ) {
+                    ListItem(
+                        headlineContent = { Text(label, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
+                        trailingContent = {
+                            RadioButton(selected = isSelected, onClick = null)
+                        },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                    )
+                }
             }
         }
     }
@@ -658,17 +671,23 @@ fun ThemeSelectionDialog(
 
 @Composable
 fun ThemeOption(label: String, mode: Int, currentMode: Int, onSelect: (Int) -> Unit) {
-    Row(
+    Surface(
+        onClick = { onSelect(mode) },
+        shape = RoundedCornerShape(16.dp),
+        color = if (mode == currentMode) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else Color.Transparent,
         modifier = Modifier
             .fillMaxWidth()
-            .clip(CircleShape)
-            .clickable { onSelect(mode) }
-            .padding(vertical = 10.dp, horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(vertical = 2.dp)
     ) {
-        RadioButton(selected = mode == currentMode, onClick = { onSelect(mode) })
-        Spacer(modifier = Modifier.width(12.dp))
-        Text(label, style = MaterialTheme.typography.bodyLarge, fontWeight = if (mode == currentMode) FontWeight.Bold else FontWeight.Normal)
+        Row(
+            modifier = Modifier
+                .padding(vertical = 12.dp, horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            RadioButton(selected = mode == currentMode, onClick = null)
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(label, style = MaterialTheme.typography.bodyLarge, fontWeight = if (mode == currentMode) FontWeight.Bold else FontWeight.Normal)
+        }
     }
 }
 
@@ -682,8 +701,7 @@ fun GroupSelectionSheet(
     onDismiss: () -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
-    val context = LocalContext.current
-    val hapticManager = remember { HapticManager.getInstance(context) }
+    val haptic = rememberHapticFeedback()
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -754,7 +772,7 @@ fun GroupSelectionSheet(
                                 item(key = course) {
                                     Surface(
                                         onClick = { 
-                                            hapticManager.lightTick()
+                                            haptic.lightTick()
                                             expandedCourses[course] = !isExpanded 
                                         },
                                         color = if (isExpanded) MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f) else Color.Transparent,
@@ -771,9 +789,8 @@ fun GroupSelectionSheet(
                                     items(groups, key = { it.id }) { group ->
                                         val isSelected = group.id == selectedGroup?.id
                                         Surface(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .hapticClickable { onGroupSelected(group) },
+                                            onClick = { onGroupSelected(group) },
+                                            modifier = Modifier.fillMaxWidth(),
                                             color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
                                             shape = CircleShape
                                         ) {
@@ -929,8 +946,7 @@ fun AboutSection(
     onNavigateToDebug: () -> Unit,
     onShowSnackbar: (String) -> Unit
 ) {
-    val context = LocalContext.current
-    val hapticManager = remember { HapticManager.getInstance(context) }
+    val haptic = rememberHapticFeedback()
     var tapCount by remember { mutableIntStateOf(0) }
     var lastTapTime by remember { mutableLongStateOf(0L) }
 
@@ -960,7 +976,7 @@ fun AboutSection(
                 if (tapCount in 3..4) {
                     onShowSnackbar("Вы в ${5 - tapCount} шагах от режима разработчика")
                 } else if (tapCount >= 5) {
-                    hapticManager.success()
+                    haptic.success()
                     onNavigateToDebug()
                     tapCount = 0
                 }

@@ -1,7 +1,6 @@
 package com.mguuschedule.ui.screens
 
 import androidx.compose.animation.*
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -22,7 +21,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mguuschedule.model.Lesson
 import com.mguuschedule.ui.components.WeekCalendar
-import com.mguuschedule.util.HapticManager
+import com.mguuschedule.ui.theme.AppMotionScheme
+import com.mguuschedule.util.rememberHapticFeedback
 import com.mguuschedule.util.formatClassroom
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -44,8 +44,7 @@ fun ScheduleScreen(
     val isOnline by viewModel.isOnline.collectAsState()
     val weatherData = viewModel.weatherData
     val hasChanges = viewModel.hasChangesInLastRefresh
-    val context = LocalContext.current
-    val hapticManager = remember { HapticManager.getInstance(context) }
+    val haptic = rememberHapticFeedback()
     
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -58,7 +57,6 @@ fun ScheduleScreen(
             refreshStatusText = "Синхронизация расписания..."
             showRefreshStatus = true
         } else if (uiState is ScheduleUiState.Success && uiState.lessons.isNotEmpty()) {
-            hapticManager.success()
             refreshStatusText = if (hasChanges) "Найдено 1 изменение" else "Расписание актуально"
             delay(1500)
             showRefreshStatus = false
@@ -93,21 +91,21 @@ fun ScheduleScreen(
                 weatherData = weatherData
             )
 
-            // Expanding refresh status block
+            // Expanding refresh status block with Spatial Motion
             AnimatedVisibility(
                 visible = showRefreshStatus && !isRefreshing && uiState is ScheduleUiState.Success,
-                enter = expandVertically(spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow)) + fadeIn(),
-                exit = shrinkVertically(spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow)) + fadeOut()
+                enter = expandVertically(AppMotionScheme.defaultSpatialSpec()) + fadeIn(AppMotionScheme.fastEffectsSpec()),
+                exit = shrinkVertically(AppMotionScheme.defaultSpatialSpec()) + fadeOut(AppMotionScheme.fastEffectsSpec())
             ) {
                 Surface(
                     color = if (hasChanges) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
                     shape = CircleShape,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                        .padding(horizontal = 14.dp, vertical = 4.dp)
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
@@ -129,28 +127,23 @@ fun ScheduleScreen(
 
             AnimatedVisibility(
                 visible = !isOnline,
-                enter = expandVertically(spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow)) + fadeIn(),
-                exit = shrinkVertically(spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow)) + fadeOut()
+                enter = expandVertically(AppMotionScheme.defaultSpatialSpec()) + fadeIn(AppMotionScheme.fastEffectsSpec()),
+                exit = shrinkVertically(AppMotionScheme.defaultSpatialSpec()) + fadeOut(AppMotionScheme.fastEffectsSpec())
             ) {
                 OfflineBanner()
             }
 
             val pullState = rememberPullToRefreshState()
-            
-            LaunchedEffect(pullState.distanceFraction) {
-                if (pullState.distanceFraction >= 1f && !isRefreshing) {
-                    hapticManager.lightTick()
-                }
-            }
 
             PullToRefreshBox(
                 isRefreshing = isRefreshing,
                 state = pullState,
                 onRefresh = { 
                     if (isOnline) {
+                        haptic.gestureThreshold()
                         viewModel.refreshSchedule() 
                     } else {
-                        hapticManager.lightTick()
+                        haptic.error()
                         scope.launch {
                             snackbarHostState.showSnackbar("Нет подключения к интернету. Показана сохраненная копия")
                         }
@@ -163,10 +156,7 @@ fun ScheduleScreen(
 
                 Crossfade(
                     targetState = selectedDate,
-                    animationSpec = spring<Float>(
-                        dampingRatio = Spring.DampingRatioNoBouncy,
-                        stiffness = Spring.StiffnessLow
-                    ),
+                    animationSpec = AppMotionScheme.fastEffectsSpec(),
                     label = "day_crossfade"
                 ) { targetDate ->
                     val lessonsForTargetDate = if (targetDate == selectedDate) lessons else emptyList()
@@ -197,7 +187,10 @@ fun ScheduleScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Button(
-                                    onClick = { viewModel.refreshSchedule() },
+                                    onClick = {
+                                        haptic.click()
+                                        viewModel.refreshSchedule()
+                                    },
                                     shape = CircleShape,
                                     modifier = Modifier.padding(top = 16.dp)
                                 ) {
@@ -211,7 +204,7 @@ fun ScheduleScreen(
                         } else {
                             LazyColumn(
                                 modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 100.dp),
+                                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 100.dp),
                                 verticalArrangement = Arrangement.Top
                             ) {
                                 items(
@@ -240,19 +233,19 @@ fun OfflineBanner() {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
+            .padding(horizontal = 14.dp, vertical = 4.dp),
         shape = CircleShape,
         color = MaterialTheme.colorScheme.surfaceContainerHigh
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
             Icon(
                 imageVector = Icons.Default.CloudOff,
                 contentDescription = null,
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(16.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.width(8.dp))
@@ -327,6 +320,7 @@ fun LessonItemWithBreak(
             onClick = onClick
         )
         if (breakDuration != null && breakDuration > 0) {
+            // Compact timeline break badge between lessons
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -339,18 +333,18 @@ fun LessonItemWithBreak(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Schedule,
                             contentDescription = null,
-                            modifier = Modifier.size(14.dp),
+                            modifier = Modifier.size(13.dp),
                             tint = MaterialTheme.colorScheme.primary
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             text = "Перерыв $breakDuration мин",
-                            style = MaterialTheme.typography.labelMedium,
+                            style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -411,15 +405,15 @@ fun LessonRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = 5.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.Top
     ) {
-        // Balanced time column (titleMedium for start time, labelMedium for end time)
+        // Compact 64dp Left Time Column (Secondary visual weight)
         Column(
             modifier = Modifier
-                .width(56.dp)
-                .padding(top = 14.dp),
+                .width(64.dp)
+                .padding(top = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
@@ -431,13 +425,13 @@ fun LessonRow(
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = endTimeStr, 
-                style = MaterialTheme.typography.labelMedium, 
+                style = MaterialTheme.typography.bodyMedium, 
                 fontWeight = FontWeight.Medium,
                 color = if (status == LessonStatus.CURRENT) MaterialTheme.colorScheme.primary.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         
-        // Card Container taking dominant width and visual weight
+        // Dominant Lesson Card (80-85% screen width, 16dp horizontal & 14-16dp vertical padding)
         Surface(
             modifier = Modifier
                 .weight(1f)
@@ -445,11 +439,13 @@ fun LessonRow(
             shape = RoundedCornerShape(20.dp),
             color = containerColor,
             contentColor = contentColor,
-            shadowElevation = if (status == LessonStatus.CURRENT) 2.dp else 1.dp,
-            tonalElevation = if (status == LessonStatus.CURRENT) 2.dp else 1.dp,
+            shadowElevation = if (status == LessonStatus.CURRENT) 3.dp else 1.dp,
+            tonalElevation = if (status == LessonStatus.CURRENT) 3.dp else 1.dp,
             onClick = onClick
         ) {
-            Column(modifier = Modifier.padding(14.dp)) {
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 15.dp)
+            ) {
                 if (status == LessonStatus.CURRENT) {
                     val totalMinutes = ChronoUnit.MINUTES.between(lesson.startTime, lesson.endTime)
                     val passedMinutes = ChronoUnit.MINUTES.between(lesson.startTime, currentTime)
@@ -494,10 +490,10 @@ fun LessonRow(
                         trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
                     )
                     
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
                 }
 
-                // Badges row
+                // Top Badges Row: Number, Type, Status
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -549,20 +545,21 @@ fun LessonRow(
                     }
                 }
                 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 
-                // Subject Name - titleMedium, lineHeight 22.sp
+                // Primary Focus: Subject Title (titleMedium/titleLarge, Bold, 22sp line height)
                 Text(
                     text = lesson.title, 
                     style = MaterialTheme.typography.titleMedium, 
                     fontWeight = FontWeight.Bold, 
+                    fontSize = 17.sp,
                     color = contentColor,
-                    lineHeight = 22.sp
+                    lineHeight = 23.sp
                 )
                 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 
-                // Bottom Row: Teacher name & Classroom badge
+                // Bottom Row: Teacher Name & Room Badge
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -578,7 +575,7 @@ fun LessonRow(
                     
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    // Room Badge using formatClassroom
+                    // Room Badge
                     Surface(
                         shape = CircleShape,
                         color = if (status == LessonStatus.CURRENT) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.surfaceContainerHigh

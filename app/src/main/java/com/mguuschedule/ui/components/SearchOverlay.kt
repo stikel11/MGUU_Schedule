@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.mguuschedule.model.Lesson
 import com.mguuschedule.util.formatClassroom
+import com.mguuschedule.util.rememberHapticFeedback
 import java.time.format.TextStyle
 import java.util.*
 
@@ -34,6 +35,7 @@ fun SearchOverlay(
     allLessons: List<Lesson>,
     onLessonClick: (Lesson) -> Unit
 ) {
+    val haptic = rememberHapticFeedback()
     var query by remember { mutableStateOf("") }
     val filters = listOf("Все", "Предмет", "Преподаватель", "Аудитория")
     var selectedFilter by remember { mutableStateOf("Все") }
@@ -89,7 +91,10 @@ fun SearchOverlay(
                     .padding(horizontal = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = handleBack) {
+                IconButton(onClick = {
+                    haptic.lightTick()
+                    handleBack()
+                }) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
                 }
                 
@@ -109,7 +114,10 @@ fun SearchOverlay(
                 )
                 
                 if (query.isNotEmpty()) {
-                    IconButton(onClick = { query = "" }) {
+                    IconButton(onClick = {
+                        haptic.lightTick()
+                        query = ""
+                    }) {
                         Icon(Icons.Default.Close, contentDescription = "Очистить")
                     }
                 }
@@ -131,8 +139,11 @@ fun SearchOverlay(
                     else -> tag
                 }
                 Surface(
-                    onClick = { selectedFilter = tag },
-                    shape = CircleShape,
+                    onClick = {
+                        haptic.selection()
+                        selectedFilter = tag
+                    },
+                    shape = RoundedCornerShape(12.dp),
                     color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
                     modifier = Modifier.height(36.dp)
                 ) {
@@ -186,6 +197,7 @@ fun SearchOverlay(
 
 @Composable
 fun SearchItemCard(lesson: Lesson, onClick: () -> Unit) {
+    val haptic = rememberHapticFeedback()
     val locale = Locale("ru")
     val dateText = remember(lesson.date) {
         val dayName = lesson.date.dayOfWeek.getDisplayName(TextStyle.SHORT, locale)
@@ -200,7 +212,10 @@ fun SearchItemCard(lesson: Lesson, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = { onClick() }),
+            .clickable(onClick = {
+                haptic.click()
+                onClick()
+            }),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         )

@@ -1,9 +1,7 @@
 package com.mguuschedule.ui.components
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -25,7 +23,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.mguuschedule.ui.navigation.Screen
-import com.mguuschedule.util.HapticManager
+import com.mguuschedule.ui.theme.AppMotionScheme
+import com.mguuschedule.util.rememberHapticFeedback
 
 @Composable
 fun AnimatedFloatingNavBar(
@@ -34,8 +33,7 @@ fun AnimatedFloatingNavBar(
     onItemClick: (Screen) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
-    val hapticManager = remember { HapticManager.getInstance(context) }
+    val haptic = rememberHapticFeedback()
     val density = LocalDensity.current
 
     val itemWidths = remember { mutableStateListOf<Dp>().apply { repeat(items.size) { add(0.dp) } } }
@@ -43,11 +41,8 @@ fun AnimatedFloatingNavBar(
     
     val selectedIndex = items.indexOfFirst { it.route == currentRoute }.coerceAtLeast(0)
     
-    // Expressive Motion: Spring animation with LowBouncy and StiffnessLow
-    val pillAnimationSpec = spring<Dp>(
-        dampingRatio = Spring.DampingRatioLowBouncy,
-        stiffness = Spring.StiffnessLow
-    )
+    // Expressive Spatial Motion for pill sliding
+    val pillAnimationSpec = AppMotionScheme.defaultSpatialSpec<Dp>()
 
     val pillOffset by animateDpAsState(
         targetValue = itemOffsets.getOrElse(selectedIndex) { 0.dp },
@@ -69,7 +64,7 @@ fun AnimatedFloatingNavBar(
         tonalElevation = 2.dp
     ) {
         Box(modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)) {
-            // Sliding Active Indicator Pill
+            // Active Indicator Pill
             Box(
                 modifier = Modifier
                     .offset(x = pillOffset)
@@ -85,9 +80,11 @@ fun AnimatedFloatingNavBar(
             ) {
                 items.forEachIndexed { index, screen ->
                     val isSelected = items.indexOfFirst { it.route == currentRoute } == index
+                    
+                    // Effects Motion for color transition
                     val contentColor by animateColorAsState(
                         targetValue = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow),
+                        animationSpec = AppMotionScheme.fastEffectsSpec(),
                         label = "contentColor"
                     )
 
@@ -106,7 +103,9 @@ fun AnimatedFloatingNavBar(
                                 indication = null
                             ) {
                                 if (!isSelected) {
-                                    hapticManager.lightTick()
+                                    haptic.selection()
+                                } else {
+                                    haptic.lightTick()
                                 }
                                 onItemClick(screen)
                             }
