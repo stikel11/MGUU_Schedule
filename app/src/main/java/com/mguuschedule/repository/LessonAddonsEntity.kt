@@ -1,0 +1,31 @@
+package com.mguuschedule.repository
+
+import androidx.room.Entity
+import androidx.room.Index
+import androidx.room.PrimaryKey
+
+@Entity(
+    tableName = "lesson_notes",
+    indices = [Index(value = ["lessonKey"], unique = true)]
+)
+data class LessonNoteEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val lessonKey: String, // "${date}_${number}_${startTime}"
+    val text: String,
+    val updatedAt: Long
+)
+
+@Entity(
+    tableName = "lesson_tasks",
+    indices = [Index(value = ["lessonKey"])]
+)
+data class LessonTaskEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val lessonKey: String, // "${date}_${number}_${startTime}"
+    val title: String,
+    val deadlineEpoch: Long? = null, // epoch millis
+    val isCompleted: Boolean = false,
+    val createdAt: Long
+)
