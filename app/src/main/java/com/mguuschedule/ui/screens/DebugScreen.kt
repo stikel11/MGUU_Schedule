@@ -14,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
@@ -21,6 +22,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.mguuschedule.ui.components.TopScrimProtection
 import com.mguuschedule.util.AppLogger
 import com.mguuschedule.util.NotificationHelper
 import com.mguuschedule.util.CrashHandler
@@ -42,28 +44,45 @@ fun DebugScreen(
     val lastCrash = remember { CrashHandler.getLastCrash(context) }
     var crashReport by remember { mutableStateOf(lastCrash) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Инструменты разработчика") },
-                navigationIcon = {
-                    IconButton(onClick = {
-                        haptic.lightTick()
-                        onBack()
-                    }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
-                    }
-                }
-            )
-        }
-    ) { innerPadding ->
-        LazyColumn(
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
+                .nestedScroll(scrollBehavior.nestedScrollConnection),
+            topBar = {
+                TopAppBar(
+                    title = { Text("Инструменты разработчика", fontWeight = FontWeight.Bold) },
+                    navigationIcon = {
+                        IconButton(onClick = {
+                            haptic.lightTick()
+                            onBack()
+                        }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                        }
+                    },
+                    scrollBehavior = scrollBehavior,
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                        scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                    )
+                )
+            },
+            containerColor = MaterialTheme.colorScheme.background
+        ) { innerPadding ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .consumeWindowInsets(innerPadding),
+                contentPadding = PaddingValues(
+                    top = innerPadding.calculateTopPadding(),
+                    bottom = innerPadding.calculateBottomPadding() + 16.dp,
+                    start = 16.dp,
+                    end = 16.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
             crashReport?.let { crashTrace ->
                 item {
                     Card(
@@ -253,6 +272,9 @@ fun DebugScreen(
             }
         }
     }
+
+    TopScrimProtection()
+}
 }
 
 @Composable

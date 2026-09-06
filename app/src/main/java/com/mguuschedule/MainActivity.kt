@@ -4,17 +4,13 @@ import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.animation.ObjectAnimator
 import android.app.Application
-import android.content.res.Configuration
-import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import android.view.View
 import androidx.activity.ComponentActivity
-import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.*
-import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -27,7 +23,6 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -46,9 +41,9 @@ import com.mguuschedule.ui.screens.*
 import com.mguuschedule.ui.theme.AppMotionScheme
 import com.mguuschedule.ui.theme.MGUUScheduleTheme
 import com.mguuschedule.util.CrashHandler
-import com.mguuschedule.util.rememberHapticFeedback
 import com.mguuschedule.util.NotificationHelper
 import com.mguuschedule.util.ShortcutHelper
+import com.mguuschedule.util.rememberHapticFeedback
 import java.time.LocalDate
 
 class MainActivity : ComponentActivity() {
@@ -58,23 +53,10 @@ class MainActivity : ComponentActivity() {
         
         CrashHandler.init(applicationContext)
         
-        val isDark = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
-        enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.auto(
-                Color.TRANSPARENT,
-                Color.TRANSPARENT,
-                detectDarkMode = { isDark }
-            ),
-            navigationBarStyle = SystemBarStyle.auto(
-                Color.TRANSPARENT,
-                Color.TRANSPARENT,
-                detectDarkMode = { isDark }
-            )
-        )
-
-        val insetsController = WindowCompat.getInsetsController(window, window.decorView)
-        insetsController.isAppearanceLightStatusBars = !isDark
-        insetsController.isAppearanceLightNavigationBars = !isDark
+        enableEdgeToEdge()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+        }
         
         splashScreen.setOnExitAnimationListener { splashScreenProvider ->
             val splashView = splashScreenProvider.view
@@ -173,12 +155,8 @@ fun MainAppScaffold(profileViewModel: ProfileViewModel, scheduleViewModel: Sched
         }
     }
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        contentWindowInsets = WindowInsets(0, 0, 0, 0)
-    ) { innerPadding ->
-        Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-            NavHost(
+    Box(modifier = Modifier.fillMaxSize()) {
+        NavHost(
                 navController,
                 startDestination = Screen.Schedule.route,
                 modifier = Modifier.fillMaxSize(),
@@ -315,4 +293,3 @@ fun MainAppScaffold(profileViewModel: ProfileViewModel, scheduleViewModel: Sched
             }
         }
     }
-}

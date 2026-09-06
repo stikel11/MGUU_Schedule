@@ -2,29 +2,42 @@ package com.mguuschedule.ui.screens
 
 import android.content.Context
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mguuschedule.model.Lesson
+import com.mguuschedule.ui.components.ExpressiveLoadingIndicator
+import com.mguuschedule.ui.components.PhotosStyleRefreshContainer
+import com.mguuschedule.ui.components.StatusBarScrim
+import com.mguuschedule.ui.components.TopScrimProtection
 import com.mguuschedule.ui.components.WeekCalendar
 import com.mguuschedule.ui.theme.AppMotionScheme
 import com.mguuschedule.util.ScheduleImageRenderer
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
 import com.mguuschedule.util.formatClassroom
 import com.mguuschedule.util.rememberHapticFeedback
 import kotlinx.coroutines.delay
@@ -48,7 +61,6 @@ fun ScheduleScreen(
     val isRefreshing = viewModel.isRefreshing
     val isOnline by viewModel.isOnline.collectAsState()
     val weatherData = viewModel.weatherData
-    val hasChanges = viewModel.hasChangesInLastRefresh
     val activeAddonLessonKeys by viewModel.activeAddonLessonKeys.collectAsState()
     val haptic = rememberHapticFeedback()
     val context = LocalContext.current
@@ -56,22 +68,6 @@ fun ScheduleScreen(
     
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    
-    var showRefreshStatus by remember { mutableStateOf(false) }
-    var refreshStatusText by remember { mutableStateOf("") }
-    
-    LaunchedEffect(isRefreshing) {
-        if (isRefreshing) {
-            refreshStatusText = "Синхронизация расписания..."
-            showRefreshStatus = true
-        } else if (uiState is ScheduleUiState.Success && uiState.lessons.isNotEmpty()) {
-            refreshStatusText = if (hasChanges) "Найдено 1 изменение" else "Расписание актуально"
-            delay(1500)
-            showRefreshStatus = false
-        } else {
-            showRefreshStatus = false
-        }
-    }
     
     var currentTime by remember { mutableStateOf(LocalTime.now()) }
     val currentDate = remember { LocalDate.now() }
@@ -83,172 +79,151 @@ fun ScheduleScreen(
         }
     }
 
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        containerColor = MaterialTheme.colorScheme.surface
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding()
-                .padding(top = 4.dp)
-        ) {
-            WeekCalendar(
-                selectedDate = selectedDate,
-                onDateSelected = { viewModel.onDateSelected(it) },
-                weatherData = weatherData,
-                unreadNotificationCount = unreadNotificationCount,
-                onNotificationHistoryClick = onNotificationHistoryClick,
-                onShareDayClick = {
-                    val appPrefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-                    val shareStyle = appPrefs.getInt("share_card_style", 0)
-                    ScheduleImageRenderer.shareDaySchedule(
-                        context = context,
-                        date = selectedDate,
-                        lessons = viewModel.lessonsForSelectedDay.value,
-                        isDarkTheme = isDarkTheme,
-                        shareStyle = shareStyle
-                    )
-                }
-            )
+            val listState = rememberLazyListState()
+            val lessons by viewModel.lessonsForSelectedDay.collectAsState()
+            val hazeState = rememberHazeState()
 
-            // Expanding refresh status block with Spatial Motion
-            AnimatedVisibility(
-                visible = showRefreshStatus && !isRefreshing && uiState is ScheduleUiState.Success,
-                enter = expandVertically(AppMotionScheme.defaultSpatialSpec()) + fadeIn(AppMotionScheme.fastEffectsSpec()),
-                exit = shrinkVertically(AppMotionScheme.defaultSpatialSpec()) + fadeOut(AppMotionScheme.fastEffectsSpec())
-            ) {
-                Surface(
-                    color = if (hasChanges) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-                    shape = CircleShape,
+            // Подключение защиты Status Bar при скролле списка расписания
+            Box(modifier = Modifier.fillMaxSize()) {
+                Scaffold(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 4.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        .fillMaxSize()
+                        .hazeSource(hazeState),
+                    snackbarHost = { SnackbarHost(snackbarHostState) },
+                    containerColor = MaterialTheme.colorScheme.background
+                ) { padding ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(padding)
                     ) {
-                        Icon(
-                            imageVector = if (hasChanges) Icons.Default.AutoAwesome else Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = refreshStatusText,
-                            style = MaterialTheme.typography.labelLarge,
-                            color = if (hasChanges) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-            }
-
-            AnimatedVisibility(
-                visible = !isOnline,
-                enter = expandVertically(AppMotionScheme.defaultSpatialSpec()) + fadeIn(AppMotionScheme.fastEffectsSpec()),
-                exit = shrinkVertically(AppMotionScheme.defaultSpatialSpec()) + fadeOut(AppMotionScheme.fastEffectsSpec())
-            ) {
-                OfflineBanner()
-            }
-
-            val pullState = rememberPullToRefreshState()
-
-            PullToRefreshBox(
-                isRefreshing = isRefreshing,
-                state = pullState,
-                onRefresh = { 
-                    if (isOnline) {
-                        haptic.gestureThreshold()
-                        viewModel.refreshSchedule() 
-                    } else {
-                        haptic.error()
-                        scope.launch {
-                            snackbarHostState.showSnackbar("Нет подключения к интернету. Показана сохраненная копия")
-                        }
-                    }
-                },
-                modifier = Modifier.fillMaxSize(),
-                indicator = {}
-            ) {
-                val lessons by viewModel.lessonsForSelectedDay.collectAsState()
-
-                Crossfade(
-                    targetState = selectedDate,
-                    animationSpec = AppMotionScheme.fastEffectsSpec(),
-                    label = "day_crossfade"
-                ) { targetDate ->
-                    val lessonsForTargetDate = if (targetDate == selectedDate) lessons else emptyList()
-
-                    if (uiState is ScheduleUiState.Loading && !isRefreshing) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(
-                                strokeWidth = 4.dp,
-                                color = MaterialTheme.colorScheme.primary,
-                                trackColor = MaterialTheme.colorScheme.primaryContainer
-                            )
-                        }
-                    } else if (uiState is ScheduleUiState.Error && lessonsForTargetDate.isEmpty()) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.padding(24.dp)
-                            ) {
-                                Text(
-                                    text = "Ошибка загрузки", 
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = uiState.message, 
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Button(
-                                    onClick = {
-                                        haptic.click()
-                                        viewModel.refreshSchedule()
-                                    },
-                                    shape = CircleShape,
-                                    modifier = Modifier.padding(top = 16.dp)
-                                ) {
-                                    Text("Повторить", fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-                    } else {
-                        if (lessonsForTargetDate.isEmpty()) {
-                            EmptySchedule()
-                        } else {
-                            LazyColumn(
-                                modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 100.dp),
-                                verticalArrangement = Arrangement.Top
-                            ) {
-                                items(
-                                    items = lessonsForTargetDate,
-                                    key = { "${it.date}_${it.number}_${it.startTime}" }
-                                ) { lesson ->
-                                    val lessonKey = "${lesson.date}_${lesson.number}_${lesson.startTime}"
-                                    LessonItemWithBreak(
-                                        lesson = lesson,
-                                        nextLesson = lessonsForTargetDate.getOrNull(lessonsForTargetDate.indexOf(lesson) + 1),
-                                        currentTime = currentTime,
-                                        currentDate = currentDate,
-                                        hasAddon = activeAddonLessonKeys.contains(lessonKey),
-                                        onClick = { onLessonClick(lesson) }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .statusBarsPadding()
+                                .padding(top = 4.dp)
+                        ) {
+                            WeekCalendar(
+                                selectedDate = selectedDate,
+                                onDateSelected = { viewModel.onDateSelected(it) },
+                                weatherData = weatherData,
+                                unreadNotificationCount = unreadNotificationCount,
+                                onNotificationHistoryClick = onNotificationHistoryClick,
+                                onShareDayClick = {
+                                    val appPrefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+                                    val shareStyle = appPrefs.getInt("share_card_style", 0)
+                                    ScheduleImageRenderer.shareDaySchedule(
+                                        context = context,
+                                        date = selectedDate,
+                                        lessons = viewModel.lessonsForSelectedDay.value,
+                                        isDarkTheme = isDarkTheme,
+                                        shareStyle = shareStyle
                                     )
                                 }
+                            )
+                        }
+
+                        AnimatedVisibility(
+                            visible = !isOnline,
+                            enter = expandVertically(AppMotionScheme.defaultSpatialSpec()) + fadeIn(AppMotionScheme.fastEffectsSpec()),
+                            exit = shrinkVertically(AppMotionScheme.defaultSpatialSpec()) + fadeOut(AppMotionScheme.fastEffectsSpec())
+                        ) {
+                            OfflineBanner()
+                        }
+
+                        PhotosStyleRefreshContainer(
+                            isRefreshing = isRefreshing,
+                            onRefresh = { 
+                                if (isOnline) {
+                                    haptic.gestureThreshold()
+                                    viewModel.refreshSchedule() 
+                                } else {
+                                    haptic.error()
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar("Нет подключения к интернету. Показана сохраненная копия")
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            Crossfade(
+                                targetState = selectedDate,
+                                animationSpec = AppMotionScheme.fastEffectsSpec(),
+                                label = "day_crossfade"
+                            ) { targetDate ->
+                                val lessonsForTargetDate = if (targetDate == selectedDate) lessons else emptyList()
+
+                                if (uiState is ScheduleUiState.Loading && !isRefreshing) {
+                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                        ExpressiveLoadingIndicator(
+                                            modifier = Modifier.size(36.dp),
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                } else if (uiState is ScheduleUiState.Error && lessonsForTargetDate.isEmpty()) {
+                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            modifier = Modifier.padding(24.dp)
+                                        ) {
+                                            Text(
+                                                text = "Ошибка загрузки", 
+                                                style = MaterialTheme.typography.titleLarge,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text(
+                                                text = uiState.message, 
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Button(
+                                                onClick = {
+                                                    haptic.click()
+                                                    viewModel.refreshSchedule()
+                                                },
+                                                shape = CircleShape,
+                                                modifier = Modifier.padding(top = 16.dp)
+                                            ) {
+                                                Text("Повторить", fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    if (lessonsForTargetDate.isEmpty()) {
+                                        EmptySchedule()
+                                    } else {
+                                        LazyColumn(
+                                            state = listState,
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = padding.calculateBottomPadding() + 100.dp),
+                                            verticalArrangement = Arrangement.Top
+                                        ) {
+                                            items(
+                                                items = lessonsForTargetDate,
+                                                key = { "${it.date}_${it.number}_${it.startTime}" }
+                                            ) { lesson ->
+                                                val lessonKey = "${lesson.date}_${lesson.number}_${lesson.startTime}"
+                                                LessonItemWithBreak(
+                                                    lesson = lesson,
+                                                    nextLesson = lessonsForTargetDate.getOrNull(lessonsForTargetDate.indexOf(lesson) + 1),
+                                                    currentTime = currentTime,
+                                                    currentDate = currentDate,
+                                                    hasAddon = activeAddonLessonKeys.contains(lessonKey),
+                                                    onClick = { onLessonClick(lesson) }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                 }
+
+                // Анимированная градиентная защита статус-бара при скролле
+                StatusBarScrim(listState = listState)
             }
-        }
-    }
 }
 
 @Composable
@@ -419,7 +394,7 @@ fun LessonRow(
     val containerColor = if (status == LessonStatus.CURRENT) {
         MaterialTheme.colorScheme.primaryContainer
     } else {
-        MaterialTheme.colorScheme.surfaceContainerLowest
+        MaterialTheme.colorScheme.surfaceContainer
     }
     
     val contentColor = if (status == LessonStatus.CURRENT) {

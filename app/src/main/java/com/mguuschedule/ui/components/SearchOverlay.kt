@@ -69,14 +69,17 @@ fun SearchOverlay(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding()
-            .padding(top = 12.dp)
-            .background(MaterialTheme.colorScheme.surface)
-            .clipToBounds()
-    ) {
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.surface
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(top = 12.dp)
+                .clipToBounds()
+        ) {
         // Верхнее поле поиска
         Surface(
             modifier = Modifier
@@ -193,6 +196,7 @@ fun SearchOverlay(
             }
         }
     }
+}
 }
 
 @Composable

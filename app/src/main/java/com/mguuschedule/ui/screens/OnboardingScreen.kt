@@ -34,16 +34,16 @@ fun OnboardingScreen(
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { visible = true }
 
-    Surface(
+    Scaffold(
         modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.surface
-    ) {
+        containerColor = MaterialTheme.colorScheme.background
+    ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 16.dp)
+                .padding(top = innerPadding.calculateTopPadding())
         ) {
-            Spacer(modifier = Modifier.statusBarsPadding())
             
             AnimatedVisibility(
                 visible = visible,
@@ -198,7 +198,7 @@ fun OnboardingContent(
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
-                        contentPadding = PaddingValues(bottom = 32.dp)
+                        contentPadding = PaddingValues(bottom = 32.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
                     ) {
                         groupedGroups.forEach { (course, groups) ->
                             val isExpanded = expandedCourses[course] ?: (searchQuery.isNotEmpty())

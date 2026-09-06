@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -23,10 +24,16 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.mguuschedule.model.EducationLevel
 import com.mguuschedule.model.Group
+import com.mguuschedule.ui.components.StatusBarScrim
+import com.mguuschedule.ui.components.TopScrimProtection
 import com.mguuschedule.util.rememberHapticFeedback
+import dev.chrisbanes.haze.HazeDefaults
+import dev.chrisbanes.haze.HazeTint
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -41,16 +48,16 @@ fun ProfileScreen(
     val selectedGroup = viewModel.selectedGroup
     val selectedZachetka = viewModel.selectedZachetka
     val haptic = rememberHapticFeedback()
-    
+
     val remindersEnabled = viewModel.remindersEnabled
     val reminderTime = viewModel.reminderTimeMinutes
     val changesEnabled = viewModel.changesEnabled
     val cacheDaysCount = viewModel.cacheDaysCount
-    
+
     val themeMode = viewModel.themeMode
     val dynamicColorEnabled = viewModel.dynamicColorEnabled
     val shareCardStyle = viewModel.shareCardStyle
-    
+
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -69,7 +76,9 @@ fun ProfileScreen(
     val isForcedLoading = scheduleViewModel.isForcedLoading
     val storageState by viewModel.storageState.collectAsState()
 
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+    val listState = rememberLazyListState()
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val hazeState = rememberHazeState()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val zachetkaSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -78,242 +87,266 @@ fun ProfileScreen(
     var showCachePeriodSheet by remember { mutableStateOf(false) }
     var showReminderTimeSheet by remember { mutableStateOf(false) }
 
-    Scaffold(
-        modifier = Modifier
-            .fillMaxSize()
-            .nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = MaterialTheme.colorScheme.surface,
-        topBar = {
-            LargeTopAppBar(
-                title = {
-                    Text(
-                        text = "Настройки",
-                        fontWeight = FontWeight.Bold
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            modifier = Modifier
+                .fillMaxSize()
+                .hazeSource(hazeState)
+                .nestedScroll(scrollBehavior.nestedScrollConnection),
+            topBar = {
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .hazeEffect(
+                                state = hazeState,
+                                style = HazeDefaults.style(
+                                    backgroundColor = MaterialTheme.colorScheme.surface,
+                                    blurRadius = 16.dp,
+                                    tint = HazeTint(MaterialTheme.colorScheme.surface.copy(alpha = 0.75f))
+                                )
+                            )
                     )
-                },
-                scrollBehavior = scrollBehavior,
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                )
-            )
-        },
-        snackbarHost = {
-            SnackbarHost(snackbarHostState) { data ->
-                Snackbar(
-                    modifier = Modifier
-                        .padding(12.dp)
-                        .clip(CircleShape),
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                    action = data.visuals.actionLabel?.let {
-                        { TextButton(onClick = { data.performAction() }) { Text(it, fontWeight = FontWeight.Bold) } }
-                    }
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.CheckCircle, null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(data.visuals.message, fontWeight = FontWeight.Medium)
+                    LargeTopAppBar(
+                        title = {
+                            Text(
+                                text = "Настройки",
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        scrollBehavior = scrollBehavior,
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = Color.Transparent,
+                            scrolledContainerColor = Color.Transparent
+                        )
+                    )
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.background,
+            snackbarHost = {
+                SnackbarHost(snackbarHostState) { data ->
+                    Snackbar(
+                        modifier = Modifier
+                            .padding(12.dp)
+                            .clip(CircleShape),
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        action = data.visuals.actionLabel?.let {
+                            { TextButton(onClick = { data.performAction() }) { Text(it, fontWeight = FontWeight.Bold) } }
+                        }
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CheckCircle, null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(data.visuals.message, fontWeight = FontWeight.Medium)
+                        }
                     }
                 }
             }
-        }
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                top = innerPadding.calculateTopPadding() + 8.dp,
-                bottom = 100.dp,
-                start = 16.dp,
-                end = 16.dp
-            ),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // Section 1: Учебная группа
-            item {
-                SettingsContainer(title = "Учебная группа") {
-                    SettingsClickItem(
-                        title = "Моя группа",
-                        subtitle = selectedGroup?.name ?: "Не выбрана",
-                        icon = Icons.Default.School,
-                        onClick = {
-                            haptic.lightTick()
-                            showGroupSheet = true
-                        }
-                    )
+        ) { innerPadding ->
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .consumeWindowInsets(innerPadding),
+                contentPadding = PaddingValues(
+                    top = innerPadding.calculateTopPadding(),
+                    bottom = innerPadding.calculateBottomPadding() + 100.dp,
+                    start = 16.dp,
+                    end = 16.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
 
-                    SettingsClickItem(
-                        title = "Номер зачетной книжки",
-                        subtitle = if (selectedZachetka.isNotBlank()) selectedZachetka else "Нажмите, чтобы выбрать зачетку",
-                        icon = Icons.Default.Badge,
-                        onClick = {
-                            haptic.lightTick()
-                            viewModel.loadZachetkasForSelectedGroup()
-                            showZachetkaSheet = true
-                        }
-                    )
-                }
-            }
-
-            // Section 2: Уведомления
-            item {
-                SettingsContainer(title = "Уведомления") {
-                    SettingsSwitchItem(
-                        title = "Напоминания о парах",
-                        subtitle = "Уведомление перед началом занятия",
-                        icon = Icons.Default.NotificationsActive,
-                        checked = remindersEnabled,
-                        onCheckedChange = { 
-                            haptic.toggle(it)
-                            if (it && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                // Section 1: Учебная группа
+                item {
+                    SettingsContainer(title = "Учебная группа") {
+                        SettingsClickItem(
+                            title = "Моя группа",
+                            subtitle = selectedGroup?.name ?: "Не выбрана",
+                            icon = Icons.Default.School,
+                            onClick = {
+                                haptic.lightTick()
+                                showGroupSheet = true
                             }
-                            viewModel.updateRemindersEnabled(it) 
-                        }
-                    )
+                        )
 
-                    val alpha = if (remindersEnabled) 1f else 0.38f
-                    SettingsClickItem(
-                        title = "Время до начала",
-                        subtitle = "$reminderTime минут",
-                        icon = Icons.Default.AccessTime,
-                        enabled = remindersEnabled,
-                        contentAlpha = alpha,
-                        onClick = { 
-                            haptic.lightTick()
-                            showReminderTimeSheet = true 
-                        }
-                    )
-
-                    SettingsSwitchItem(
-                        title = "Оповещения об изменениях",
-                        subtitle = "Проверка замен и переносов аудиторий",
-                        icon = Icons.Default.Update,
-                        checked = changesEnabled,
-                        onCheckedChange = { 
-                            haptic.toggle(it)
-                            if (it && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        SettingsClickItem(
+                            title = "Номер зачетной книжки",
+                            subtitle = if (selectedZachetka.isNotBlank()) selectedZachetka else "Нажмите, чтобы выбрать зачетку",
+                            icon = Icons.Default.Badge,
+                            onClick = {
+                                haptic.lightTick()
+                                viewModel.loadZachetkasForSelectedGroup()
+                                showZachetkaSheet = true
                             }
-                            viewModel.updateChangesEnabled(it) 
-                        }
-                    )
-
-                    SettingsSwitchItem(
-                        title = "Live Updates",
-                        subtitle = "Интерактивное уведомление с таймером во время пары",
-                        icon = Icons.Default.Timer,
-                        checked = viewModel.liveUpdatesEnabled,
-                        onCheckedChange = {
-                            haptic.toggle(it)
-                            viewModel.updateLiveUpdatesEnabled(it)
-                        }
-                    )
+                        )
+                    }
                 }
-            }
 
-            // Section 3: Внешний вид
-            item {
-                SettingsContainer(title = "Внешний вид") {
-                    val themeSubtitle = when (themeMode) {
-                        1 -> "Светлая"
-                        2 -> "Тёмная"
-                        else -> "Системная"
-                    }
-                    SettingsClickItem(
-                        title = "Тема оформления",
-                        subtitle = themeSubtitle,
-                        icon = Icons.Default.Palette,
-                        onClick = { 
-                            haptic.lightTick()
-                            showThemeDialog = true 
-                        }
-                    )
-
-                    val shareStyleSubtitle = when (shareCardStyle) {
-                        1 -> "Тёмный (M3 Dark)"
-                        2 -> "Светлый (M3 Light)"
-                        3 -> "Чёрно-белый (Минимализм)"
-                        else -> "Тематический (Material You)"
-                    }
-                    SettingsClickItem(
-                        title = "Стиль постера расписания",
-                        subtitle = shareStyleSubtitle,
-                        icon = Icons.Default.Share,
-                        onClick = {
-                            haptic.lightTick()
-                            showShareStyleDialog = true
-                        }
-                    )
-
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                // Section 2: Уведомления
+                item {
+                    SettingsContainer(title = "Уведомления") {
                         SettingsSwitchItem(
-                            title = "Динамические цвета (Material You)",
-                            subtitle = "Использовать цвета из обоев рабочего стола",
-                            icon = Icons.Default.ColorLens,
-                            checked = dynamicColorEnabled,
-                            onCheckedChange = { 
+                            title = "Напоминания о парах",
+                            subtitle = "Уведомление перед началом занятия",
+                            icon = Icons.Default.NotificationsActive,
+                            checked = remindersEnabled,
+                            onCheckedChange = {
                                 haptic.toggle(it)
-                                viewModel.updateDynamicColorEnabled(it) 
+                                if (it && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                }
+                                viewModel.updateRemindersEnabled(it)
+                            }
+                        )
+
+                        val alpha = if (remindersEnabled) 1f else 0.38f
+                        SettingsClickItem(
+                            title = "Время до начала",
+                            subtitle = "$reminderTime минут",
+                            icon = Icons.Default.AccessTime,
+                            enabled = remindersEnabled,
+                            contentAlpha = alpha,
+                            onClick = {
+                                haptic.lightTick()
+                                showReminderTimeSheet = true
+                            }
+                        )
+
+                        SettingsSwitchItem(
+                            title = "Оповещения об изменениях",
+                            subtitle = "Проверка замен и переносов аудиторий",
+                            icon = Icons.Default.Update,
+                            checked = changesEnabled,
+                            onCheckedChange = {
+                                haptic.toggle(it)
+                                if (it && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                }
+                                viewModel.updateChangesEnabled(it)
+                            }
+                        )
+
+                        SettingsSwitchItem(
+                            title = "Live Updates",
+                            subtitle = "Интерактивное уведомление с таймером во время пары",
+                            icon = Icons.Default.Timer,
+                            checked = viewModel.liveUpdatesEnabled,
+                            onCheckedChange = {
+                                haptic.toggle(it)
+                                viewModel.updateLiveUpdatesEnabled(it)
+                            }
+                        )
+                    }
+                }
+
+                // Section 3: Внешний вид
+                item {
+                    SettingsContainer(title = "Внешний вид") {
+                        val themeSubtitle = when (themeMode) {
+                            1 -> "Светлая"
+                            2 -> "Тёмная"
+                            else -> "Системная"
+                        }
+                        SettingsClickItem(
+                            title = "Тема оформления",
+                            subtitle = themeSubtitle,
+                            icon = Icons.Default.Palette,
+                            onClick = {
+                                haptic.lightTick()
+                                showThemeDialog = true
+                            }
+                        )
+
+                        val shareStyleSubtitle = when (shareCardStyle) {
+                            1 -> "Тёмный (M3 Dark)"
+                            2 -> "Светлый (M3 Light)"
+                            3 -> "Чёрно-белый (Минимализм)"
+                            else -> "Тематический (Material You)"
+                        }
+                        SettingsClickItem(
+                            title = "Стиль постера расписания",
+                            subtitle = shareStyleSubtitle,
+                            icon = Icons.Default.Share,
+                            onClick = {
+                                haptic.lightTick()
+                                showShareStyleDialog = true
+                            }
+                        )
+
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                            SettingsSwitchItem(
+                                title = "Динамические цвета (Material You)",
+                                subtitle = "Использовать цвета из обоев рабочего стола",
+                                icon = Icons.Default.ColorLens,
+                                checked = dynamicColorEnabled,
+                                onCheckedChange = {
+                                    haptic.toggle(it)
+                                    viewModel.updateDynamicColorEnabled(it)
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // Section 4: Данные и хранилище
+                item {
+                    SettingsContainer(title = "Данные и хранилище") {
+                        SettingsClickItem(
+                            title = "Период автокэширования",
+                            subtitle = "$cacheDaysCount дней",
+                            icon = Icons.Default.DateRange,
+                            onClick = {
+                                haptic.lightTick()
+                                showCachePeriodSheet = true
+                            }
+                        )
+
+                        SettingsClickItem(
+                            title = "Очистить локальный кэш",
+                            subtitle = "${storageState.statusText} • ${storageState.lastUpdated}",
+                            icon = Icons.Default.DeleteSweep,
+                            enabled = !isForcedLoading && storageState.lessonsCount > 0,
+                            titleColor = MaterialTheme.colorScheme.error,
+                            iconTint = MaterialTheme.colorScheme.error,
+                            onClick = {
+                                haptic.error()
+                                viewModel.clearStorage(scheduleViewModel)
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("Кэш успешно очищен")
+                                }
+                            }
+                        )
+                    }
+                }
+
+                // Section 5: О приложении & Отладка
+                item {
+                    SettingsContainer(title = "О приложении") {
+                        SettingsClickItem(
+                            title = "МГУУ Расписание",
+                            subtitle = "Версия 0.10 beta • Material 3 Expressive",
+                            icon = Icons.Default.Info,
+                            onClick = {}
+                        )
+
+                        SettingsClickItem(
+                            title = "Панель отладки",
+                            subtitle = "Инструменты тестирования и логи",
+                            icon = Icons.Default.BugReport,
+                            onClick = {
+                                haptic.lightTick()
+                                onNavigateToDebug()
                             }
                         )
                     }
                 }
             }
-
-            // Section 4: Данные и хранилище
-            item {
-                SettingsContainer(title = "Данные и хранилище") {
-                    SettingsClickItem(
-                        title = "Период автокэширования",
-                        subtitle = "$cacheDaysCount дней",
-                        icon = Icons.Default.DateRange,
-                        onClick = { 
-                            haptic.lightTick()
-                            showCachePeriodSheet = true 
-                        }
-                    )
-
-                    SettingsClickItem(
-                        title = "Очистить локальный кэш",
-                        subtitle = "${storageState.statusText} • ${storageState.lastUpdated}",
-                        icon = Icons.Default.DeleteSweep,
-                        enabled = !isForcedLoading && storageState.lessonsCount > 0,
-                        titleColor = MaterialTheme.colorScheme.error,
-                        iconTint = MaterialTheme.colorScheme.error,
-                        onClick = {
-                            haptic.error()
-                            viewModel.clearStorage(scheduleViewModel)
-                            scope.launch {
-                                snackbarHostState.showSnackbar("Кэш успешно очищен")
-                            }
-                        }
-                    )
-                }
-            }
-
-            // Section 5: О приложение & Отладка
-            item {
-                SettingsContainer(title = "О приложении") {
-                    SettingsClickItem(
-                        title = "МГУУ Расписание",
-                        subtitle = "Версия 0.10 beta • Material 3 Expressive",
-                        icon = Icons.Default.Info,
-                        onClick = {}
-                    )
-
-                    SettingsClickItem(
-                        title = "Панель отладки",
-                        subtitle = "Инструменты тестирования и логи",
-                        icon = Icons.Default.BugReport,
-                        onClick = {
-                            haptic.lightTick()
-                            onNavigateToDebug()
-                        }
-                    )
-                }
-            }
         }
+
+        // Анимированная затеняющая дымка статус-бара при скролле
+        StatusBarScrim(listState = listState)
 
         if (showThemeDialog) {
             ThemeSelectionDialog(

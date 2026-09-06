@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -37,6 +38,7 @@ import com.mguuschedule.model.Lesson
 import com.mguuschedule.repository.AppDatabase
 import com.mguuschedule.repository.LessonTaskEntity
 import com.mguuschedule.repository.ScheduleRepository
+import com.mguuschedule.ui.components.TopScrimProtection
 import com.mguuschedule.util.formatClassroom
 import com.mguuschedule.util.rememberHapticFeedback
 import kotlinx.coroutines.launch
@@ -104,7 +106,7 @@ fun getFloorImageResId(room: String): Int? {
     if (room.isBlank() || room.trim() == "—") return null
     if (room.contains("онлайн", ignoreCase = true) || room.contains("дистант", ignoreCase = true)) return null
 
-    val regex = Regex("\\b([1-5])\\d{2}\\b")
+    val regex = Regex("([1-5])\\d{2}")
     val match = regex.find(room) ?: return null
     val floorDigit = match.groupValues[1].toIntOrNull() ?: return null
 
@@ -211,29 +213,41 @@ fun LessonDetailScreen(
         formatClassroom(lesson.room)
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Информация о паре", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = {
-                        haptic.click()
-                        onBack()
-                    }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
-            )
-        }
-    ) { padding ->
-        Column(
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 8.dp)
-        ) {
+                .nestedScroll(scrollBehavior.nestedScrollConnection),
+            topBar = {
+                TopAppBar(
+                    title = { Text("Информация о паре", fontWeight = FontWeight.Bold) },
+                    navigationIcon = {
+                        IconButton(onClick = {
+                            haptic.click()
+                            onBack()
+                        }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                        }
+                    },
+                    scrollBehavior = scrollBehavior,
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                        scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                    )
+                )
+            },
+            containerColor = MaterialTheme.colorScheme.background
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .consumeWindowInsets(padding)
+                    .verticalScroll(rememberScrollState())
+                    .padding(padding)
+                    .padding(horizontal = 20.dp, vertical = 8.dp)
+            ) {
             // Lesson Main Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -589,6 +603,9 @@ fun LessonDetailScreen(
             }
         )
     }
+
+    TopScrimProtection()
+}
 }
 
 @Composable

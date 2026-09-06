@@ -1,5 +1,8 @@
 package com.mguuschedule.ui.theme
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -8,7 +11,16 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
 
 private val DarkColorScheme = darkColorScheme(
     primary = PrimaryDark,
@@ -29,6 +41,8 @@ private val DarkColorScheme = darkColorScheme(
     onSurface = OnSurfaceDark,
     surfaceVariant = SurfaceVariantDark,
     onSurfaceVariant = OnSurfaceVariantDark,
+    surfaceDim = SurfaceDimDark,
+    surfaceBright = SurfaceBrightDark,
     surfaceContainerLowest = SurfaceContainerLowestDark,
     surfaceContainerLow = SurfaceContainerLowDark,
     surfaceContainer = SurfaceContainerDark,
@@ -57,6 +71,8 @@ private val LightColorScheme = lightColorScheme(
     onSurface = OnSurfaceLight,
     surfaceVariant = SurfaceVariantLight,
     onSurfaceVariant = OnSurfaceVariantLight,
+    surfaceDim = SurfaceDimLight,
+    surfaceBright = SurfaceBrightLight,
     surfaceContainerLowest = SurfaceContainerLowestLight,
     surfaceContainerLow = SurfaceContainerLowLight,
     surfaceContainer = SurfaceContainerLight,
@@ -76,6 +92,18 @@ fun MGUUScheduleTheme(
         1 -> false
         2 -> true
         else -> isSystemInDarkTheme()
+    }
+
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        val activity = view.context.findActivity()
+        if (activity != null) {
+            SideEffect {
+                val controller = WindowCompat.getInsetsController(activity.window, view)
+                controller.isAppearanceLightStatusBars = !darkTheme
+                controller.isAppearanceLightNavigationBars = !darkTheme
+            }
+        }
     }
 
     val colorScheme = when {

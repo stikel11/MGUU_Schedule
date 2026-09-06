@@ -15,6 +15,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -26,7 +28,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mguuschedule.repository.AppDatabase
 import com.mguuschedule.repository.NotificationDao
 import com.mguuschedule.repository.NotificationEntity
+import com.mguuschedule.ui.components.TopScrimProtection
 import com.mguuschedule.util.rememberHapticFeedback
+import dev.chrisbanes.haze.HazeDefaults
+import dev.chrisbanes.haze.HazeTint
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -89,85 +97,116 @@ fun NotificationHistoryScreen(
         viewModel.markAllAsRead()
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("История уведомлений", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = {
-                        haptic.lightTick()
-                        onBack()
-                    }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
-                    }
-                },
-                actions = {
-                    if (notifications.isNotEmpty()) {
-                        IconButton(onClick = {
-                            haptic.click()
-                            viewModel.clearAll()
-                        }) {
-                            Icon(Icons.Default.DeleteSweep, contentDescription = "Очистить историю")
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                )
-            )
-        },
-        containerColor = MaterialTheme.colorScheme.surface
-    ) { innerPadding ->
-        if (notifications.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        modifier = Modifier.size(72.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                Icons.Default.NotificationsNone,
-                                contentDescription = null,
-                                modifier = Modifier.size(36.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val hazeState = rememberHazeState()
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            modifier = Modifier
+                .fillMaxSize()
+                .hazeSource(hazeState)
+                .nestedScroll(scrollBehavior.nestedScrollConnection),
+            topBar = {
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .hazeEffect(
+                                state = hazeState,
+                                style = HazeDefaults.style(
+                                    backgroundColor = MaterialTheme.colorScheme.surface,
+                                    blurRadius = 16.dp,
+                                    tint = HazeTint(MaterialTheme.colorScheme.surface.copy(alpha = 0.75f))
+                                )
                             )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "История уведомлений пуста",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Здесь будут появляться отслеживаемые изменения и напоминания",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    MediumTopAppBar(
+                        title = { Text("История уведомлений", fontWeight = FontWeight.Bold) },
+                        navigationIcon = {
+                            IconButton(onClick = {
+                                haptic.lightTick()
+                                onBack()
+                            }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                            }
+                        },
+                        actions = {
+                            if (notifications.isNotEmpty()) {
+                                IconButton(onClick = {
+                                    haptic.click()
+                                    viewModel.clearAll()
+                                }) {
+                                    Icon(Icons.Default.DeleteSweep, contentDescription = "Очистить историю")
+                                }
+                            }
+                        },
+                        scrollBehavior = scrollBehavior,
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = Color.Transparent,
+                            scrolledContainerColor = Color.Transparent
+                        )
                     )
                 }
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                items(notifications, key = { it.id }) { item ->
-                    NotificationItemCard(item = item)
+            },
+            containerColor = MaterialTheme.colorScheme.background
+        ) { innerPadding ->
+            if (notifications.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            modifier = Modifier.size(72.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Default.NotificationsNone,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(36.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "История уведомлений пуста",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Здесь будут появляться отслеживаемые изменения и напоминания",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .consumeWindowInsets(innerPadding),
+                    contentPadding = PaddingValues(
+                        top = innerPadding.calculateTopPadding(),
+                        bottom = innerPadding.calculateBottomPadding() + 16.dp,
+                        start = 16.dp,
+                        end = 16.dp
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(notifications, key = { it.id }) { item ->
+                        NotificationItemCard(item = item)
+                    }
                 }
             }
         }
+
+        TopScrimProtection()
     }
 }
 

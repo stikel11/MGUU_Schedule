@@ -1,7 +1,12 @@
 package com.mguuschedule.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -17,7 +22,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -26,6 +30,11 @@ import com.mguuschedule.ui.navigation.Screen
 import com.mguuschedule.ui.theme.AppMotionScheme
 import com.mguuschedule.util.rememberHapticFeedback
 
+/**
+ * Компактный плавающий бар навигации (по принципу Google Photos).
+ * Показывает иконку + подпись только для ВЫБРАННОГО раздела.
+ * Для невыбранных разделов отображается только текстовая подпись.
+ */
 @Composable
 fun AnimatedFloatingNavBar(
     items: List<Screen>,
@@ -41,7 +50,6 @@ fun AnimatedFloatingNavBar(
     
     val selectedIndex = items.indexOfFirst { it.route == currentRoute }.coerceAtLeast(0)
     
-    // Expressive Spatial Motion for pill sliding
     val pillAnimationSpec = AppMotionScheme.defaultSpatialSpec<Dp>()
 
     val pillOffset by animateDpAsState(
@@ -57,14 +65,14 @@ fun AnimatedFloatingNavBar(
     )
 
     Surface(
-        modifier = modifier.height(56.dp),
+        modifier = modifier.height(52.dp),
         shape = CircleShape,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         shadowElevation = 4.dp,
         tonalElevation = 2.dp
     ) {
-        Box(modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)) {
-            // Active Indicator Pill
+        Box(modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)) {
+            // Анимированный индикатор активного раздела
             Box(
                 modifier = Modifier
                     .offset(x = pillOffset)
@@ -81,7 +89,6 @@ fun AnimatedFloatingNavBar(
                 items.forEachIndexed { index, screen ->
                     val isSelected = items.indexOfFirst { it.route == currentRoute } == index
                     
-                    // Effects Motion for color transition
                     val contentColor by animateColorAsState(
                         targetValue = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                         animationSpec = AppMotionScheme.fastEffectsSpec(),
@@ -109,17 +116,27 @@ fun AnimatedFloatingNavBar(
                                 }
                                 onItemClick(screen)
                             }
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                            .padding(horizontal = 14.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center
                     ) {
-                        Icon(
-                            imageVector = screen.icon,
-                            contentDescription = screen.title,
-                            tint = contentColor,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        // Иконка отображается ТОЛЬКО у выбранного раздела
+                        AnimatedVisibility(
+                            visible = isSelected,
+                            enter = expandHorizontally(AppMotionScheme.defaultSpatialSpec()) + fadeIn(AppMotionScheme.fastEffectsSpec()),
+                            exit = shrinkHorizontally(AppMotionScheme.defaultSpatialSpec()) + fadeOut(AppMotionScheme.fastEffectsSpec())
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = screen.icon,
+                                    contentDescription = screen.title,
+                                    tint = contentColor,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                            }
+                        }
+
                         Text(
                             text = screen.title,
                             color = contentColor,
@@ -129,7 +146,7 @@ fun AnimatedFloatingNavBar(
                     }
                     
                     if (index < items.size - 1) {
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Spacer(modifier = Modifier.width(2.dp))
                     }
                 }
             }

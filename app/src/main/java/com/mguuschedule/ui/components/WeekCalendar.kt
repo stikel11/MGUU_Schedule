@@ -229,7 +229,7 @@ fun WeekCalendar(
                                     showMonthPicker = false
                                 },
                                 shape = RoundedCornerShape(20.dp),
-                                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
+                                color = if (isSelected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
                                 modifier = Modifier.height(52.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
@@ -237,7 +237,7 @@ fun WeekCalendar(
                                         text = name,
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
@@ -365,15 +365,19 @@ fun DayItem(
 
     val isWeekend = date.dayOfWeek == DayOfWeek.SATURDAY || date.dayOfWeek == DayOfWeek.SUNDAY
     
+    val isToday = remember(date) { date.isEqual(LocalDate.now()) }
+
     val targetTextColor = when {
         isSelected -> MaterialTheme.colorScheme.onPrimary
+        isToday -> MaterialTheme.colorScheme.onTertiaryContainer
         isWeekend -> MaterialTheme.colorScheme.error.copy(alpha = if (isSameMonth) 1f else 0.38f)
-        !isSameMonth -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+        !isSameMonth -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
         else -> MaterialTheme.colorScheme.onSurface
     }
     
     val targetLabelColor = when {
         isSelected -> MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f)
+        isToday -> MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.85f)
         isWeekend -> MaterialTheme.colorScheme.error.copy(alpha = if (isSameMonth) 0.75f else 0.38f)
         !isSameMonth -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
         else -> MaterialTheme.colorScheme.onSurfaceVariant
@@ -391,7 +395,11 @@ fun DayItem(
         label = "labelColor"
     )
     val backgroundColor by animateColorAsState(
-        targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.5f),
+        targetValue = when {
+            isSelected -> MaterialTheme.colorScheme.primary
+            isToday -> MaterialTheme.colorScheme.tertiaryContainer
+            else -> MaterialTheme.colorScheme.surfaceContainerLow
+        },
         animationSpec = AppMotionScheme.fastEffectsSpec(),
         label = "bgColor"
     )

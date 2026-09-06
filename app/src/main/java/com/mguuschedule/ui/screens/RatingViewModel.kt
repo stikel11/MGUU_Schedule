@@ -75,9 +75,12 @@ class RatingViewModel(
         val groupName = prefs.getString("selected_group_name", "25М-УГКП21") ?: "25М-УГКП21"
         val savedZachetka = prefs.getString("selected_zachetka", "") ?: ""
 
+        val currentZachetka = (uiState as? RatingUiState.Success)?.student?.zachetka.orEmpty()
+        val isZachetkaChanged = savedZachetka.isNotBlank() && !savedZachetka.equals(currentZachetka, ignoreCase = true)
+
         viewModelScope.launch {
             // 1. Попытка сначала сразу показать сохраненный кэш БРС
-            if (uiState is RatingUiState.Loading) {
+            if (uiState is RatingUiState.Loading || isZachetkaChanged) {
                 val cachedEntity = ratingRepository.getCachedRating(groupId, savedZachetka, yearId ?: "", semId ?: "")
                 if (cachedEntity != null) {
                     runCatching {
@@ -85,9 +88,13 @@ class RatingViewModel(
                         val subjectsType = object : TypeToken<List<SubjectScore>>() {}.type
                         val studentsListType = object : TypeToken<List<StudentRating>>() {}.type
 
-                        val cachedStudent: StudentRating? = gson.fromJson(cachedEntity.studentJson, studentType)
-                        val cachedSubjects: List<SubjectScore> = gson.fromJson(cachedEntity.subjectsJson, subjectsType) ?: emptyList()
                         val cachedStudentsList: List<StudentRating> = gson.fromJson(cachedEntity.studentsListJson, studentsListType) ?: emptyList()
+                        val cachedStudent = if (savedZachetka.isNotBlank() && cachedStudentsList.isNotEmpty()) {
+                            cachedStudentsList.find { it.zachetka.equals(savedZachetka, ignoreCase = true) }
+                        } else {
+                            gson.fromJson(cachedEntity.studentJson, studentType)
+                        }
+                        val cachedSubjects: List<SubjectScore> = gson.fromJson(cachedEntity.subjectsJson, subjectsType) ?: emptyList()
 
                         if (cachedStudent != null || cachedSubjects.isNotEmpty()) {
                             uiState = RatingUiState.Success(
@@ -95,13 +102,13 @@ class RatingViewModel(
                                 subjects = cachedSubjects,
                                 studentsList = cachedStudentsList
                             )
-                            AppLogger.d("RATING", "Отображен локальный кэш БРС из Room")
+                            AppLogger.d("RATING", "Отображен локальный кэш БРС для ${cachedStudent?.zachetka}")
                         }
                     }
                 }
             }
 
-            if (!forceRefresh && uiState is RatingUiState.Success && yearId == selectedYearId && semId == selectedSemId) return@launch
+            if (!forceRefresh && !isZachetkaChanged && uiState is RatingUiState.Success && yearId == selectedYearId && semId == selectedSemId) return@launch
 
             isRefreshing = true
 
