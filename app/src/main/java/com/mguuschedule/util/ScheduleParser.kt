@@ -1,5 +1,6 @@
 package com.mguuschedule.util
 
+import com.mguuschedule.model.EducationLevel
 import com.mguuschedule.model.Group
 import com.mguuschedule.model.LessonEntity
 import org.jsoup.Jsoup
@@ -66,7 +67,7 @@ object ScheduleParser {
         return parsedLessons
     }
 
-    fun parseGroups(html: String): List<Group> {
+    fun parseGroups(html: String, level: EducationLevel = EducationLevel.BACHELOR): List<Group> {
         val doc = Jsoup.parse(html)
         val groups = mutableListOf<Group>()
         
@@ -85,7 +86,8 @@ object ScheduleParser {
                         Group(
                             id = groupId,
                             name = element.text().trim(),
-                            course = courseName
+                            course = courseName,
+                            level = level
                         )
                     )
                 } catch (e: Exception) {

@@ -55,11 +55,23 @@ class ScheduleViewModel(
         .flatMapLatest { date ->
             scheduleRepository.getLessonsByDateFlow(date.format(DateTimeFormatter.ISO_LOCAL_DATE))
         }
-        .map { entities -> entities.map { it.toLesson() }.sortedBy { it.startTime } }
+        .map { entities ->
+            runCatching {
+                entities.mapNotNull { it.toLesson() }.sortedBy { it.startTime }
+            }.getOrDefault(emptyList())
+        }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.Eagerly,
             initialValue = emptyList()
+        )
+
+    val activeAddonLessonKeys: StateFlow<Set<String>> = scheduleRepository.getActiveAddonLessonKeysFlow()
+        .map { it.toSet() }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptySet()
         )
 
     var uiState: ScheduleUiState by mutableStateOf(ScheduleUiState.Loading)
@@ -135,8 +147,16 @@ class ScheduleViewModel(
     fun loadSchedule(groupId: String, forceRefresh: Boolean = false) {
         if (!forceRefresh && currentGroupId == groupId) return
         
+        val isGroupChanged = currentGroupId != null && currentGroupId != groupId
         currentGroupId = groupId
-        refreshSchedule()
+        
+        viewModelScope.launch {
+            if (isGroupChanged || forceRefresh) {
+                scheduleRepository.clearDatabase()
+                uiState = ScheduleUiState.Loading
+            }
+            refreshSchedule()
+        }
     }
 
     fun refreshSchedule() {
@@ -150,25 +170,43 @@ class ScheduleViewModel(
             
             AppLogger.d("SCHEDULE_TRACE", ">>> 1. Старт корутины загрузки...")
             
-            val result = scheduleRepository.fetchSchedule(groupId, groupName, cacheDaysCount)
-            
-            result.onSuccess { entities ->
-                val newLessons = entities.map { it.toLesson() }
-                hasChangesInLastRefresh = if (lessonsForSelectedDay.value.isEmpty()) false else lessonsForSelectedDay.value != newLessons
+            try {
+                val result = scheduleRepository.fetchSchedule(groupId, groupName, cacheDaysCount)
                 
-                uiState = ScheduleUiState.Success(newLessons)
-                scheduleUpcomingRemindersFromDb()
-                AppLogger.d("SCHEDULE_TRACE", ">>> 3. Успешно загружено пар: ${newLessons.size}")
-            }.onFailure { e ->
-                AppLogger.e("SCHEDULE_TRACE", "ОШИБКА ЗАГРУЗКИ: ${e.message}", e)
-                if (lessonsForSelectedDay.value.isEmpty()) {
-                    uiState = ScheduleUiState.Error(e.message ?: "Ошибка подключения")
+                result.onSuccess { entities ->
+                    try {
+                        val newLessons = entities.mapNotNull { it.toLesson() }
+                        val currentDayStr = _selectedDate.value.toString()
+                        val previousDayLessons = lessonsForSelectedDay.value
+                        val newDayLessons = newLessons.filter { it.date.toString() == currentDayStr }
+                        
+                        hasChangesInLastRefresh = if (previousDayLessons.isEmpty()) false else previousDayLessons != newDayLessons
+                        
+                        uiState = ScheduleUiState.Success(newLessons)
+                        scheduleUpcomingRemindersFromDb()
+                        AppLogger.d("SCHEDULE_TRACE", ">>> 3. Успешно загружено пар: ${newLessons.size}")
+                    } catch (e: Exception) {
+                        AppLogger.e("SCHEDULE_TRACE", "ОШИБКА ОБРАБОТКИ ПАР: ${e.message}", e)
+                        if (lessonsForSelectedDay.value.isEmpty()) {
+                            uiState = ScheduleUiState.Error(e.message ?: "Ошибка обработки расписания")
+                        }
+                    }
+                }.onFailure { e ->
+                    AppLogger.e("SCHEDULE_TRACE", "ОШИБКА ЗАГРУЗКИ: ${e.message}", e)
+                    if (lessonsForSelectedDay.value.isEmpty()) {
+                        uiState = ScheduleUiState.Error(e.message ?: "Ошибка подключения")
+                    }
                 }
+            } catch (e: Exception) {
+                AppLogger.e("SCHEDULE_TRACE", "НЕОЖИДАННАЯ ОШИБКА: ${e.message}", e)
+                if (lessonsForSelectedDay.value.isEmpty()) {
+                    uiState = ScheduleUiState.Error(e.message ?: "Ошибка загрузки расписания")
+                }
+            } finally {
+                isForcedLoading = false
+                isRefreshing = false
+                AppLogger.d("SCHEDULE_TRACE", ">>> 4. isRefreshing сброшен в false")
             }
-
-            isForcedLoading = false
-            isRefreshing = false
-            AppLogger.d("SCHEDULE_TRACE", ">>> 4. isRefreshing сброшен в false")
         }
     }
 
@@ -180,7 +218,7 @@ class ScheduleViewModel(
                 val todayStr = LocalDate.now().toString()
                 val upcomingEntities = scheduleRepository.getUpcomingLessons(todayStr)
                 val minutesBefore = appPrefs.getInt("reminder_time", 15)
-                val upcomingLessons = upcomingEntities.map { it.toLesson() }
+                val upcomingLessons = upcomingEntities.mapNotNull { it.toLesson() }
                 
                 if (enabled) {
                     upcomingLessons.forEach { lesson ->
@@ -237,7 +275,7 @@ class ScheduleViewModelFactory(
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(ScheduleViewModel::class.java)) {
             val database = AppDatabase.getDatabase(application)
-            val repository = ScheduleRepository(application, database.scheduleDao())
+            val repository = ScheduleRepository(application, database)
             return ScheduleViewModel(repository, application) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")

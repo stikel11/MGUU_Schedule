@@ -1,26 +1,183 @@
 package com.mguuschedule.ui.screens
 
-import androidx.compose.foundation.background
+import android.app.Application
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.mguuschedule.R
 import com.mguuschedule.model.Lesson
+import com.mguuschedule.repository.AppDatabase
+import com.mguuschedule.repository.LessonTaskEntity
+import com.mguuschedule.repository.ScheduleRepository
 import com.mguuschedule.util.formatClassroom
 import com.mguuschedule.util.rememberHapticFeedback
+import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+
+class LessonDetailViewModel(
+    application: Application,
+    val lesson: Lesson
+) : AndroidViewModel(application) {
+    private val database = AppDatabase.getDatabase(application)
+    private val repository = ScheduleRepository(application, database)
+    private val lessonKey = "${lesson.date}_${lesson.number}_${lesson.startTime}"
+
+    val noteFlow = repository.getNoteFlow(lessonKey)
+    val tasksFlow = repository.getTasksFlow(lessonKey)
+
+    fun saveNote(text: String) {
+        viewModelScope.launch {
+            repository.saveNote(lessonKey, text)
+        }
+    }
+
+    fun addTask(title: String, deadlineStr: String? = null) {
+        viewModelScope.launch {
+            val epoch = runCatching {
+                deadlineStr?.let {
+                    LocalDate.parse(it.trim()).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                }
+            }.getOrNull()
+            repository.addTask(lessonKey, title, epoch)
+        }
+    }
+
+    fun toggleTask(taskId: Long, isCompleted: Boolean) {
+        viewModelScope.launch {
+            repository.toggleTaskCompleted(taskId, isCompleted)
+        }
+    }
+
+    fun deleteTask(taskId: Long) {
+        viewModelScope.launch {
+            repository.deleteTask(taskId)
+        }
+    }
+}
+
+class LessonDetailViewModelFactory(
+    private val application: Application,
+    private val lesson: Lesson
+) : ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        return LessonDetailViewModel(application, lesson) as T
+    }
+}
+
+/**
+ * Определение ресурса схемы этажа по номеру аудитории.
+ * Поддерживаются 3-значные аудитории (101-599). Первая цифра определяет этаж (1-5).
+ */
+fun getFloorImageResId(room: String): Int? {
+    if (room.isBlank() || room.trim() == "—") return null
+    if (room.contains("онлайн", ignoreCase = true) || room.contains("дистант", ignoreCase = true)) return null
+
+    val regex = Regex("\\b([1-5])\\d{2}\\b")
+    val match = regex.find(room) ?: return null
+    val floorDigit = match.groupValues[1].toIntOrNull() ?: return null
+
+    return when (floorDigit) {
+        1 -> R.drawable.floor_1
+        2 -> R.drawable.floor_2
+        3 -> R.drawable.floor_3
+        4 -> R.drawable.floor_4
+        5 -> R.drawable.floor_5
+        else -> null
+    }
+}
+
+/**
+ * Интерактивный компонент просмотра схемы этажа с поддержкой Pinch-to-Zoom, Pan и Double-Tap Zoom.
+ */
+@Composable
+fun InteractiveFloorMap(
+    imageResId: Int,
+    contentDescription: String,
+    modifier: Modifier = Modifier
+) {
+    var scale by remember { mutableFloatStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+
+    val state = rememberTransformableState { zoomChange, offsetChange, _ ->
+        scale = (scale * zoomChange).coerceIn(1f, 4f)
+        if (scale <= 1.05f) {
+            scale = 1f
+            offset = Offset.Zero
+        } else {
+            val maxOffsetX = 320f * (scale - 1f)
+            val maxOffsetY = 240f * (scale - 1f)
+            val newX = (offset.x + offsetChange.x).coerceIn(-maxOffsetX, maxOffsetX)
+            val newY = (offset.y + offsetChange.y).coerceIn(-maxOffsetY, maxOffsetY)
+            offset = Offset(newX, newY)
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .clipToBounds()
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onDoubleTap = {
+                        if (scale > 1.2f) {
+                            scale = 1f
+                            offset = Offset.Zero
+                        } else {
+                            scale = 2.5f
+                        }
+                    }
+                )
+            }
+            .transformable(state = state),
+        contentAlignment = Alignment.Center
+    ) {
+        Image(
+            painter = painterResource(id = imageResId),
+            contentDescription = contentDescription,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(6.dp)
+                .graphicsLayer(
+                    scaleX = scale,
+                    scaleY = scale,
+                    translationX = offset.x,
+                    translationY = offset.y
+                )
+        )
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -28,182 +185,472 @@ fun LessonDetailScreen(
     lesson: Lesson?,
     onBack: () -> Unit
 ) {
-    val haptic = rememberHapticFeedback()
     if (lesson == null) {
-        Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface), contentAlignment = Alignment.Center) {
-            Text("Занятие не найдено")
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("Информация о паре не найдена")
         }
         return
     }
 
+    val context = LocalContext.current
+    val viewModel: LessonDetailViewModel = viewModel(
+        factory = LessonDetailViewModelFactory(context.applicationContext as Application, lesson)
+    )
+
+    val noteEntity by viewModel.noteFlow.collectAsState(initial = null)
+    val taskList by viewModel.tasksFlow.collectAsState(initial = emptyList())
+    val haptic = rememberHapticFeedback()
+
+    var showNoteDialog by remember { mutableStateOf(false) }
+    var showTaskDialog by remember { mutableStateOf(false) }
+
+    val typeFormatted = remember(lesson.type) {
+        lesson.type.lowercase().replaceFirstChar { it.uppercase() }
+    }
     val roomFormatted = remember(lesson.room) {
         formatClassroom(lesson.room)
     }
 
-    Surface(
-        color = MaterialTheme.colorScheme.surface,
-        modifier = Modifier.fillMaxSize().clipToBounds()
-    ) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = { Text("Информация о паре", style = MaterialTheme.typography.titleMedium) },
-                    navigationIcon = {
-                        IconButton(onClick = {
-                            haptic.lightTick()
-                            onBack()
-                        }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
-                        }
-                    },
-                    actions = {
-                        IconButton(onClick = {
-                            haptic.lightTick()
-                            /* Настроить уведомление */
-                        }) {
-                            Icon(Icons.Default.Notifications, contentDescription = "Уведомление")
-                        }
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Информация о паре", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = {
+                        haptic.click()
+                        onBack()
+                    }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
                     }
-                )
-            }
-        ) { innerPadding ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp)
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 8.dp)
+        ) {
+            // Lesson Main Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(28.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
             ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         Surface(
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            shape = RoundedCornerShape(100.dp)
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.1f)
                         ) {
                             Text(
                                 text = "${lesson.number} пара",
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                                 style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                             )
                         }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = lesson.type,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.1f)
+                        ) {
+                            Text(
+                                text = typeFormatted,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            )
+                        }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
                     Text(
                         text = lesson.title,
-                        style = MaterialTheme.typography.headlineMedium,
+                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
-                        lineHeight = 32.sp
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        lineHeight = 26.sp
                     )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f))
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Time & Room Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text(
+                                text = "Время проведения",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                            )
+                            Text(
+                                text = "${lesson.startTime} — ${lesson.endTime}",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = "Аудитория",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                            )
+                            Text(
+                                text = roomFormatted,
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Teacher Row
+                    Column {
+                        Text(
+                            text = "Преподаватель",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                        )
+                        Text(
+                            text = lesson.teacher,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
                 }
+            }
 
-                Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
-                DetailItem(
-                    icon = Icons.Default.AccessTime,
-                    label = "Время",
-                    value = "${lesson.startTime} - ${lesson.endTime}"
-                )
-                
-                DetailItem(
-                    icon = Icons.Default.LocationOn,
-                    label = "Аудитория",
-                    value = roomFormatted
-                )
+            // Notes Section
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+            ) {
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.EditNote,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Заметка к паре",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
 
-                DetailItem(
-                    icon = Icons.Default.Person,
-                    label = "Преподаватель",
-                    value = lesson.teacher
-                )
+                        IconButton(onClick = {
+                            haptic.lightTick()
+                            showNoteDialog = true
+                        }) {
+                            Icon(
+                                imageVector = if (noteEntity?.text.isNullOrBlank()) Icons.Default.Add else Icons.Default.Edit,
+                                contentDescription = "Редактировать заметку"
+                            )
+                        }
+                    }
 
-                DetailItem(
-                    icon = Icons.Default.Map,
-                    label = "Адрес корпуса",
-                    value = "ул. Сретенка, 28"
-                )
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                Spacer(modifier = Modifier.height(32.dp))
+                    if (noteEntity?.text.isNullOrBlank()) {
+                        Text(
+                            text = "Нажмите +, чтобы добавить заметку к этой паре",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        Text(
+                            text = noteEntity!!.text,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
 
-                Text(
-                    text = "Схема этажа",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
+            Spacer(modifier = Modifier.height(16.dp))
 
-                Spacer(modifier = Modifier.height(12.dp))
+            // Tasks Section
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+            ) {
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.CheckCircleOutline,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Задачки к паре",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
 
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(400.dp),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
-                ) {
+                        IconButton(onClick = {
+                            haptic.lightTick()
+                            showTaskDialog = true
+                        }) {
+                            Icon(Icons.Default.Add, contentDescription = "Добавить задачу")
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    if (taskList.isEmpty()) {
+                        Text(
+                            text = "Нет задач к этой паре",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            taskList.forEach { task ->
+                                TaskItemRow(
+                                    task = task,
+                                    onToggle = { isChecked ->
+                                        haptic.click()
+                                        viewModel.toggleTask(task.id, isChecked)
+                                    },
+                                    onDelete = {
+                                        haptic.click()
+                                        viewModel.deleteTask(task.id)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Floor Plan Section (In existing block on LessonDetailScreen)
+            val floorImageResId = remember(lesson.room) { getFloorImageResId(lesson.room) }
+            val floorNumber = remember(lesson.room) {
+                Regex("\\b([1-5])\\d{2}\\b").find(lesson.room)?.groupValues?.get(1) ?: ""
+            }
+
+            Text(
+                text = if (floorNumber.isNotBlank()) "Схема $floorNumber этажа" else "Схема этажа",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(280.dp),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+            ) {
+                if (floorImageResId != null) {
+                    InteractiveFloorMap(
+                        imageResId = floorImageResId,
+                        contentDescription = "Схема $floorNumber этажа для $roomFormatted",
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(
                                 Icons.Default.Map, 
                                 contentDescription = null, 
-                                modifier = Modifier.size(64.dp),
-                                tint = MaterialTheme.colorScheme.outline
+                                modifier = Modifier.size(56.dp),
+                                tint = MaterialTheme.colorScheme.primary
                             )
+                            Spacer(modifier = Modifier.height(12.dp))
                             Text(
-                                "Схема для этажа ${lesson.room.filter { it.isDigit() }.take(1)}",
+                                text = "Схема недоступна для $roomFormatted",
                                 style = MaterialTheme.typography.bodyLarge,
-                                modifier = Modifier.padding(top = 16.dp)
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
                 }
-                
-                Spacer(modifier = Modifier.height(32.dp))
             }
+            
+            Spacer(modifier = Modifier.height(48.dp))
         }
+    }
+
+    // Note Dialog
+    if (showNoteDialog) {
+        var textValue by remember { mutableStateOf(noteEntity?.text.orEmpty()) }
+        AlertDialog(
+            onDismissRequest = { showNoteDialog = false },
+            title = { Text("Заметка к паре", fontWeight = FontWeight.Bold) },
+            text = {
+                OutlinedTextField(
+                    value = textValue,
+                    onValueChange = { textValue = it },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
+                    placeholder = { Text("Введите текст заметки...") },
+                    shape = RoundedCornerShape(16.dp)
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    haptic.click()
+                    viewModel.saveNote(textValue)
+                    showNoteDialog = false
+                }) { Text("Сохранить") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNoteDialog = false }) { Text("Отмена") }
+            }
+        )
+    }
+
+    // Task Dialog
+    if (showTaskDialog) {
+        var titleValue by remember { mutableStateOf("") }
+        var deadlineValue by remember { mutableStateOf("") }
+
+        AlertDialog(
+            onDismissRequest = { showTaskDialog = false },
+            title = { Text("Новая задача", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = titleValue,
+                        onValueChange = { titleValue = it },
+                        label = { Text("Заголовок задачи") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    OutlinedTextField(
+                        value = deadlineValue,
+                        onValueChange = { deadlineValue = it },
+                        label = { Text("Дедлайн (например: 2025-09-30)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (titleValue.isNotBlank()) {
+                            haptic.click()
+                            viewModel.addTask(titleValue, deadlineValue.ifBlank { null })
+                            showTaskDialog = false
+                        }
+                    }
+                ) { Text("Добавить") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTaskDialog = false }) { Text("Отмена") }
+            }
+        )
     }
 }
 
 @Composable
-fun DetailItem(
-    icon: ImageVector,
-    label: String,
-    value: String
+fun TaskItemRow(
+    task: LessonTaskEntity,
+    onToggle: (Boolean) -> Unit,
+    onDelete: () -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
+    val deadlineFormatted = remember(task.deadlineEpoch) {
+        task.deadlineEpoch?.let {
+            val date = Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
+            DateTimeFormatter.ofPattern("dd.MM.yyyy").format(date)
+        }
+    }
+
+    val isOverdue = remember(task.deadlineEpoch, task.isCompleted) {
+        if (task.isCompleted || task.deadlineEpoch == null) false
+        else task.deadlineEpoch < System.currentTimeMillis()
+    }
+
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = if (isOverdue) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f) else MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Icon(
-            icon, 
-            contentDescription = null, 
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(24.dp)
-        )
-        Spacer(modifier = Modifier.width(20.dp))
-        Column {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = value,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Bold
-            )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                Checkbox(
+                    checked = task.isCompleted,
+                    onCheckedChange = onToggle
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text(
+                        text = task.title,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = if (task.isCompleted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
+                    )
+                    if (deadlineFormatted != null) {
+                        Text(
+                            text = "Дедлайн: $deadlineFormatted",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (isOverdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            IconButton(onClick = onDelete) {
+                Icon(
+                    Icons.Default.DeleteOutline,
+                    contentDescription = "Удалить задачу",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }

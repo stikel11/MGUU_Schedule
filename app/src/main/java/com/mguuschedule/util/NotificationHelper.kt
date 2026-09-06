@@ -21,6 +21,11 @@ import com.mguuschedule.MainActivity
 import com.mguuschedule.model.Lesson
 import com.mguuschedule.receiver.NotificationDismissReceiver
 import com.mguuschedule.receiver.ReminderReceiver
+import com.mguuschedule.repository.AppDatabase
+import com.mguuschedule.repository.NotificationEntity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.time.LocalDateTime
 import java.time.ZoneId
 
@@ -215,8 +220,37 @@ object NotificationHelper {
         try {
             NotificationManagerCompat.from(context).notify(notificationId, builder.build())
             AppLogger.d("NOTIFICATION", "Отправлено уведомление ID $notificationId ($title)")
+            
+            // Сохраняем уведомление в локальную историю в Room DB
+            val type = when (channelId) {
+                CHANNEL_SCHEDULE_CHANGES -> "CHANGE"
+                CHANNEL_CLASS_REMINDERS -> "REMINDER"
+                CHANNEL_LIVE_UPDATES -> "LIVE_UPDATE"
+                else -> "SYSTEM"
+            }
+            saveNotificationToHistory(context, title, message, type)
         } catch (e: Exception) {
             AppLogger.e("NOTIFICATION", "Ошибка отправки уведомления: ${e.message}", e)
+        }
+    }
+
+    private fun saveNotificationToHistory(context: Context, title: String, message: String, type: String) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val db = AppDatabase.getDatabase(context)
+                db.notificationDao().insertNotification(
+                    NotificationEntity(
+                        title = title,
+                        message = message,
+                        type = type,
+                        timestamp = System.currentTimeMillis(),
+                        isRead = false
+                    )
+                )
+                AppLogger.d("NOTIFICATION", "Уведомление сохранено в историю DB: $title")
+            } catch (e: Exception) {
+                AppLogger.e("NOTIFICATION", "Ошибка записи уведомления в историю DB: ${e.message}")
+            }
         }
     }
 

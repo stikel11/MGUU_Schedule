@@ -40,6 +40,9 @@ fun WeekCalendar(
     selectedDate: LocalDate,
     onDateSelected: (LocalDate) -> Unit,
     weatherData: WeatherData? = null,
+    unreadNotificationCount: Int = 0,
+    onNotificationHistoryClick: () -> Unit = {},
+    onShareDayClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showMonthPicker by remember { mutableStateOf(false) }
@@ -88,7 +91,7 @@ fun WeekCalendar(
             .fillMaxWidth()
             .padding(top = 12.dp, bottom = 4.dp)
     ) {
-        // Top Row: Month Picker Button and Weather Chip
+        // Top Row: Month Picker Button, Notification Bell, Share, and Weather
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -126,8 +129,64 @@ fun WeekCalendar(
                 }
             }
 
-            weatherData?.let { data ->
-                WeatherChip(data = data)
+            // Right Action Controls
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Notification Bell with Unread Badge
+                Surface(
+                    onClick = {
+                        haptic.lightTick()
+                        onNotificationHistoryClick()
+                    },
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = if (unreadNotificationCount > 0) Icons.Default.NotificationsActive else Icons.Default.NotificationsNone,
+                            contentDescription = "История уведомлений",
+                            tint = if (unreadNotificationCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        if (unreadNotificationCount > 0) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(top = 8.dp, end = 8.dp)
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primary)
+                            )
+                        }
+                    }
+                }
+
+                // Share Day Schedule Poster Button
+                Surface(
+                    onClick = {
+                        haptic.click()
+                        onShareDayClick()
+                    },
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Поделиться расписанием дня",
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
+                weatherData?.let { data ->
+                    WeatherChip(data = data)
+                }
             }
         }
 

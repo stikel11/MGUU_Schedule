@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.mguuschedule.model.EducationLevel
 import com.mguuschedule.model.Group
 import com.mguuschedule.ui.theme.AppMotionScheme
 import com.mguuschedule.util.rememberHapticFeedback
@@ -149,91 +150,122 @@ fun OnboardingContent(
             }
         }
         is GroupsUiState.Success -> {
-            val filteredGroups = remember(groupsUiState.groups, searchQuery) {
-                groupsUiState.groups.filter {
-                    it.name.contains(searchQuery, ignoreCase = true)
-                }
-            }
+            var selectedLevelTab by remember { mutableStateOf(EducationLevel.BACHELOR) }
 
-            if (filteredGroups.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Ничего не найдено", style = MaterialTheme.typography.bodyLarge)
-                }
-            } else {
-                val groupedGroups = remember(filteredGroups) {
-                    filteredGroups.groupBy { it.course }
-                }
-                
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(bottom = 32.dp)
+            Column(modifier = Modifier.fillMaxSize()) {
+                SingleChoiceSegmentedButtonRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
                 ) {
-                    groupedGroups.forEach { (course, groups) ->
-                        val isExpanded = expandedCourses[course] ?: (searchQuery.isNotEmpty())
-                        
-                        item(key = course) {
-                            Surface(
-                                onClick = {
-                                    haptic.lightTick()
-                                    expandedCourses[course] = !isExpanded
-                                },
-                                color = if (isExpanded) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-                                shape = RoundedCornerShape(16.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                    SegmentedButton(
+                        selected = selectedLevelTab == EducationLevel.BACHELOR,
+                        onClick = {
+                            haptic.selection()
+                            selectedLevelTab = EducationLevel.BACHELOR
+                        },
+                        shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
+                    ) {
+                        Text("Бакалавриат", fontWeight = FontWeight.Bold)
+                    }
+                    SegmentedButton(
+                        selected = selectedLevelTab == EducationLevel.MASTER,
+                        onClick = {
+                            haptic.selection()
+                            selectedLevelTab = EducationLevel.MASTER
+                        },
+                        shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
+                    ) {
+                        Text("Магистратура", fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                val filteredGroups = remember(groupsUiState.groups, selectedLevelTab, searchQuery) {
+                    groupsUiState.groups
+                        .filter { it.level == selectedLevelTab }
+                        .filter { it.name.contains(searchQuery, ignoreCase = true) }
+                }
+
+                if (filteredGroups.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("Ничего не найдено", style = MaterialTheme.typography.bodyLarge)
+                    }
+                } else {
+                    val groupedGroups = remember(filteredGroups) {
+                        filteredGroups.groupBy { it.course }
+                    }
+                    
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        contentPadding = PaddingValues(bottom = 32.dp)
+                    ) {
+                        groupedGroups.forEach { (course, groups) ->
+                            val isExpanded = expandedCourses[course] ?: (searchQuery.isNotEmpty())
+                            
+                            item(key = course) {
+                                Surface(
+                                    onClick = {
+                                        haptic.lightTick()
+                                        expandedCourses[course] = !isExpanded
+                                    },
+                                    color = if (isExpanded) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    shape = RoundedCornerShape(16.dp),
+                                    modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Text(
-                                        text = course,
-                                        modifier = Modifier.weight(1f),
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Icon(
-                                        if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                        contentDescription = null
-                                    )
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(16.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = course,
+                                            modifier = Modifier.weight(1f),
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Icon(
+                                            if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                            contentDescription = null
+                                        )
+                                    }
                                 }
                             }
-                        }
 
-                        if (isExpanded) {
-                            items(groups, key = { it.id }) { group ->
-                                Card(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            haptic.success()
-                                            onGroupSelected(group)
-                                        },
-                                    shape = RoundedCornerShape(16.dp),
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-                                    )
-                                ) {
-                                    ListItem(
-                                        headlineContent = { 
-                                            Text(
-                                                group.name, 
-                                                style = MaterialTheme.typography.bodyLarge,
-                                                fontWeight = FontWeight.Medium
-                                            ) 
-                                        },
-                                        leadingContent = { 
-                                            Icon(
-                                                Icons.Default.Group, 
-                                                contentDescription = null, 
-                                                modifier = Modifier.size(24.dp),
-                                                tint = MaterialTheme.colorScheme.primary
-                                            ) 
-                                        },
-                                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                                    )
+                            if (isExpanded) {
+                                items(groups, key = { it.id }) { group ->
+                                    Card(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                haptic.success()
+                                                onGroupSelected(group)
+                                            },
+                                        shape = RoundedCornerShape(16.dp),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                                        )
+                                    ) {
+                                        ListItem(
+                                            headlineContent = { 
+                                                Text(
+                                                    group.name, 
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    fontWeight = FontWeight.Medium
+                                                ) 
+                                            },
+                                            leadingContent = { 
+                                                Icon(
+                                                    Icons.Default.Group, 
+                                                    contentDescription = null, 
+                                                    modifier = Modifier.size(24.dp),
+                                                    tint = MaterialTheme.colorScheme.primary
+                                                ) 
+                                            },
+                                            colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                                        )
+                                    }
                                 }
                             }
                         }

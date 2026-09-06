@@ -1,5 +1,6 @@
 package com.mguuschedule.util
 
+import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,6 +25,11 @@ object AppLogger {
     fun d(tag: String, msg: String) {
         add("DEBUG", "[$tag] $msg")
         android.util.Log.d(tag, msg)
+    }
+
+    fun w(tag: String, msg: String) {
+        add("WARN", "[$tag] $msg")
+        Log.w(tag, msg)
     }
 
     private fun add(level: String, msg: String) {

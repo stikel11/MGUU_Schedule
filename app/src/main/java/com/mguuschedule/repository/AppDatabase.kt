@@ -6,9 +6,22 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.mguuschedule.model.LessonEntity
 
-@Database(entities = [LessonEntity::class], version = 2, exportSchema = false)
+@Database(
+    entities = [
+        LessonEntity::class,
+        NotificationEntity::class,
+        LessonNoteEntity::class,
+        LessonTaskEntity::class,
+        RatingEntity::class
+    ],
+    version = 5,
+    exportSchema = false
+)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun scheduleDao(): ScheduleDao
+    abstract fun notificationDao(): NotificationDao
+    abstract fun lessonAddonsDao(): LessonAddonsDao
+    abstract fun ratingDao(): RatingDao
 
     companion object {
         @Volatile

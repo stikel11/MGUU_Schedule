@@ -1,6 +1,8 @@
 package com.mguuschedule.ui.screens
 
+import android.content.Context
 import androidx.compose.animation.*
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -22,8 +24,9 @@ import androidx.compose.ui.unit.sp
 import com.mguuschedule.model.Lesson
 import com.mguuschedule.ui.components.WeekCalendar
 import com.mguuschedule.ui.theme.AppMotionScheme
-import com.mguuschedule.util.rememberHapticFeedback
+import com.mguuschedule.util.ScheduleImageRenderer
 import com.mguuschedule.util.formatClassroom
+import com.mguuschedule.util.rememberHapticFeedback
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -36,6 +39,8 @@ enum class LessonStatus { PAST, CURRENT, UPCOMING }
 @Composable
 fun ScheduleScreen(
     viewModel: ScheduleViewModel,
+    unreadNotificationCount: Int = 0,
+    onNotificationHistoryClick: () -> Unit = {},
     onLessonClick: (Lesson) -> Unit = {}
 ) {
     val selectedDate by viewModel.selectedDate.collectAsState()
@@ -44,7 +49,10 @@ fun ScheduleScreen(
     val isOnline by viewModel.isOnline.collectAsState()
     val weatherData = viewModel.weatherData
     val hasChanges = viewModel.hasChangesInLastRefresh
+    val activeAddonLessonKeys by viewModel.activeAddonLessonKeys.collectAsState()
     val haptic = rememberHapticFeedback()
+    val context = LocalContext.current
+    val isDarkTheme = isSystemInDarkTheme()
     
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -88,7 +96,20 @@ fun ScheduleScreen(
             WeekCalendar(
                 selectedDate = selectedDate,
                 onDateSelected = { viewModel.onDateSelected(it) },
-                weatherData = weatherData
+                weatherData = weatherData,
+                unreadNotificationCount = unreadNotificationCount,
+                onNotificationHistoryClick = onNotificationHistoryClick,
+                onShareDayClick = {
+                    val appPrefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+                    val shareStyle = appPrefs.getInt("share_card_style", 0)
+                    ScheduleImageRenderer.shareDaySchedule(
+                        context = context,
+                        date = selectedDate,
+                        lessons = viewModel.lessonsForSelectedDay.value,
+                        isDarkTheme = isDarkTheme,
+                        shareStyle = shareStyle
+                    )
+                }
             )
 
             // Expanding refresh status block with Spatial Motion
@@ -211,11 +232,13 @@ fun ScheduleScreen(
                                     items = lessonsForTargetDate,
                                     key = { "${it.date}_${it.number}_${it.startTime}" }
                                 ) { lesson ->
+                                    val lessonKey = "${lesson.date}_${lesson.number}_${lesson.startTime}"
                                     LessonItemWithBreak(
                                         lesson = lesson,
                                         nextLesson = lessonsForTargetDate.getOrNull(lessonsForTargetDate.indexOf(lesson) + 1),
                                         currentTime = currentTime,
                                         currentDate = currentDate,
+                                        hasAddon = activeAddonLessonKeys.contains(lessonKey),
                                         onClick = { onLessonClick(lesson) }
                                     )
                                 }
@@ -303,6 +326,7 @@ fun LessonItemWithBreak(
     nextLesson: Lesson?, 
     currentTime: LocalTime,
     currentDate: LocalDate,
+    hasAddon: Boolean = false,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -317,6 +341,7 @@ fun LessonItemWithBreak(
             lesson = lesson, 
             currentTime = currentTime, 
             currentDate = currentDate,
+            hasAddon = hasAddon,
             onClick = onClick
         )
         if (breakDuration != null && breakDuration > 0) {
@@ -369,6 +394,7 @@ fun LessonRow(
     lesson: Lesson, 
     currentTime: LocalTime,
     currentDate: LocalDate,
+    hasAddon: Boolean = false,
     onClick: () -> Unit
 ) {
     val status = remember(lesson, currentTime, currentDate) {
@@ -575,28 +601,45 @@ fun LessonRow(
                     
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    // Room Badge
-                    Surface(
-                        shape = CircleShape,
-                        color = if (status == LessonStatus.CURRENT) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.surfaceContainerHigh
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Room Badge (Standard unclickable element)
+                        Surface(
+                            shape = CircleShape,
+                            color = if (status == LessonStatus.CURRENT) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.surfaceContainerHigh
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.LocationOn, 
-                                contentDescription = null, 
-                                modifier = Modifier.size(14.dp), 
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = roomFormatted, 
-                                style = MaterialTheme.typography.labelMedium, 
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.LocationOn, 
+                                    contentDescription = null, 
+                                    modifier = Modifier.size(14.dp), 
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = roomFormatted, 
+                                    style = MaterialTheme.typography.labelMedium, 
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+
+                        if (hasAddon) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primaryContainer
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.EditNote,
+                                    contentDescription = "Есть заметка или задача",
+                                    modifier = Modifier.padding(4.dp).size(12.dp),
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
                         }
                     }
                 }

@@ -101,7 +101,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val app = LocalContext.current.applicationContext as Application
             val database = AppDatabase.getDatabase(app)
-            val repository = ScheduleRepository(app, database.scheduleDao())
+            val repository = ScheduleRepository(app, database)
             
             val profileViewModel: ProfileViewModel = viewModel(
                 factory = ProfileViewModelFactory(repository, app)
@@ -149,11 +149,17 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainAppScaffold(profileViewModel: ProfileViewModel, scheduleViewModel: ScheduleViewModel) {
     val navController = rememberNavController()
-    val items = listOf(Screen.Schedule, Screen.Profile)
+    val items = listOf(Screen.Schedule, Screen.Rating, Screen.Settings)
     val selectedGroup = profileViewModel.selectedGroup
     val haptic = rememberHapticFeedback()
 
     val currentContext = LocalContext.current
+    val app = currentContext.applicationContext as Application
+    val notificationViewModel: NotificationHistoryViewModel = viewModel(
+        factory = NotificationHistoryViewModelFactory(app)
+    )
+    val unreadCount by notificationViewModel.unreadCount.collectAsState()
+
     val activity = remember(currentContext) { currentContext as? ComponentActivity }
     val lessonIdExtra = remember { activity?.intent?.getStringExtra("navigate_to_lesson_id") }
 
@@ -184,13 +190,23 @@ fun MainAppScaffold(profileViewModel: ProfileViewModel, scheduleViewModel: Sched
                 composable(Screen.Schedule.route) {
                     ScheduleScreen(
                         viewModel = scheduleViewModel,
+                        unreadNotificationCount = unreadCount,
+                        onNotificationHistoryClick = { navController.navigate("notification_history") },
                         onLessonClick = { lesson -> 
                             haptic.click()
                             navController.navigate("lesson/${lesson.id}") 
                         }
                     )
                 }
-                composable(Screen.Profile.route) {
+                composable(Screen.Rating.route) {
+                    RatingScreen()
+                }
+                composable("notification_history") {
+                    NotificationHistoryScreen(
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+                composable(Screen.Settings.route) {
                     ProfileScreen(
                         viewModel = profileViewModel,
                         scheduleViewModel = scheduleViewModel,
@@ -246,8 +262,9 @@ fun MainAppScaffold(profileViewModel: ProfileViewModel, scheduleViewModel: Sched
             val currentDestination = navBackStackEntry?.destination
             val isDetailScreen = currentDestination?.route?.contains("lesson/") == true
             val isSearchScreen = currentDestination?.route == Screen.Search.route
+            val isNotificationScreen = currentDestination?.route == "notification_history"
 
-            if (!isDetailScreen && !isSearchScreen) {
+            if (!isDetailScreen && !isSearchScreen && !isNotificationScreen) {
                 Row(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)

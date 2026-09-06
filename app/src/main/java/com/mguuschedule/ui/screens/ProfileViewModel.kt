@@ -9,14 +9,17 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import androidx.compose.ui.graphics.toArgb
 import com.mguuschedule.repository.ScheduleRepository
 import com.mguuschedule.util.NotificationHelper
 import androidx.lifecycle.viewModelScope
 import androidx.work.*
+import com.mguuschedule.model.EducationLevel
 import com.mguuschedule.model.Group
+import com.mguuschedule.model.Lesson
+import com.mguuschedule.repository.RatingRepository
 import com.mguuschedule.util.LiveUpdateManager
 import com.mguuschedule.util.ScheduleParser
+import com.mguuschedule.worker.RatingUpdateWorker
 import com.mguuschedule.worker.ScheduleUpdateWorker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,17 +28,24 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jsoup.Jsoup
 import java.io.File
+import java.time.LocalDate
+import java.time.LocalTime
 import java.util.concurrent.TimeUnit
 
 sealed class GroupsUiState {
     object Loading : GroupsUiState()
     data class Success(val groups: List<Group>) : GroupsUiState()
     data class Error(val message: String) : GroupsUiState()
+}
+
+sealed class ZachetkasUiState {
+    object Loading : ZachetkasUiState()
+    data class Success(val zachetkas: List<String>) : ZachetkasUiState()
+    data class Error(val message: String) : ZachetkasUiState()
 }
 
 data class StorageUiState(
@@ -51,8 +61,12 @@ class ProfileViewModel(
     application: Application
 ) : AndroidViewModel(application) {
     private val prefs = application.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+    private val ratingRepository = RatingRepository()
 
     var groupsUiState: GroupsUiState by mutableStateOf(GroupsUiState.Loading)
+        private set
+
+    var zachetkasUiState: ZachetkasUiState by mutableStateOf(ZachetkasUiState.Loading)
         private set
 
     private val _periodState = MutableStateFlow(prefs.getInt("cache_days_count", 14))
@@ -89,6 +103,9 @@ class ProfileViewModel(
     var selectedGroup by mutableStateOf<Group?>(loadSavedGroup())
         private set
 
+    var selectedZachetka by mutableStateOf(prefs.getString("selected_zachetka", "") ?: "")
+        private set
+
     // Notification Settings
     var remindersEnabled by mutableStateOf(prefs.getBoolean("reminders_enabled", true))
         private set
@@ -109,6 +126,14 @@ class ProfileViewModel(
     var dynamicColorEnabled by mutableStateOf(prefs.getBoolean("dynamic_color", true))
         private set
 
+    var shareCardStyle by mutableIntStateOf(prefs.getInt("share_card_style", 0))
+        private set
+
+    fun updateShareCardStyle(style: Int) {
+        shareCardStyle = style
+        prefs.edit().putInt("share_card_style", style).apply()
+    }
+
     var cacheDaysCount by mutableIntStateOf(prefs.getInt("cache_days_count", 30))
         private set
 
@@ -128,15 +153,17 @@ class ProfileViewModel(
     }
 
     private fun refreshStorageStatus() {
-        // Теперь обновляется автоматически через Flow
+        // Обновляется автоматически через Flow
     }
 
     private fun loadSavedGroup(): Group? {
         val id = prefs.getString("selected_group_id", null)
         val name = prefs.getString("selected_group_name", null)
         val course = prefs.getString("selected_group_course", "")
+        val levelStr = prefs.getString("selected_group_level", EducationLevel.BACHELOR.name)
+        val level = runCatching { EducationLevel.valueOf(levelStr ?: "BACHELOR") }.getOrDefault(EducationLevel.BACHELOR)
         return if (id != null && name != null) {
-            Group(id, name, course ?: "")
+            Group(id, name, course ?: "", level)
         } else null
     }
 
@@ -144,30 +171,69 @@ class ProfileViewModel(
         viewModelScope.launch {
             groupsUiState = GroupsUiState.Loading
             try {
-                val groups = withContext(Dispatchers.IO) {
-                    val url = "https://portal.mguu.ru/student/scheduler2.php#mag"
-                    val response = Jsoup.connect(url)
-                        .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                        .timeout(10000)
-                        .get()
+                val allGroups = withContext(Dispatchers.IO) {
+                    val userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
                     
-                    ScheduleParser.parseGroups(response.html())
+                    val urlBak = "https://portal.mguu.ru/student/scheduler1.php#bak"
+                    val urlMag = "https://portal.mguu.ru/student/scheduler2.php#mag"
+
+                    val docBak = runCatching { Jsoup.connect(urlBak).userAgent(userAgent).timeout(10000).get() }.getOrNull()
+                    val docMag = runCatching { Jsoup.connect(urlMag).userAgent(userAgent).timeout(10000).get() }.getOrNull()
+
+                    val bakList = docBak?.let { ScheduleParser.parseGroups(it.html(), EducationLevel.BACHELOR) } ?: emptyList()
+                    val magList = docMag?.let { ScheduleParser.parseGroups(it.html(), EducationLevel.MASTER) } ?: emptyList()
+
+                    bakList + magList
                 }
-                groupsUiState = GroupsUiState.Success(groups)
+
+                if (allGroups.isNotEmpty()) {
+                    groupsUiState = GroupsUiState.Success(allGroups)
+                } else {
+                    groupsUiState = GroupsUiState.Error("Не удалось загрузить список групп")
+                }
             } catch (e: Exception) {
                 groupsUiState = GroupsUiState.Error(e.message ?: "Ошибка загрузки групп")
             }
         }
     }
 
+    fun loadZachetkasForSelectedGroup() {
+        val group = selectedGroup ?: return
+        viewModelScope.launch {
+            zachetkasUiState = ZachetkasUiState.Loading
+            try {
+                val groupUrl = ratingRepository.buildGroupUrl(group.id, group.name)
+                val ratingPage = withContext(Dispatchers.IO) {
+                    ratingRepository.parseGroupList(groupUrl)
+                }
+                val zachetkas = ratingPage.students.map { it.zachetka }.filter { it.isNotBlank() }
+                if (zachetkas.isNotEmpty()) {
+                    zachetkasUiState = ZachetkasUiState.Success(zachetkas)
+                } else {
+                    zachetkasUiState = ZachetkasUiState.Error("Зачетки для выбранной группы не найдены")
+                }
+            } catch (e: Exception) {
+                zachetkasUiState = ZachetkasUiState.Error("Не удалось загрузить зачетки группы")
+            }
+        }
+    }
+
     fun selectGroup(group: Group) {
         selectedGroup = group
+        selectedZachetka = ""
         prefs.edit().apply {
             putString("selected_group_id", group.id)
             putString("selected_group_name", group.name)
             putString("selected_group_course", group.course)
-            apply()
+            putString("selected_group_level", group.level.name)
+            putString("selected_zachetka", "")
+            commit()
         }
+    }
+
+    fun updateSelectedZachetka(zachetka: String) {
+        selectedZachetka = zachetka.trim()
+        prefs.edit().putString("selected_zachetka", zachetka.trim()).commit()
     }
 
     fun updateRemindersEnabled(enabled: Boolean) {
@@ -178,7 +244,6 @@ class ProfileViewModel(
     fun updateReminderTime(minutes: Int) {
         reminderTimeMinutes = minutes
         prefs.edit().putInt("reminder_time", minutes).apply()
-        // При смене времени уведомления перезапускаем воркер, чтобы он перепланировал будильники
         if (changesEnabled) startScheduleWorker()
     }
 
@@ -238,35 +303,54 @@ class ProfileViewModel(
                 ExistingPeriodicWorkPolicy.KEEP,
                 request
             )
+
+        // Автоподгрузка рейтинга БРС 3 раза в день (каждые 8 часов)
+        val ratingRequest = PeriodicWorkRequestBuilder<RatingUpdateWorker>(8, TimeUnit.HOURS)
+            .setConstraints(constraints)
+            .build()
+
+        WorkManager.getInstance(getApplication())
+            .enqueueUniquePeriodicWork(
+                "RatingUpdate",
+                ExistingPeriodicWorkPolicy.KEEP,
+                ratingRequest
+            )
     }
 
     private fun stopScheduleWorker() {
         WorkManager.getInstance(getApplication()).cancelUniqueWork("ScheduleUpdate")
+        WorkManager.getInstance(getApplication()).cancelUniqueWork("RatingUpdate")
     }
 
     // Debug Tools
     fun testLiveUpdateUpcoming() {
-        NotificationHelper.showLiveUpdateNotification(
-            context = getApplication(),
-            title = "Скоро начнется: Теория организации",
-            message = "Ауд. 423 • Пахомов И.Ю.",
-            subText = "1 пара",
-            shortText = "423 • 5м",
-            targetTimeMillis = System.currentTimeMillis() + 300000,
-            notificationId = 999
+        val dummyLesson = Lesson(
+            id = "test_1",
+            title = "Теория организации",
+            type = "Лекция",
+            startTime = LocalTime.now().plusMinutes(15),
+            endTime = LocalTime.now().plusMinutes(105),
+            teacher = "Пахомов И.Ю.",
+            room = "423",
+            date = LocalDate.now(),
+            number = 1
         )
+        LiveUpdateManager.showFirstLessonUpcomingNotification(getApplication(), dummyLesson)
     }
 
     fun testLiveUpdateActive() {
-        NotificationHelper.showLiveUpdateNotification(
-            context = getApplication(),
-            title = "Идет занятие: Теория организации",
-            message = "Ауд. 423 • Пахомов И.Ю.",
-            subText = "1 пара",
-            shortText = "423 • 45м",
-            targetTimeMillis = System.currentTimeMillis() + 2700000,
-            notificationId = 999
+        val dummyLesson = Lesson(
+            id = "test_2",
+            title = "Теория организации",
+            type = "Лекция",
+            startTime = LocalTime.now().minusMinutes(75),
+            endTime = LocalTime.now().plusMinutes(15),
+            teacher = "Пахомов И.Ю.",
+            room = "423",
+            date = LocalDate.now(),
+            number = 1
         )
+        LiveUpdateManager.showLessonEndingNotification(getApplication(), dummyLesson)
     }
 
     fun stopLiveUpdate() {
