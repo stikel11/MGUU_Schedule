@@ -11,6 +11,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.*
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -155,16 +158,57 @@ fun MainAppScaffold(profileViewModel: ProfileViewModel, scheduleViewModel: Sched
         }
     }
 
+    val bottomTabRoutes = remember { listOf(Screen.Schedule.route, Screen.Rating.route, Screen.Settings.route) }
+
     Box(modifier = Modifier.fillMaxSize()) {
         NavHost(
-                navController,
-                startDestination = Screen.Schedule.route,
-                modifier = Modifier.fillMaxSize(),
-                enterTransition = { fadeIn(animationSpec = AppMotionScheme.fastEffectsSpec()) },
-                exitTransition = { fadeOut(animationSpec = AppMotionScheme.fastEffectsSpec()) },
-                popEnterTransition = { fadeIn(animationSpec = AppMotionScheme.fastEffectsSpec()) },
-                popExitTransition = { fadeOut(animationSpec = AppMotionScheme.fastEffectsSpec()) }
-            ) {
+            navController = navController,
+            startDestination = Screen.Schedule.route,
+            modifier = Modifier.fillMaxSize(),
+            enterTransition = {
+                if (initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes) {
+                    EnterTransition.None
+                } else {
+                    slideIntoContainer(
+                        towards = AnimatedContentTransitionScope.SlideDirection.Start,
+                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                    ) + fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow))
+                }
+            },
+            exitTransition = {
+                if (initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes) {
+                    ExitTransition.None
+                } else {
+                    scaleOut(
+                        targetScale = 0.9f,
+                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                    ) + fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMediumLow))
+                }
+            },
+            popEnterTransition = {
+                if (initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes) {
+                    EnterTransition.None
+                } else {
+                    scaleIn(
+                        initialScale = 0.9f,
+                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                    ) + fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow))
+                }
+            },
+            popExitTransition = {
+                if (initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes) {
+                    ExitTransition.None
+                } else {
+                    slideOutOfContainer(
+                        towards = AnimatedContentTransitionScope.SlideDirection.End,
+                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                    ) + scaleOut(
+                        targetScale = 0.85f,
+                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                    )
+                }
+            }
+        ) {
                 composable(Screen.Schedule.route) {
                     ScheduleScreen(
                         viewModel = scheduleViewModel,

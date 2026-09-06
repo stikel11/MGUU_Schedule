@@ -115,6 +115,7 @@ object LiveUpdateManager {
     fun showFirstLessonUpcomingNotification(context: Context, lesson: Lesson) {
         val startTimeMillis = LocalDateTime.of(LocalDate.now(), lesson.startTime)
             .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val leadTimeMillis = startTimeMillis - 15 * 60 * 1000L
 
         val roomFormatted = formatClassroom(lesson.room)
         val title = "Скоро первая пара: ${lesson.title}"
@@ -125,9 +126,10 @@ object LiveUpdateManager {
             context = context,
             title = title,
             message = message,
-            subText = "${lesson.number} пара • Начало в ${lesson.startTime}",
+            subText = "",
             shortText = shortText,
             targetTimeMillis = startTimeMillis,
+            startTimeMillis = leadTimeMillis,
             notificationId = LIVE_UPDATE_NOTIFICATION_ID,
             lessonId = lesson.id
         )
@@ -137,11 +139,13 @@ object LiveUpdateManager {
      * Показывает Live Update за 15 минут до КОНЦА каждой из пар
      */
     fun showLessonEndingNotification(context: Context, lesson: Lesson) {
+        val startTimeMillis = LocalDateTime.of(LocalDate.now(), lesson.startTime)
+            .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val endTimeMillis = LocalDateTime.of(LocalDate.now(), lesson.endTime)
             .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
 
         val roomFormatted = formatClassroom(lesson.room)
-        val title = "До конца пары 15 мин: ${lesson.title}"
+        val title = "Идет пара: ${lesson.title}"
         val message = "$roomFormatted • ${lesson.teacher}"
         val shortText = "${lesson.room} • Конец"
 
@@ -149,9 +153,10 @@ object LiveUpdateManager {
             context = context,
             title = title,
             message = message,
-            subText = "${lesson.number} пара • Завершение в ${lesson.endTime}",
+            subText = "",
             shortText = shortText,
             targetTimeMillis = endTimeMillis,
+            startTimeMillis = startTimeMillis,
             notificationId = LIVE_UPDATE_NOTIFICATION_ID,
             lessonId = lesson.id
         )

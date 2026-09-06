@@ -29,8 +29,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mguuschedule.model.ControlPoint
 import com.mguuschedule.model.StudentRating
 import com.mguuschedule.model.SubjectScore
+import com.mguuschedule.ui.components.CollapsibleScreenTitle
 import com.mguuschedule.ui.components.ExpressiveLoadingIndicator
 import com.mguuschedule.ui.components.PhotosStyleRefreshContainer
+import com.mguuschedule.ui.components.StatusBarBlurOverlay
 import com.mguuschedule.ui.components.StatusBarScrim
 import com.mguuschedule.ui.components.TopScrimProtection
 import com.mguuschedule.ui.theme.AppMotionScheme
@@ -57,7 +59,6 @@ fun RatingScreen() {
     val haptic = rememberHapticFeedback()
 
     val listState = rememberLazyListState()
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val hazeState = rememberHazeState()
 
     var expandedSubjectUrl by remember { mutableStateOf<String?>(null) }
@@ -70,47 +71,7 @@ fun RatingScreen() {
         Scaffold(
             modifier = Modifier
                 .fillMaxSize()
-                .hazeSource(hazeState)
-                .nestedScroll(scrollBehavior.nestedScrollConnection),
-            topBar = {
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .hazeEffect(
-                                state = hazeState,
-                                style = HazeDefaults.style(
-                                    backgroundColor = MaterialTheme.colorScheme.surface,
-                                    blurRadius = 16.dp,
-                                    tint = HazeTint(MaterialTheme.colorScheme.surface.copy(alpha = 0.75f))
-                                )
-                            )
-                    )
-                    LargeTopAppBar(
-                        title = {
-                            Text(
-                                text = "Рейтинг БРС",
-                                fontWeight = FontWeight.Bold
-                            )
-                        },
-                        actions = {
-                            IconButton(
-                                onClick = {
-                                    haptic.click()
-                                    viewModel.loadRating(forceRefresh = true)
-                                }
-                            ) {
-                                Icon(Icons.Default.Refresh, contentDescription = "Обновить")
-                            }
-                        },
-                        scrollBehavior = scrollBehavior,
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = Color.Transparent,
-                            scrolledContainerColor = Color.Transparent
-                        )
-                    )
-                }
-            },
+                .hazeSource(hazeState),
             containerColor = MaterialTheme.colorScheme.background
         ) { innerPadding ->
             PhotosStyleRefreshContainer(
@@ -127,13 +88,15 @@ fun RatingScreen() {
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
-                        top = innerPadding.calculateTopPadding(),
                         bottom = innerPadding.calculateBottomPadding() + 100.dp,
                         start = 16.dp,
                         end = 16.dp
                     ),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
+                    item {
+                        CollapsibleScreenTitle(title = "Рейтинг БРС")
+                    }
 
                     when (uiState) {
                         is RatingUiState.Loading -> {
@@ -396,8 +359,8 @@ fun RatingScreen() {
             }
         }
 
-        // Анимированная затеняющая дымка статус-бара при скролле
-        StatusBarScrim(listState = listState)
+        // Переиспользуемая матовая блюр-полоса в зоне статус-бара
+        StatusBarBlurOverlay(hazeState = hazeState)
     }
 }
 

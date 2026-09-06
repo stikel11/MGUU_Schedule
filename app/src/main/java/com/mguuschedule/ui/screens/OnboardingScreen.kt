@@ -34,6 +34,8 @@ fun OnboardingScreen(
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { visible = true }
 
+    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background
@@ -41,8 +43,9 @@ fun OnboardingScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .consumeWindowInsets(innerPadding)
                 .padding(horizontal = 16.dp)
-                .padding(top = innerPadding.calculateTopPadding())
+                .padding(top = topInset + 12.dp)
         ) {
             
             AnimatedVisibility(
@@ -52,7 +55,7 @@ fun OnboardingScreen(
             ) {
                 Column {
                     Row(
-                        modifier = Modifier.padding(top = 24.dp),
+                        modifier = Modifier.padding(top = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(

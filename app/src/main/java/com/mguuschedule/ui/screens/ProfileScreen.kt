@@ -26,6 +26,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.mguuschedule.model.EducationLevel
 import com.mguuschedule.model.Group
+import com.mguuschedule.ui.components.CollapsibleScreenTitle
+import com.mguuschedule.ui.components.StatusBarBlurOverlay
 import com.mguuschedule.ui.components.StatusBarScrim
 import com.mguuschedule.ui.components.TopScrimProtection
 import com.mguuschedule.util.rememberHapticFeedback
@@ -77,7 +79,6 @@ fun ProfileScreen(
     val storageState by viewModel.storageState.collectAsState()
 
     val listState = rememberLazyListState()
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val hazeState = rememberHazeState()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val zachetkaSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -91,37 +92,7 @@ fun ProfileScreen(
         Scaffold(
             modifier = Modifier
                 .fillMaxSize()
-                .hazeSource(hazeState)
-                .nestedScroll(scrollBehavior.nestedScrollConnection),
-            topBar = {
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .hazeEffect(
-                                state = hazeState,
-                                style = HazeDefaults.style(
-                                    backgroundColor = MaterialTheme.colorScheme.surface,
-                                    blurRadius = 16.dp,
-                                    tint = HazeTint(MaterialTheme.colorScheme.surface.copy(alpha = 0.75f))
-                                )
-                            )
-                    )
-                    LargeTopAppBar(
-                        title = {
-                            Text(
-                                text = "Настройки",
-                                fontWeight = FontWeight.Bold
-                            )
-                        },
-                        scrollBehavior = scrollBehavior,
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = Color.Transparent,
-                            scrolledContainerColor = Color.Transparent
-                        )
-                    )
-                }
-            },
+                .hazeSource(hazeState),
             containerColor = MaterialTheme.colorScheme.background,
             snackbarHost = {
                 SnackbarHost(snackbarHostState) { data ->
@@ -150,13 +121,15 @@ fun ProfileScreen(
                     .fillMaxSize()
                     .consumeWindowInsets(innerPadding),
                 contentPadding = PaddingValues(
-                    top = innerPadding.calculateTopPadding(),
                     bottom = innerPadding.calculateBottomPadding() + 100.dp,
                     start = 16.dp,
                     end = 16.dp
                 ),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                item {
+                    CollapsibleScreenTitle(title = "Настройки")
+                }
 
                 // Section 1: Учебная группа
                 item {
@@ -345,8 +318,8 @@ fun ProfileScreen(
             }
         }
 
-        // Анимированная затеняющая дымка статус-бара при скролле
-        StatusBarScrim(listState = listState)
+        // Переиспользуемая матовая блюр-полоса в зоне статус-бара
+        StatusBarBlurOverlay(hazeState = hazeState)
 
         if (showThemeDialog) {
             ThemeSelectionDialog(

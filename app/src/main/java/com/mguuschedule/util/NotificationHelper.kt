@@ -10,7 +10,6 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
@@ -69,15 +68,16 @@ object NotificationHelper {
     }
 
     /**
-     * Создание системного Live Update уведомления (Android 16 Promoted Ongoing Status Chip).
+     * Создание системного Live Update уведомления (Android 16 Promoted Ongoing Status Chip + Progress Bar).
      */
     fun showLiveUpdateNotification(
         context: Context,
         title: String,
         message: String,
-        subText: String,
+        subText: String = "",
         shortText: String,
         targetTimeMillis: Long,
+        startTimeMillis: Long = System.currentTimeMillis() - 2700000L,
         notificationId: Int = LiveUpdateManager.LIVE_UPDATE_NOTIFICATION_ID,
         lessonId: String? = null
     ) {
@@ -104,20 +104,28 @@ object NotificationHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val dismissIntent = Intent(context, NotificationDismissReceiver::class.java)
-        val dismissPendingIntent = PendingIntent.getBroadcast(
-            context,
-            0,
-            dismissIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        val now = System.currentTimeMillis()
+        val start = if (startTimeMillis > 0 && startTimeMillis < targetTimeMillis) {
+            startTimeMillis
+        } else {
+            (targetTimeMillis - 2700000L).coerceAtMost(now)
+        }
+        val totalDuration = (targetTimeMillis - start).coerceAtLeast(1L)
+        val elapsed = (now - start).coerceAtLeast(0L)
+
+        val maxProgress = 1000
+        val currentProgress = ((elapsed.toDouble() / totalDuration) * maxProgress)
+            .toInt()
+            .coerceIn(0, maxProgress)
 
         if (Build.VERSION.SDK_INT >= 36) { // Android 16+ API 36 Promoted Ongoing API
             val builder = Notification.Builder(context, CHANNEL_LIVE_UPDATES)
-                .setSmallIcon(R.drawable.ic_menu_today)
+                .setSmallIcon(com.mguuschedule.R.drawable.baseline_schedule_24)
                 .setContentTitle(title)
                 .setContentText(message)
-                .setSubText(subText)
+                .apply {
+                    if (subText.isNotBlank()) setSubText(subText)
+                }
                 .setOngoing(true)
                 .setCategory(Notification.CATEGORY_EVENT)
                 .setContentIntent(pendingIntent)
@@ -127,13 +135,7 @@ object NotificationHelper {
                 .setUsesChronometer(true)
                 .setChronometerCountDown(true)
                 .setColorized(false)
-                .addAction(
-                    Notification.Action.Builder(
-                        Icon.createWithResource(context, R.drawable.ic_menu_close_clear_cancel),
-                        "Завершить",
-                        dismissPendingIntent
-                    ).build()
-                )
+                .setProgress(maxProgress, currentProgress, false)
 
             try {
                 val setPromotedOngoingMethod = builder.javaClass.getMethod("setRequestPromotedOngoing", Boolean::class.javaPrimitiveType)
@@ -148,16 +150,18 @@ object NotificationHelper {
             try {
                 val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                 manager.notify(notificationId, builder.build())
-                AppLogger.d("NOTIFICATION", "Отправлено нативное LiveUpdate (Android 16 API 36): $title")
+                AppLogger.d("NOTIFICATION", "Отправлено нативное LiveUpdate (Android 16 API 36): $title ($currentProgress/$maxProgress)")
             } catch (e: Exception) {
                 AppLogger.e("NOTIFICATION", "Ошибка отправки LiveUpdate (API 36): ${e.message}", e)
             }
         } else { // Fallback for API < 36 using NotificationCompat and System Extras
             val builder = NotificationCompat.Builder(context, CHANNEL_LIVE_UPDATES)
-                .setSmallIcon(R.drawable.ic_menu_today)
+                .setSmallIcon(com.mguuschedule.R.drawable.baseline_schedule_24)
                 .setContentTitle(title)
                 .setContentText(message)
-                .setSubText(subText)
+                .apply {
+                    if (subText.isNotBlank()) setSubText(subText)
+                }
                 .setOngoing(true)
                 .setCategory(NotificationCompat.CATEGORY_EVENT)
                 .setPriority(NotificationCompat.PRIORITY_MAX)
@@ -168,11 +172,7 @@ object NotificationHelper {
                 .setUsesChronometer(true)
                 .setChronometerCountDown(true)
                 .setColorized(false)
-                .addAction(
-                    R.drawable.ic_menu_close_clear_cancel,
-                    "Завершить",
-                    dismissPendingIntent
-                )
+                .setProgress(maxProgress, currentProgress, false)
 
             val extras = Bundle()
             extras.putBoolean("android.requestPromotedOngoing", true)
@@ -181,7 +181,7 @@ object NotificationHelper {
 
             try {
                 NotificationManagerCompat.from(context).notify(notificationId, builder.build())
-                AppLogger.d("NOTIFICATION", "Отправлено LiveUpdate (Compat + Extras): $title")
+                AppLogger.d("NOTIFICATION", "Отправлено LiveUpdate (Compat + Extras): $title ($currentProgress/$maxProgress)")
             } catch (e: Exception) {
                 AppLogger.e("NOTIFICATION", "Ошибка отправки LiveUpdate (Compat): ${e.message}", e)
             }
@@ -272,14 +272,16 @@ object NotificationHelper {
     }
 
     fun triggerLiveUpdateNotification(context: Context) {
-        val endTime = System.currentTimeMillis() + 2700000 // +45 min
+        val startTime = System.currentTimeMillis()
+        val endTime = startTime + 2700000L // +45 min
         showLiveUpdateNotification(
             context = context,
             title = "Идет пара: Теория организации",
-            message = "${formatClassroom("423")} • До конца 45 мин",
-            subText = "7 пара",
+            message = formatClassroom("423"),
+            subText = "",
             shortText = "423 • 45м",
             targetTimeMillis = endTime,
+            startTimeMillis = startTime,
             notificationId = LiveUpdateManager.LIVE_UPDATE_NOTIFICATION_ID
         )
     }

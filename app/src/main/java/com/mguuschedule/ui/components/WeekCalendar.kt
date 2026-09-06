@@ -89,7 +89,7 @@ fun WeekCalendar(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(top = 12.dp, bottom = 4.dp)
+            .padding(bottom = 4.dp)
     ) {
         // Top Row: Month Picker Button, Notification Bell, Share, and Weather
         Row(
