@@ -19,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
@@ -185,7 +186,8 @@ fun InteractiveFloorMap(
 @Composable
 fun LessonDetailScreen(
     lesson: Lesson?,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onTeacherClick: (String) -> Unit = {}
 ) {
     if (lesson == null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -286,7 +288,7 @@ fun LessonDetailScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     Text(
                         text = lesson.title,
@@ -296,11 +298,11 @@ fun LessonDetailScreen(
                         lineHeight = 26.sp
                     )
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f))
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     // Time & Room Row
                     Row(
@@ -328,7 +330,7 @@ fun LessonDetailScreen(
                                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                             )
                             Text(
-                                text = roomFormatted,
+                                text = roomFormatted.replace("Ауд. ", "").replace("Ауд.", ""),
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -336,21 +338,42 @@ fun LessonDetailScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     // Teacher Row
                     Column {
                         Text(
                             text = "Преподаватель",
                             style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                            modifier = Modifier.padding(bottom = 2.dp)
                         )
-                        Text(
-                            text = lesson.teacher,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
+                        if (lesson.teacher.isNotBlank() && lesson.teacher != "—") {
+                            Surface(
+                                onClick = { 
+                                    haptic.lightTick()
+                                    onTeacherClick(lesson.teacher) 
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color.Transparent,
+                                modifier = Modifier.offset(x = (-8).dp)
+                            ) {
+                                Text(
+                                    text = lesson.teacher,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        } else {
+                            Text(
+                                text = "Не указан",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
                     }
                 }
             }
@@ -384,30 +407,35 @@ fun LessonDetailScreen(
                             )
                         }
 
-                        IconButton(onClick = {
-                            haptic.lightTick()
-                            showNoteDialog = true
-                        }) {
+                        IconButton(
+                            onClick = {
+                                haptic.lightTick()
+                                showNoteDialog = true
+                            },
+                            modifier = Modifier.size(36.dp)
+                        ) {
                             Icon(
                                 imageVector = if (noteEntity?.text.isNullOrBlank()) Icons.Default.Add else Icons.Default.Edit,
-                                contentDescription = "Редактировать заметку"
+                                contentDescription = "Редактировать заметку",
+                                modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.primary
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
-
                     if (noteEntity?.text.isNullOrBlank()) {
                         Text(
-                            text = "Нажмите +, чтобы добавить заметку к этой паре",
+                            text = "Добавить комментарий...",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
                         )
                     } else {
                         Text(
                             text = noteEntity!!.text,
                             style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
                         )
                     }
                 }
@@ -442,23 +470,31 @@ fun LessonDetailScreen(
                             )
                         }
 
-                        IconButton(onClick = {
-                            haptic.lightTick()
-                            showTaskDialog = true
-                        }) {
-                            Icon(Icons.Default.Add, contentDescription = "Добавить задачу")
+                        IconButton(
+                            onClick = {
+                                haptic.lightTick()
+                                showTaskDialog = true
+                            },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Add,
+                                contentDescription = "Добавить задачу",
+                                modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(8.dp))
 
                     if (taskList.isEmpty()) {
                         Text(
                             text = "Нет задач к этой паре",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
                         )
                     } else {
+                        Spacer(modifier = Modifier.height(8.dp))
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             taskList.forEach { task ->
                                 TaskItemRow(
@@ -486,46 +522,29 @@ fun LessonDetailScreen(
                 Regex("\\b([1-5])\\d{2}\\b").find(lesson.room)?.groupValues?.get(1) ?: ""
             }
 
-            Text(
-                text = if (floorNumber.isNotBlank()) "Схема $floorNumber этажа" else "Схема этажа",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
+            if (floorImageResId != null) {
+                Text(
+                    text = if (floorNumber.isNotBlank()) "Схема $floorNumber этажа" else "Схема этажа",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 4.dp)
+                )
 
-            Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(280.dp),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
-            ) {
-                if (floorImageResId != null) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(280.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+                ) {
                     InteractiveFloorMap(
                         imageResId = floorImageResId,
                         contentDescription = "Схема $floorNumber этажа для $roomFormatted",
                         modifier = Modifier.fillMaxSize()
                     )
-                } else {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                Icons.Default.Map, 
-                                contentDescription = null, 
-                                modifier = Modifier.size(56.dp),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                text = "Схема недоступна для $roomFormatted",
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
                 }
             }
             

@@ -51,6 +51,8 @@ import com.mguuschedule.util.CrashHandler
 import com.mguuschedule.util.NotificationHelper
 import com.mguuschedule.util.ShortcutHelper
 import com.mguuschedule.util.rememberHapticFeedback
+import java.net.URLDecoder
+import java.net.URLEncoder
 import java.time.LocalDate
 
 class MainActivity : ComponentActivity() {
@@ -253,6 +255,24 @@ fun MainAppScaffold(profileViewModel: ProfileViewModel, scheduleViewModel: Sched
                     val lesson = lessonId?.let { scheduleViewModel.getLessonById(it) }
                     LessonDetailScreen(
                         lesson = lesson, 
+                        onBack = { navController.popBackStack() },
+                        onTeacherClick = { teacherName ->
+                            val encodedName = URLEncoder.encode(teacherName, "UTF-8")
+                            navController.navigate("teacher/$encodedName")
+                        }
+                    )
+                }
+
+                composable(
+                    route = Screen.TeacherProfile.route,
+                    arguments = listOf(navArgument("teacherName") { type = NavType.StringType })
+                ) { backStackEntry ->
+                    val teacherName = backStackEntry.arguments?.getString("teacherName")?.let {
+                        URLDecoder.decode(it, "UTF-8")
+                    } ?: "Неизвестный преподаватель"
+                    
+                    TeacherProfileScreen(
+                        teacherName = teacherName,
                         onBack = { navController.popBackStack() }
                     )
                 }
