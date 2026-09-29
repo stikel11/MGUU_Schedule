@@ -2,7 +2,7 @@ package com.mguuschedule.ui.screens
 
 import android.content.Context
 import androidx.compose.animation.*
-import androidx.compose.animation.core.*
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
@@ -157,75 +157,81 @@ fun ScheduleScreen(
                         }
                     }
 
-                    // Items 3..N: Schedule lessons or loading/error/empty states
-                    if (uiState is ScheduleUiState.Loading && !isRefreshing) {
-                        item {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 60.dp),
-                                contentAlignment = Alignment.Center
+                    // Items 3..N: Schedule lessons or loading/error/empty states wrapped in Crossfade
+                    item {
+                        Crossfade(
+                            targetState = selectedDate,
+                            animationSpec = AppMotionScheme.defaultEffectsSpec(),
+                            label = "day_crossfade"
+                        ) { targetDate ->
+                            val lessonsForTargetDate = if (targetDate == selectedDate) lessons else emptyList()
+                            
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                ExpressiveLoadingIndicator(
-                                    modifier = Modifier.size(36.dp),
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
-                    } else if (uiState is ScheduleUiState.Error && lessons.isEmpty()) {
-                        item {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 40.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    modifier = Modifier.padding(24.dp)
-                                ) {
-                                    Text(
-                                        text = "Ошибка загрузки", 
-                                        style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text(
-                                        text = uiState.message, 
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Button(
-                                        onClick = {
-                                            haptic.click()
-                                            viewModel.refreshSchedule()
-                                        },
-                                        shape = CircleShape,
-                                        modifier = Modifier.padding(top = 16.dp)
+                                if (uiState is ScheduleUiState.Loading && !isRefreshing) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 60.dp),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        Text("Повторить", fontWeight = FontWeight.Bold)
+                                        ExpressiveLoadingIndicator(
+                                            modifier = Modifier.size(36.dp),
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                } else if (uiState is ScheduleUiState.Error && lessonsForTargetDate.isEmpty()) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 40.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            modifier = Modifier.padding(24.dp)
+                                        ) {
+                                            Text(
+                                                text = "Ошибка загрузки", 
+                                                style = MaterialTheme.typography.titleLarge,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text(
+                                                text = uiState.message, 
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Button(
+                                                onClick = {
+                                                    haptic.click()
+                                                    viewModel.refreshSchedule()
+                                                },
+                                                shape = CircleShape,
+                                                modifier = Modifier.padding(top = 16.dp)
+                                            ) {
+                                                Text("Повторить", fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+                                } else if (lessonsForTargetDate.isEmpty()) {
+                                    EmptySchedule()
+                                } else {
+                                    lessonsForTargetDate.forEachIndexed { index, lesson ->
+                                        val lessonKey = "${lesson.date}_${lesson.number}_${lesson.startTime}"
+                                        LessonItemWithBreak(
+                                            lesson = lesson,
+                                            nextLesson = lessonsForTargetDate.getOrNull(index + 1),
+                                            currentTime = currentTime,
+                                            currentDate = currentDate,
+                                            hasAddon = activeAddonLessonKeys.contains(lessonKey),
+                                            onClick = { onLessonClick(lesson) }
+                                        )
                                     }
                                 }
                             }
-                        }
-                    } else if (lessons.isEmpty()) {
-                        item {
-                            EmptySchedule()
-                        }
-                    } else {
-                        items(
-                            items = lessons,
-                            key = { "${it.date}_${it.number}_${it.startTime}" }
-                        ) { lesson ->
-                            val lessonKey = "${lesson.date}_${lesson.number}_${lesson.startTime}"
-                            LessonItemWithBreak(
-                                lesson = lesson,
-                                nextLesson = lessons.getOrNull(lessons.indexOf(lesson) + 1),
-                                currentTime = currentTime,
-                                currentDate = currentDate,
-                                hasAddon = activeAddonLessonKeys.contains(lessonKey),
-                                onClick = { onLessonClick(lesson) }
-                            )
                         }
                     }
                 }

@@ -1,7 +1,6 @@
 package com.mguuschedule.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -37,6 +36,7 @@ import dev.chrisbanes.haze.HazeTint
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import dev.chrisbanes.haze.materials.HazeMaterials
+import com.mguuschedule.ui.theme.AppMotionScheme
 
 /**
  * Анимированная затеняющая дымка статус-бара при скролле.
@@ -52,8 +52,8 @@ fun BoxScope.StatusBarScrim(
 
     AnimatedVisibility(
         visible = isScrolled,
-        enter = fadeIn(tween(300)),
-        exit = fadeOut(tween(300)),
+        enter = fadeIn(AppMotionScheme.defaultEffectsSpec()),
+        exit = fadeOut(AppMotionScheme.defaultEffectsSpec()),
         modifier = modifier.fillMaxWidth().align(Alignment.TopCenter)
     ) {
         Spacer(

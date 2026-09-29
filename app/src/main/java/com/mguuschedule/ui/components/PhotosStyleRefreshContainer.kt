@@ -1,9 +1,7 @@
 package com.mguuschedule.ui.components
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -39,6 +37,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.mguuschedule.ui.theme.AppMotionScheme
 import kotlinx.coroutines.delay
 
 /**
@@ -92,7 +91,7 @@ fun PhotosStyleRefreshContainer(
             else -> totalPanelHeight + (totalPanelHeight.value * 0.15f * (rawFraction - 1f))
                 .dp.coerceAtMost(24.dp)
         },
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+        animationSpec = AppMotionScheme.defaultSpatialSpec(),
         label = "photos_refresh_offset",
     )
 
