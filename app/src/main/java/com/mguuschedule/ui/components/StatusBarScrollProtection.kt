@@ -46,7 +46,7 @@ fun BoxScope.StatusBarScrim(
     listState: LazyListState,
     modifier: Modifier = Modifier
 ) {
-    val isScrolled by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0 } }
+    val isScrolled by remember { derivedStateOf { listState.canScrollBackward } }
     val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val scrimColor = MaterialTheme.colorScheme.surface
 

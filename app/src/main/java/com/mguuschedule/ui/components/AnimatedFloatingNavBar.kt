@@ -7,6 +7,7 @@ import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -68,8 +69,8 @@ fun AnimatedFloatingNavBar(
         modifier = modifier.height(52.dp),
         shape = CircleShape,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shadowElevation = 4.dp,
-        tonalElevation = 2.dp
+        shadowElevation = 3.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
     ) {
         Box(modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)) {
             // Анимированный индикатор активного раздела
@@ -100,8 +101,10 @@ fun AnimatedFloatingNavBar(
                             .fillMaxHeight()
                             .onGloballyPositioned { coordinates ->
                                 with(density) {
-                                    itemWidths[index] = coordinates.size.width.toDp()
-                                    itemOffsets[index] = coordinates.positionInParent().x.toDp()
+                                    val newWidth = coordinates.size.width.toDp()
+                                    val newOffset = coordinates.positionInParent().x.toDp()
+                                    if (itemWidths[index] != newWidth) itemWidths[index] = newWidth
+                                    if (itemOffsets[index] != newOffset) itemOffsets[index] = newOffset
                                 }
                             }
                             .clip(CircleShape)

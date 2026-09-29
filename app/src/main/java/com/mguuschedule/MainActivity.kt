@@ -14,6 +14,8 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -22,6 +24,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -287,50 +291,65 @@ fun MainAppScaffold(profileViewModel: ProfileViewModel, scheduleViewModel: Sched
             val isNotificationScreen = currentDestination?.route == "notification_history"
 
             if (!isDetailScreen && !isSearchScreen && !isNotificationScreen) {
-                Row(
+                Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    MaterialTheme.colorScheme.background.copy(alpha = 0.4f),
+                                    MaterialTheme.colorScheme.background.copy(alpha = 0.85f)
+                                )
+                            )
+                        )
                         .navigationBarsPadding()
-                        .padding(bottom = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
+                        .padding(top = 32.dp, bottom = 16.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    AnimatedFloatingNavBar(
-                        items = items,
-                        currentRoute = currentDestination?.route,
-                        onItemClick = { screen ->
-                            val isSelected = currentDestination?.hierarchy?.any { it.route == screen.route } == true
-                            if (isSelected && screen == Screen.Schedule) {
-                                scheduleViewModel.resetToToday()
-                            } else {
-                                navController.navigate(screen.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        AnimatedFloatingNavBar(
+                            items = items,
+                            currentRoute = currentDestination?.route,
+                            onItemClick = { screen ->
+                                val isSelected = currentDestination?.hierarchy?.any { it.route == screen.route } == true
+                                if (isSelected && screen == Screen.Schedule) {
+                                    scheduleViewModel.resetToToday()
+                                } else {
+                                    navController.navigate(screen.route) {
+                                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
                                 }
                             }
-                        }
-                    )
+                        )
 
-                    Spacer(modifier = Modifier.width(10.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
 
-                    Surface(
-                        onClick = {
-                            haptic.lightTick()
-                            navController.navigate(Screen.Search.route)
-                        },
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.surfaceContainer,
-                        shadowElevation = 4.dp,
-                        modifier = Modifier.size(56.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = "Поиск",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(24.dp)
-                            )
+                        Surface(
+                            onClick = {
+                                haptic.lightTick()
+                                navController.navigate(Screen.Search.route)
+                            },
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            shadowElevation = 3.dp,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)),
+                            modifier = Modifier.size(56.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = "Поиск",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
                         }
                     }
                 }

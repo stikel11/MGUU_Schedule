@@ -15,6 +15,10 @@ import android.text.StaticLayout
 import android.text.TextPaint
 import androidx.core.content.FileProvider
 import com.mguuschedule.model.Lesson
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import java.time.LocalDate
@@ -41,27 +45,32 @@ object ScheduleImageRenderer {
         isDarkTheme: Boolean = false,
         shareStyle: Int = 0
     ) {
-        val bitmap = renderDayScheduleBitmap(context, date, lessons, isDarkTheme, shareStyle)
-        val file = File(context.cacheDir, "shared_schedule.png")
-        FileOutputStream(file).use { out ->
-            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+        CoroutineScope(Dispatchers.IO).launch {
+            val bitmap = renderDayScheduleBitmap(context, date, lessons, isDarkTheme, shareStyle)
+            val file = File(context.cacheDir, "shared_schedule.png")
+            FileOutputStream(file).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            }
+
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                file
+            )
+
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "image/png"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+
+            val chooser = Intent.createChooser(intent, "Поделиться расписанием на день")
+            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            
+            withContext(Dispatchers.Main) {
+                context.startActivity(chooser)
+            }
         }
-
-        val uri = FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.fileprovider",
-            file
-        )
-
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "image/png"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-
-        val chooser = Intent.createChooser(intent, "Поделиться расписанием на день")
-        chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(chooser)
     }
 
     private fun resolvePalette(context: Context, shareStyle: Int, isDarkTheme: Boolean): PosterPalette {

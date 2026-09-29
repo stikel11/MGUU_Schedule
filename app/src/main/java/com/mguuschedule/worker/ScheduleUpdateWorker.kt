@@ -85,14 +85,14 @@ class ScheduleUpdateWorker(
                 
                 val today = LocalDate.now()
                 val tomorrow = today.plusDays(1)
+                @Suppress("DEPRECATION")
+                val locale = Locale("ru")
 
                 fun formatDate(date: LocalDate): String {
                     return when (date) {
                         today -> "Сегодня"
                         tomorrow -> "Завтра"
                         else -> {
-                            @Suppress("DEPRECATION")
-                            val locale = Locale("ru")
                             val dayName = date.dayOfWeek.getDisplayName(TextStyle.FULL, locale)
                                 .replaceFirstChar { it.uppercase() }
                             val monthName = date.month.getDisplayName(TextStyle.SHORT, locale)

@@ -71,13 +71,12 @@ fun ScheduleScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     
-    var currentTime by remember { mutableStateOf(LocalTime.now()) }
     val currentDate = remember { LocalDate.now() }
     
-    LaunchedEffect(Unit) {
+    val currentTimeState = produceState(LocalTime.now()) {
         while (true) {
-            currentTime = LocalTime.now()
             delay(60000)
+            value = LocalTime.now()
         }
     }
 
@@ -91,7 +90,7 @@ fun ScheduleScreen(
                 .fillMaxSize()
                 .hazeSource(hazeState),
             snackbarHost = { SnackbarHost(snackbarHostState) },
-            containerColor = MaterialTheme.colorScheme.background
+            containerColor = Color.Transparent
         ) { innerPadding ->
             PhotosStyleRefreshContainer(
                 isRefreshing = isRefreshing,
@@ -224,7 +223,7 @@ fun ScheduleScreen(
                                         LessonItemWithBreak(
                                             lesson = lesson,
                                             nextLesson = lessonsForTargetDate.getOrNull(index + 1),
-                                            currentTime = currentTime,
+                                            currentTimeProvider = { currentTimeState.value },
                                             currentDate = currentDate,
                                             hasAddon = activeAddonLessonKeys.contains(lessonKey),
                                             onClick = { onLessonClick(lesson) }
@@ -316,7 +315,7 @@ fun EmptySchedule() {
 fun LessonItemWithBreak(
     lesson: Lesson, 
     nextLesson: Lesson?, 
-    currentTime: LocalTime,
+    currentTimeProvider: () -> LocalTime,
     currentDate: LocalDate,
     hasAddon: Boolean = false,
     onClick: () -> Unit,
@@ -324,14 +323,14 @@ fun LessonItemWithBreak(
 ) {
     val breakDuration = remember(lesson.endTime, nextLesson?.startTime) {
         if (nextLesson != null) {
-            calculateSafeBreakMinutes(lesson.endTime.toString(), nextLesson.startTime.toString())
+            calculateSafeBreakMinutes(lesson.endTime, nextLesson.startTime)
         } else null
     }
     
     Column(modifier = modifier) {
         LessonRow(
             lesson = lesson, 
-            currentTime = currentTime, 
+            currentTimeProvider = currentTimeProvider, 
             currentDate = currentDate,
             hasAddon = hasAddon,
             onClick = onClick
@@ -372,41 +371,32 @@ fun LessonItemWithBreak(
     }
 }
 
-fun calculateSafeBreakMinutes(endStr: String, startStr: String): Int? = runCatching {
-    val cleanEnd = endStr.replace("\u00A0", "").trim()
-    val cleanStart = startStr.replace("\u00A0", "").trim()
-    val t1 = LocalTime.parse(cleanEnd)
-    val t2 = LocalTime.parse(cleanStart)
-    val diff = ChronoUnit.MINUTES.between(t1, t2).toInt()
+fun calculateSafeBreakMinutes(endTime: LocalTime, startTime: LocalTime): Int? = runCatching {
+    val diff = ChronoUnit.MINUTES.between(endTime, startTime).toInt()
     if (diff in 1..120) diff else null
 }.getOrNull()
 
 @Composable
 fun LessonRow(
     lesson: Lesson, 
-    currentTime: LocalTime,
+    currentTimeProvider: () -> LocalTime,
     currentDate: LocalDate,
     hasAddon: Boolean = false,
     onClick: () -> Unit
 ) {
-    val status = remember(lesson, currentTime, currentDate) {
-        when {
-            currentDate.isAfter(lesson.date) -> LessonStatus.PAST
-            currentDate.isBefore(lesson.date) -> LessonStatus.UPCOMING
-            currentTime.isAfter(lesson.endTime) -> LessonStatus.PAST
-            currentTime.isBefore(lesson.startTime) -> LessonStatus.UPCOMING
-            else -> LessonStatus.CURRENT
-        }
+    val currentTime = currentTimeProvider()
+    val status = when {
+        currentDate.isAfter(lesson.date) -> LessonStatus.PAST
+        currentDate.isBefore(lesson.date) -> LessonStatus.UPCOMING
+        currentTime.isAfter(lesson.endTime) -> LessonStatus.PAST
+        currentTime.isBefore(lesson.startTime) -> LessonStatus.UPCOMING
+        else -> LessonStatus.CURRENT
     }
 
-    val startTimeStr = remember(lesson.startTime) { lesson.startTime.toString() }
-    val endTimeStr = remember(lesson.endTime) { lesson.endTime.toString() }
-    val typeName = remember(lesson.type) {
-        lesson.type.lowercase().replaceFirstChar { it.uppercase() }
-    }
-    val roomFormatted = remember(lesson.room) {
-        formatClassroom(lesson.room)
-    }
+    val startTimeStr = lesson.startTime.toString()
+    val endTimeStr = lesson.endTime.toString()
+    val typeName = lesson.type.lowercase().replaceFirstChar { it.uppercase() }
+    val roomFormatted = formatClassroom(lesson.room)
     
     val containerColor = if (status == LessonStatus.CURRENT) {
         MaterialTheme.colorScheme.primaryContainer
