@@ -81,15 +81,40 @@ class ScheduleUpdateWorker(
 
             // Отправка уведомлений об изменениях (только если был сохранен ранее непустой кэш)
             if (changesEnabled && oldLessonsMapped.isNotEmpty()) {
-                val diffs = findDetailedChanges(oldLessonsMapped, newLessonsMapped)
-                diffs.forEachIndexed { index, message ->
+                val diffsByDate = findDetailedChanges(oldLessonsMapped, newLessonsMapped)
+                
+                val today = LocalDate.now()
+                val tomorrow = today.plusDays(1)
+
+                fun formatDate(date: LocalDate): String {
+                    return when (date) {
+                        today -> "Сегодня"
+                        tomorrow -> "Завтра"
+                        else -> {
+                            @Suppress("DEPRECATION")
+                            val locale = Locale("ru")
+                            val dayName = date.dayOfWeek.getDisplayName(TextStyle.FULL, locale)
+                                .replaceFirstChar { it.uppercase() }
+                            val monthName = date.month.getDisplayName(TextStyle.SHORT, locale)
+                            "$dayName, ${date.dayOfMonth} $monthName"
+                        }
+                    }
+                }
+
+                var index = 0
+                diffsByDate.forEach { (date, messages) ->
+                    val dateStr = formatDate(date)
+                    val title = "Изменения в расписании: $dateStr"
+                    val combinedMessage = messages.joinToString("\n")
+
                     NotificationHelper.showNotification(
                         applicationContext,
                         NotificationHelper.CHANNEL_SCHEDULE_CHANGES,
-                        "Изменение в расписании",
-                        message,
+                        title,
+                        combinedMessage,
                         2000 + index
                     )
+                    index++
                 }
             }
 
@@ -127,8 +152,8 @@ class ScheduleUpdateWorker(
         cachePrefs.edit().putString("cache_$groupId", json).putLong("last_update_time", System.currentTimeMillis()).apply()
     }
 
-    private fun findDetailedChanges(old: List<Lesson>, new: List<Lesson>): List<String> {
-        val changes = mutableListOf<String>()
+    private fun findDetailedChanges(old: List<Lesson>, new: List<Lesson>): Map<LocalDate, List<String>> {
+        val changes = mutableMapOf<LocalDate, MutableList<String>>()
         
         fun String.normalize(): String = this.replace("\u00A0", " ").replace(Regex("\\s+"), " ").trim()
 
@@ -138,20 +163,6 @@ class ScheduleUpdateWorker(
         val newMap = new.associateBy { lessonKey(it) }
         
         val today = LocalDate.now()
-        val tomorrow = today.plusDays(1)
-
-        fun formatDate(date: LocalDate): String {
-            return when (date) {
-                today -> "Сегодня"
-                tomorrow -> "Завтра"
-                else -> {
-                    val dayName = date.dayOfWeek.getDisplayName(TextStyle.FULL, Locale("ru"))
-                        .replaceFirstChar { it.uppercase() }
-                    val monthName = date.month.getDisplayName(TextStyle.SHORT, Locale("ru"))
-                    "$dayName, ${date.dayOfMonth} $monthName"
-                }
-            }
-        }
 
         // Множество дат, присутствующих в новом расписании (для проверки отмены пар только в те дни, данные по которым загружены)
         val newDates = new.map { it.date }.toSet()
@@ -161,25 +172,24 @@ class ScheduleUpdateWorker(
             if (oldLesson.date >= today) {
                 val key = lessonKey(oldLesson)
                 val newLesson = newMap[key]
-                val dateStr = formatDate(oldLesson.date)
                 
                 if (newLesson == null) {
                     // Если день есть в загруженных данных, но конкретная пара исчезла — она отменена
                     if (newDates.contains(oldLesson.date)) {
-                        changes.add("$dateStr: пара отменена: ${oldLesson.title.normalize()}")
+                        changes.getOrPut(oldLesson.date) { mutableListOf() }.add("Отменена: ${oldLesson.title.normalize()}")
                     }
                 } else {
                     // Пара существует, проверяем реальные изменения аудитории или преподавателя
                     val oldRoom = oldLesson.room.normalize()
                     val newRoom = newLesson.room.normalize()
                     if (oldRoom != newRoom && oldRoom.isNotEmpty() && newRoom.isNotEmpty()) {
-                        changes.add("$dateStr: ${oldLesson.title.normalize()} перенесен в Ауд. $newRoom (была $oldRoom)")
+                        changes.getOrPut(oldLesson.date) { mutableListOf() }.add("${oldLesson.title.normalize()} перенесен в Ауд. $newRoom (была $oldRoom)")
                     }
 
                     val oldTeacher = oldLesson.teacher.normalize()
                     val newTeacher = newLesson.teacher.normalize()
                     if (oldTeacher != newTeacher && oldTeacher.isNotEmpty() && newTeacher.isNotEmpty()) {
-                        changes.add("$dateStr: ${oldLesson.title.normalize()}: замена преподавателя на $newTeacher")
+                        changes.getOrPut(oldLesson.date) { mutableListOf() }.add("${oldLesson.title.normalize()}: замена преподавателя на $newTeacher")
                     }
                 }
             }
@@ -190,8 +200,7 @@ class ScheduleUpdateWorker(
             if (newLesson.date >= today) {
                 val key = lessonKey(newLesson)
                 if (!oldMap.containsKey(key)) {
-                    val dateStr = formatDate(newLesson.date)
-                    changes.add("$dateStr: новая пара ${newLesson.title.normalize()} в ${newLesson.startTime}")
+                    changes.getOrPut(newLesson.date) { mutableListOf() }.add("Новая пара ${newLesson.title.normalize()} в ${newLesson.startTime}")
                 }
             }
         }
