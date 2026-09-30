@@ -460,6 +460,12 @@ fun SearchItemCard(lesson: Lesson, onClick: () -> Unit) {
     val roomFormatted = remember(lesson.room) {
         formatClassroom(lesson.room)
     }
+    val hasCpFromType = remember(lesson.type, lesson.title) {
+        lesson.type.contains("кт", ignoreCase = true) ||
+        lesson.type.contains("контрол", ignoreCase = true) ||
+        lesson.title.contains("кт", ignoreCase = true) ||
+        lesson.title.contains("контрол", ignoreCase = true)
+    }
 
     Card(
         modifier = Modifier
@@ -498,6 +504,9 @@ fun SearchItemCard(lesson: Lesson, onClick: () -> Unit) {
                 SearchChip(text = dateText)
                 SearchChip(text = lesson.type)
                 SearchChip(text = roomFormatted, isPrimary = true)
+                if (hasCpFromType) {
+                    SearchChip(text = "КТ", isPrimary = true)
+                }
             }
         }
     }

@@ -544,14 +544,22 @@ fun LessonRow(
                     }
 
                     // Control Point Badge
-                    if (controlPoints.isNotEmpty()) {
+                    val hasCpFromType = remember(lesson.type, lesson.title) {
+                        lesson.type.contains("кт", ignoreCase = true) ||
+                        lesson.type.contains("контрол", ignoreCase = true) ||
+                        lesson.title.contains("кт", ignoreCase = true) ||
+                        lesson.title.contains("контрол", ignoreCase = true)
+                    }
+                    val hasControlPoint = controlPoints.isNotEmpty() || hasCpFromType
+
+                    if (hasControlPoint) {
                         Spacer(modifier = Modifier.width(8.dp))
                         Surface(
                             shape = CircleShape,
                             color = MaterialTheme.colorScheme.tertiaryContainer
                         ) {
                             Text(
-                                text = if (controlPoints.size == 1) "КТ" else "КТ · ${controlPoints.size}",
+                                text = if (controlPoints.size > 1) "КТ · ${controlPoints.size}" else "КТ",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onTertiaryContainer,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
