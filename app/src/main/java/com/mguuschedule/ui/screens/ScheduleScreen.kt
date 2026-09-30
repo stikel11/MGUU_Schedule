@@ -28,6 +28,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.mguuschedule.model.ControlPoint
 import com.mguuschedule.model.Lesson
 import com.mguuschedule.ui.components.CollapsibleScreenTitle
 import com.mguuschedule.ui.components.ExpressiveLoadingIndicator
@@ -64,6 +65,7 @@ fun ScheduleScreen(
     val isOnline by viewModel.isOnline.collectAsState()
     val weatherData = viewModel.weatherData
     val activeAddonLessonKeys by viewModel.activeAddonLessonKeys.collectAsState()
+    val lessonControlPointsMap by viewModel.lessonControlPointsFlow.collectAsState()
     val haptic = rememberHapticFeedback()
     val context = LocalContext.current
     val isDarkTheme = isSystemInDarkTheme()
@@ -220,12 +222,14 @@ fun ScheduleScreen(
                                 } else {
                                     lessonsForTargetDate.forEachIndexed { index, lesson ->
                                         val lessonKey = "${lesson.date}_${lesson.number}_${lesson.startTime}"
+                                        val linkedCps = lessonControlPointsMap[lesson.id] ?: emptyList()
                                         LessonItemWithBreak(
                                             lesson = lesson,
                                             nextLesson = lessonsForTargetDate.getOrNull(index + 1),
                                             currentTimeProvider = { currentTimeState.value },
                                             currentDate = currentDate,
                                             hasAddon = activeAddonLessonKeys.contains(lessonKey),
+                                            controlPoints = linkedCps,
                                             onClick = { onLessonClick(lesson) }
                                         )
                                     }
@@ -313,11 +317,12 @@ fun EmptySchedule() {
 
 @Composable
 fun LessonItemWithBreak(
-    lesson: Lesson, 
-    nextLesson: Lesson?, 
+    lesson: Lesson,
+    nextLesson: Lesson?,
     currentTimeProvider: () -> LocalTime,
     currentDate: LocalDate,
     hasAddon: Boolean = false,
+    controlPoints: List<ControlPoint> = emptyList(),
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -333,6 +338,7 @@ fun LessonItemWithBreak(
             currentTimeProvider = currentTimeProvider, 
             currentDate = currentDate,
             hasAddon = hasAddon,
+            controlPoints = controlPoints,
             onClick = onClick
         )
         if (breakDuration != null && breakDuration > 0) {
@@ -378,10 +384,11 @@ fun calculateSafeBreakMinutes(endTime: LocalTime, startTime: LocalTime): Int? = 
 
 @Composable
 fun LessonRow(
-    lesson: Lesson, 
+    lesson: Lesson,
     currentTimeProvider: () -> LocalTime,
     currentDate: LocalDate,
     hasAddon: Boolean = false,
+    controlPoints: List<ControlPoint> = emptyList(),
     onClick: () -> Unit
 ) {
     val currentTime = currentTimeProvider()
@@ -534,6 +541,23 @@ fun LessonRow(
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
                             fontWeight = FontWeight.Bold
                         )
+                    }
+
+                    // Control Point Badge
+                    if (controlPoints.isNotEmpty()) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.tertiaryContainer
+                        ) {
+                            Text(
+                                text = if (controlPoints.size == 1) "КТ" else "КТ · ${controlPoints.size}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
 
                     if (status == LessonStatus.PAST) {

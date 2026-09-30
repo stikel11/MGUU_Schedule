@@ -17,6 +17,9 @@ interface RatingDao {
     @Query("SELECT * FROM rating_cache ORDER BY updatedAt DESC LIMIT 1")
     suspend fun getLatestRatingCache(): RatingEntity?
 
+    @Query("SELECT * FROM rating_cache ORDER BY updatedAt DESC LIMIT 1")
+    fun getLatestRatingCacheFlow(): Flow<RatingEntity?>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveRatingCache(rating: RatingEntity): Long
 

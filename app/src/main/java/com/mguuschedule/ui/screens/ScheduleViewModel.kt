@@ -10,6 +10,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.mguuschedule.model.ControlPoint
 import com.mguuschedule.model.Lesson
 import com.mguuschedule.model.toLesson
 import com.mguuschedule.repository.AppDatabase
@@ -26,10 +27,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import com.mguuschedule.util.SearchEngine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
@@ -88,6 +91,23 @@ class ScheduleViewModel(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = emptySet()
         )
+
+    private val ratingDao = AppDatabase.getDatabase(application).ratingDao()
+
+    val lessonControlPointsFlow: StateFlow<Map<String, List<ControlPoint>>> = combine(
+        allLessonsFlow,
+        ratingDao.getLatestRatingCacheFlow()
+    ) { lessons, ratingEntity ->
+        if (ratingEntity == null || lessons.isEmpty()) {
+            emptyMap()
+        } else {
+            SearchEngine.computeLessonControlPointsMap(lessons, ratingEntity)
+        }
+    }.flowOn(Dispatchers.Default).stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyMap()
+    )
 
     var uiState: ScheduleUiState by mutableStateOf(ScheduleUiState.Loading)
         private set

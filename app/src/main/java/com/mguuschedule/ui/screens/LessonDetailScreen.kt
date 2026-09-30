@@ -35,9 +35,11 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mguuschedule.R
+import com.mguuschedule.model.ControlPoint
 import com.mguuschedule.model.Lesson
 import com.mguuschedule.repository.AppDatabase
 import com.mguuschedule.repository.LessonTaskEntity
+import com.mguuschedule.util.SearchEngine
 import com.mguuschedule.repository.ScheduleRepository
 import com.mguuschedule.ui.components.TopScrimProtection
 import com.mguuschedule.util.formatClassroom
@@ -204,6 +206,18 @@ fun LessonDetailScreen(
     val noteEntity by viewModel.noteFlow.collectAsState(initial = null)
     val taskList by viewModel.tasksFlow.collectAsState(initial = emptyList())
     val haptic = rememberHapticFeedback()
+
+    val database = remember { AppDatabase.getDatabase(context) }
+    val ratingEntity by database.ratingDao().getLatestRatingCacheFlow().collectAsState(initial = null)
+
+    val linkedControlPoints = remember(lesson, ratingEntity) {
+        val entity = ratingEntity
+        if (entity == null) emptyList()
+        else {
+            val map = SearchEngine.computeLessonControlPointsMap(listOf(lesson), entity)
+            map[lesson.id] ?: emptyList()
+        }
+    }
 
     var showNoteDialog by remember { mutableStateOf(false) }
     var showTaskDialog by remember { mutableStateOf(false) }
@@ -378,7 +392,80 @@ fun LessonDetailScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Control Points Section (if linked to this lesson)
+            if (linkedControlPoints.isNotEmpty()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+                ) {
+                    Column(modifier = Modifier.padding(18.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.TaskAlt,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (linkedControlPoints.size == 1) "Контрольная точка" else "Контрольные точки",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        linkedControlPoints.forEachIndexed { index, point ->
+                            if (index > 0) {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(vertical = 10.dp),
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                )
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = point.pointName,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    if (point.date.isNotBlank() && point.date != "—") {
+                                        Text(
+                                            text = point.date,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (point.score != null) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh
+                                ) {
+                                    Text(
+                                        text = if (point.score != null) "${point.score} баллов" else "Результат отсутствует",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (point.score != null) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+            }
 
             // Notes Section
             Card(
