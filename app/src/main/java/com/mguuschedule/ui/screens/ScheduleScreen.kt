@@ -87,6 +87,13 @@ fun ScheduleScreen(
     val lessons by viewModel.lessonsForSelectedDay.collectAsState()
     val hazeState = rememberHazeState()
 
+    val scrollToTopTrigger by viewModel.scrollToTopTrigger.collectAsState()
+    LaunchedEffect(scrollToTopTrigger) {
+        if (scrollToTopTrigger > 0 && (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0)) {
+            listState.animateScrollToItem(0)
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             modifier = Modifier

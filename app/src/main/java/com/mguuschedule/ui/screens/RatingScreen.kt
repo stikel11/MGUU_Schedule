@@ -45,13 +45,11 @@ import dev.chrisbanes.haze.rememberHazeState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RatingScreen() {
-    val context = LocalContext.current
-    val app = context.applicationContext as Application
-    val viewModel: RatingViewModel = viewModel(
-        factory = RatingViewModelFactory(app)
+fun RatingScreen(
+    viewModel: RatingViewModel = viewModel(
+        factory = RatingViewModelFactory(LocalContext.current.applicationContext as Application)
     )
-
+) {
     val uiState = viewModel.uiState
     val isRefreshing = viewModel.isRefreshing
     val controlPointsMap by viewModel.subjectControlPoints.collectAsState()
@@ -60,6 +58,13 @@ fun RatingScreen() {
 
     val listState = rememberLazyListState()
     val hazeState = rememberHazeState()
+
+    val scrollToTopTrigger by viewModel.scrollToTopTrigger.collectAsState()
+    LaunchedEffect(scrollToTopTrigger) {
+        if (scrollToTopTrigger > 0 && (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0)) {
+            listState.animateScrollToItem(0)
+        }
+    }
 
     var expandedSubjectUrl by remember { mutableStateOf<String?>(null) }
 

@@ -54,6 +54,13 @@ class ScheduleViewModel(
     private val _selectedDate = MutableStateFlow(LocalDate.now())
     val selectedDate = _selectedDate.asStateFlow()
 
+    private val _scrollToTopTrigger = MutableStateFlow(0)
+    val scrollToTopTrigger = _scrollToTopTrigger.asStateFlow()
+
+    fun scrollToTop() {
+        _scrollToTopTrigger.value += 1
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     val lessonsForSelectedDay: StateFlow<List<Lesson>> = _selectedDate
         .flatMapLatest { date ->

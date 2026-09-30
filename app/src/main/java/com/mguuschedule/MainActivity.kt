@@ -146,6 +146,9 @@ fun MainAppScaffold(profileViewModel: ProfileViewModel, scheduleViewModel: Sched
 
     val currentContext = LocalContext.current
     val app = currentContext.applicationContext as Application
+    val ratingViewModel: RatingViewModel = viewModel(
+        factory = RatingViewModelFactory(app)
+    )
     val notificationViewModel: NotificationHistoryViewModel = viewModel(
         factory = NotificationHistoryViewModelFactory(app)
     )
@@ -227,7 +230,7 @@ fun MainAppScaffold(profileViewModel: ProfileViewModel, scheduleViewModel: Sched
                     )
                 }
                 composable(Screen.Rating.route) {
-                    RatingScreen()
+                    RatingScreen(viewModel = ratingViewModel)
                 }
                 composable("notification_history") {
                     NotificationHistoryScreen(
@@ -348,8 +351,20 @@ fun MainAppScaffold(profileViewModel: ProfileViewModel, scheduleViewModel: Sched
                             currentRoute = currentDestination?.route,
                             onItemClick = { screen ->
                                 val isSelected = currentDestination?.hierarchy?.any { it.route == screen.route } == true
-                                if (isSelected && screen == Screen.Schedule) {
-                                    scheduleViewModel.resetToToday()
+                                if (isSelected) {
+                                    when (screen) {
+                                        Screen.Schedule -> {
+                                            scheduleViewModel.resetToToday()
+                                            scheduleViewModel.scrollToTop()
+                                        }
+                                        Screen.Rating -> {
+                                            ratingViewModel.scrollToTop()
+                                        }
+                                        Screen.Settings -> {
+                                            profileViewModel.scrollToTop()
+                                        }
+                                        else -> {}
+                                    }
                                 } else {
                                     navController.navigate(screen.route) {
                                         popUpTo(navController.graph.findStartDestination().id) { saveState = true }

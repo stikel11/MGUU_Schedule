@@ -44,6 +44,13 @@ class RatingViewModel(
     private val prefs = application.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
     private val gson = Gson()
 
+    private val _scrollToTopTrigger = MutableStateFlow(0)
+    val scrollToTopTrigger = _scrollToTopTrigger.asStateFlow()
+
+    fun scrollToTop() {
+        _scrollToTopTrigger.value += 1
+    }
+
     var uiState by mutableStateOf<RatingUiState>(RatingUiState.Loading)
         private set
 

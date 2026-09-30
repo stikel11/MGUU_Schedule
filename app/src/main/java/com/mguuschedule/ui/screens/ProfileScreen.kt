@@ -80,6 +80,13 @@ fun ProfileScreen(
 
     val listState = rememberLazyListState()
     val hazeState = rememberHazeState()
+
+    val scrollToTopTrigger by viewModel.scrollToTopTrigger.collectAsState()
+    LaunchedEffect(scrollToTopTrigger) {
+        if (scrollToTopTrigger > 0 && (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0)) {
+            listState.animateScrollToItem(0)
+        }
+    }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val zachetkaSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -299,7 +306,7 @@ fun ProfileScreen(
                     SettingsContainer(title = "О приложении") {
                         SettingsClickItem(
                             title = "МГУУ Расписание",
-                            subtitle = "Версия 0.27 beta • Material 3 Expressive",
+                            subtitle = "Версия 0.28 beta • Material 3 Expressive",
                             icon = Icons.Default.Info,
                             onClick = {}
                         )

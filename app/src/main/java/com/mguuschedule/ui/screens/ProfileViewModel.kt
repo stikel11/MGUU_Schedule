@@ -60,6 +60,13 @@ class ProfileViewModel(
     private val repository: ScheduleRepository,
     application: Application
 ) : AndroidViewModel(application) {
+
+    private val _scrollToTopTrigger = MutableStateFlow(0)
+    val scrollToTopTrigger = _scrollToTopTrigger.asStateFlow()
+
+    fun scrollToTop() {
+        _scrollToTopTrigger.value += 1
+    }
     private val prefs = application.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
     private val ratingRepository = RatingRepository()
 

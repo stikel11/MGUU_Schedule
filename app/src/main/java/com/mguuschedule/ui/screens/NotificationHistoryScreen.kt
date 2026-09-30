@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
@@ -40,10 +41,24 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+
+fun formatNotificationGroupHeader(epochMillis: Long): String {
+    val date = Instant.ofEpochMilli(epochMillis).atZone(ZoneId.systemDefault()).toLocalDate()
+    val today = LocalDate.now()
+    return when {
+        date.isEqual(today) -> "Сегодня"
+        date.isEqual(today.minusDays(1)) -> "Вчера"
+        else -> {
+            val formatter = DateTimeFormatter.ofPattern("d MMMM", Locale.forLanguageTag("ru"))
+            date.format(formatter)
+        }
+    }
+}
 
 class NotificationHistoryViewModel(
     private val notificationDao: NotificationDao,
@@ -99,6 +114,13 @@ fun NotificationHistoryScreen(
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val hazeState = rememberHazeState()
+    var showClearDialog by remember { mutableStateOf(false) }
+
+    val groupedNotifications = remember(notifications) {
+        notifications.groupBy { item ->
+            formatNotificationGroupHeader(item.timestamp)
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
@@ -134,7 +156,7 @@ fun NotificationHistoryScreen(
                             if (notifications.isNotEmpty()) {
                                 IconButton(onClick = {
                                     haptic.click()
-                                    viewModel.clearAll()
+                                    showClearDialog = true
                                 }) {
                                     Icon(Icons.Default.DeleteSweep, contentDescription = "Очистить историю")
                                 }
@@ -157,33 +179,45 @@ fun NotificationHistoryScreen(
                         .padding(innerPadding),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            modifier = Modifier.size(72.dp)
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp),
+                        shape = RoundedCornerShape(28.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(28.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    Icons.Default.NotificationsNone,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(36.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                modifier = Modifier.size(64.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Default.NotificationsNone,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(32.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "История пока пуста",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Здесь будут появляться изменения расписания и напоминания о занятиях",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
                         }
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "История уведомлений пуста",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Здесь будут появляться отслеживаемые изменения и напоминания",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
                     }
                 }
             } else {
@@ -193,109 +227,155 @@ fun NotificationHistoryScreen(
                         .consumeWindowInsets(innerPadding),
                     contentPadding = PaddingValues(
                         top = innerPadding.calculateTopPadding(),
-                        bottom = innerPadding.calculateBottomPadding() + 16.dp,
+                        bottom = innerPadding.calculateBottomPadding() + 24.dp,
                         start = 16.dp,
                         end = 16.dp
                     ),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(notifications, key = { it.id }) { item ->
-                        NotificationItemCard(item = item)
+                    groupedNotifications.forEach { (header, items) ->
+                        item(key = "header_$header") {
+                            Text(
+                                text = header,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(top = 12.dp, bottom = 4.dp, start = 4.dp)
+                            )
+                        }
+
+                        items(items, key = { it.id }) { item ->
+                            NotificationItemCard(item = item)
+                        }
                     }
                 }
             }
         }
 
         TopScrimProtection()
+
+        if (showClearDialog) {
+            AlertDialog(
+                onDismissRequest = { showClearDialog = false },
+                title = { Text("Очистить историю?", fontWeight = FontWeight.Bold) },
+                text = { Text("Все сохраненные уведомления будут удалены.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        haptic.click()
+                        viewModel.clearAll()
+                        showClearDialog = false
+                    }) { Text("Очистить", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showClearDialog = false }) { Text("Отмена") }
+                }
+            )
+        }
     }
 }
 
 @Composable
 fun NotificationItemCard(item: NotificationEntity) {
-    val dateTimeStr = remember(item.timestamp) {
+    val timeStr = remember(item.timestamp) {
         val dt = LocalDateTime.ofInstant(Instant.ofEpochMilli(item.timestamp), ZoneId.systemDefault())
-        val dateFormatter = DateTimeFormatter.ofPattern("d MMM, HH:mm", Locale.forLanguageTag("ru"))
-        dt.format(dateFormatter)
+        val timeFormatter = DateTimeFormatter.ofPattern("HH:mm", Locale.forLanguageTag("ru"))
+        dt.format(timeFormatter)
     }
 
-    val typeLabel = remember(item.type) {
+    val (typeLabel, icon) = remember(item.type) {
         when (item.type) {
-            "CHANGE" -> "Изменение"
-            "REMINDER" -> "Напоминание"
-            "LIVE_UPDATE" -> "Live Update"
-            else -> "Системное"
+            "CHANGE" -> "Изменение" to Icons.Default.EditCalendar
+            "REMINDER" -> "Напоминание" to Icons.Default.NotificationsActive
+            "LIVE_UPDATE" -> "Live Update" to Icons.Default.Timer
+            else -> "Системное" to Icons.Default.Info
         }
     }
 
     val typeBgColor = when (item.type) {
-        "CHANGE" -> MaterialTheme.colorScheme.primaryContainer
-        "REMINDER" -> MaterialTheme.colorScheme.tertiaryContainer
+        "CHANGE" -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
+        "REMINDER" -> MaterialTheme.colorScheme.primaryContainer
         else -> MaterialTheme.colorScheme.surfaceContainerHighest
     }
 
     val typeTextColor = when (item.type) {
-        "CHANGE" -> MaterialTheme.colorScheme.onPrimaryContainer
-        "REMINDER" -> MaterialTheme.colorScheme.onTertiaryContainer
+        "CHANGE" -> MaterialTheme.colorScheme.onErrorContainer
+        "REMINDER" -> MaterialTheme.colorScheme.onPrimaryContainer
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
 
     Surface(
         shape = RoundedCornerShape(20.dp),
-        color = if (!item.isRead) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f) else MaterialTheme.colorScheme.surfaceContainerLow,
+        color = if (!item.isRead) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = typeBgColor,
+                modifier = Modifier.size(40.dp)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        shape = CircleShape,
-                        color = typeBgColor
-                    ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = typeTextColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = typeLabel,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
-                            color = typeTextColor,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            color = typeTextColor
                         )
+                        if (!item.isRead) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primary)
+                            )
+                        }
                     }
-                    if (!item.isRead) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primary)
-                        )
-                    }
+
+                    Text(
+                        text = timeStr,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
 
-                Text(
-                    text = dateTimeStr,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = item.title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-
-            if (item.message.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(4.dp))
+
                 Text(
-                    text = item.message,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = item.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
                 )
+
+                if (item.message.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = item.message,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }
