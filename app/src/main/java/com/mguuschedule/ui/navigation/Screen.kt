@@ -15,4 +15,5 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     object Debug : Screen("debug", "Отладка", Icons.Default.Settings)
     object LessonDetail : Screen("lesson/{lessonId}", "Информация", Icons.Default.DateRange)
     object TeacherProfile : Screen("teacher/{teacherName}", "Профиль преподавателя", Icons.Default.DateRange)
+    object Todo : Screen("todo", "Задачи", Icons.Default.DateRange)
 }

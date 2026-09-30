@@ -12,9 +12,10 @@ import com.mguuschedule.model.LessonEntity
         NotificationEntity::class,
         LessonNoteEntity::class,
         LessonTaskEntity::class,
+        LessonMaterialEntity::class,
         RatingEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mguuschedule.model.ControlPoint
@@ -115,9 +116,7 @@ fun ScheduleScreen(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
-                        bottom = innerPadding.calculateBottomPadding() + 100.dp,
-                        start = 12.dp,
-                        end = 12.dp
+                        bottom = innerPadding.calculateBottomPadding() + 100.dp
                     ),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
@@ -125,7 +124,7 @@ fun ScheduleScreen(
                     item {
                         CollapsibleScreenTitle(
                             title = "Расписание",
-                            modifier = Modifier.padding(horizontal = 4.dp)
+                            modifier = Modifier.padding(horizontal = 16.dp)
                         )
                     }
 
@@ -187,7 +186,7 @@ fun ScheduleScreen(
                                     Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(vertical = 40.dp),
+                                            .padding(horizontal = 16.dp, vertical = 40.dp),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Column(
@@ -222,7 +221,7 @@ fun ScheduleScreen(
                                 } else {
                                     lessonsForTargetDate.forEachIndexed { index, lesson ->
                                         val lessonKey = "${lesson.date}_${lesson.number}_${lesson.startTime}"
-                                        val linkedCps = lessonControlPointsMap[lesson.id] ?: emptyList()
+                                        val linkedCps = lessonControlPointsMap[lessonKey] ?: emptyList()
                                         LessonItemWithBreak(
                                             lesson = lesson,
                                             nextLesson = lessonsForTargetDate.getOrNull(index + 1),
@@ -230,7 +229,8 @@ fun ScheduleScreen(
                                             currentDate = currentDate,
                                             hasAddon = activeAddonLessonKeys.contains(lessonKey),
                                             controlPoints = linkedCps,
-                                            onClick = { onLessonClick(lesson) }
+                                            onClick = { onLessonClick(lesson) },
+                                            modifier = Modifier.padding(horizontal = 16.dp)
                                         )
                                     }
                                 }
@@ -282,7 +282,7 @@ fun EmptySchedule() {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 60.dp), 
+            .padding(horizontal = 16.dp, vertical = 60.dp), 
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -508,68 +508,54 @@ fun LessonRow(
                     Spacer(modifier = Modifier.height(12.dp))
                 }
 
-                // Top Badges Row: Number, Type, Status
+                // Top Badges Row: Type, Status
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Lesson Number Pill Badge
-                    Surface(
-                        shape = CircleShape,
-                        color = if (status == LessonStatus.CURRENT) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.secondaryContainer
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text(
-                            text = "${lesson.number} пара",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (status == LessonStatus.CURRENT) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSecondaryContainer,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    
-                    Spacer(modifier = Modifier.width(8.dp))
-                    
-                    // Lesson Type Badge
-                    Surface(
-                        shape = CircleShape,
-                        color = if (status == LessonStatus.CURRENT) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.tertiaryContainer
-                    ) {
-                        Text(
-                            text = typeName,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (status == LessonStatus.CURRENT) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onTertiaryContainer,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    // Control Point Badge
-                    val hasCpFromType = remember(lesson.type, lesson.title) {
-                        lesson.type.contains("кт", ignoreCase = true) ||
-                        lesson.type.contains("контрол", ignoreCase = true) ||
-                        lesson.title.contains("кт", ignoreCase = true) ||
-                        lesson.title.contains("контрол", ignoreCase = true)
-                    }
-                    val hasControlPoint = controlPoints.isNotEmpty() || hasCpFromType
-
-                    if (hasControlPoint) {
-                        Spacer(modifier = Modifier.width(8.dp))
+                        // Lesson Type Badge
                         Surface(
                             shape = CircleShape,
-                            color = MaterialTheme.colorScheme.tertiaryContainer
+                            color = if (status == LessonStatus.CURRENT) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.tertiaryContainer,
+                            modifier = Modifier.weight(1f, fill = false)
                         ) {
                             Text(
-                                text = if (controlPoints.size > 1) "КТ · ${controlPoints.size}" else "КТ",
+                                text = typeName,
                                 style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                color = if (status == LessonStatus.CURRENT) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onTertiaryContainer,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
+                        }
+
+                        // Control Point Badge
+                        val hasControlPoint = controlPoints.isNotEmpty()
+
+                        if (hasControlPoint) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.tertiaryContainer
+                            ) {
+                                Text(
+                                    text = if (controlPoints.size > 1) "КТ · ${controlPoints.size}" else "КТ",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
 
                     if (status == LessonStatus.PAST) {
-                        Spacer(modifier = Modifier.weight(1f))
+                        Spacer(modifier = Modifier.width(8.dp))
                         Surface(
                             shape = CircleShape,
                             color = MaterialTheme.colorScheme.surfaceContainerHigh
@@ -610,7 +596,9 @@ fun LessonRow(
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Normal,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     
                     Spacer(modifier = Modifier.width(8.dp))

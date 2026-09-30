@@ -3,9 +3,12 @@ package com.mguuschedule.ui.components
 import android.app.Application
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -51,8 +54,8 @@ fun SearchOverlay(
 ) {
     val haptic = rememberHapticFeedback()
     val uiState by viewModel.uiState.collectAsState()
+    val query by viewModel.query.collectAsState()
     
-    val query = uiState.query
     val selectedFilter = uiState.selectedFilter
     val results = uiState.results
 
@@ -196,7 +199,7 @@ fun SearchOverlay(
                                 is SearchResultItem.RoomCard -> "room_${item.room}"
                                 is SearchResultItem.DateHeader -> "date_${item.date}"
                                 is SearchResultItem.ControlPointHeader -> "cp_header"
-                                is SearchResultItem.ControlPointCard -> "cp_${item.subjectName}_${item.pointName}"
+                                is SearchResultItem.ControlPointCard -> "cp_${item.uniqueId}"
                                 is SearchResultItem.SectionHeader -> "section_${item.title}"
                                 is SearchResultItem.LessonCard -> "lesson_${item.lesson.id}_${item.lesson.date}"
                             }
@@ -460,12 +463,6 @@ fun SearchItemCard(lesson: Lesson, onClick: () -> Unit) {
     val roomFormatted = remember(lesson.room) {
         formatClassroom(lesson.room)
     }
-    val hasCpFromType = remember(lesson.type, lesson.title) {
-        lesson.type.contains("кт", ignoreCase = true) ||
-        lesson.type.contains("контрол", ignoreCase = true) ||
-        lesson.title.contains("кт", ignoreCase = true) ||
-        lesson.title.contains("контрол", ignoreCase = true)
-    }
 
     Card(
         modifier = Modifier
@@ -498,15 +495,14 @@ fun SearchItemCard(lesson: Lesson, onClick: () -> Unit) {
             Spacer(modifier = Modifier.height(12.dp))
             
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 SearchChip(text = dateText)
                 SearchChip(text = lesson.type)
                 SearchChip(text = roomFormatted, isPrimary = true)
-                if (hasCpFromType) {
-                    SearchChip(text = "КТ", isPrimary = true)
-                }
             }
         }
     }

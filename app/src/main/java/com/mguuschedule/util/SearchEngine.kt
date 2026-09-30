@@ -37,6 +37,7 @@ sealed class SearchResultItem {
     ) : SearchResultItem()
 
     data class ControlPointCard(
+        val uniqueId: String,
         val subjectName: String,
         val pointName: String,
         val dateText: String,
@@ -116,12 +117,21 @@ object SearchEngine {
         )
 
         val allParsedCPs = mutableListOf<ParsedCP>()
+        
+        // Определяем базовый год из yearId (например "2026_2027")
+        val baseYear = Regex("^(\\d{4})").find(ratingEntity.yearId)?.groupValues?.get(1)?.toIntOrNull() ?: LocalDate.now().year
 
         subjects.forEach { subject ->
             val points = controlPointsMap[subject.detailUrl] ?: emptyList()
             val normSubject = normalizeSubjectName(subject.title)
             points.forEach { cp ->
-                val parsedDate = parseControlPointDate(cp.date)
+                // Если дата КТ имеет месяц от 1 до 8 (весенний семестр), год скорее всего baseYear + 1
+                // Для осеннего семестра (9-12) год = baseYear. Это эвристика для fallbackYear.
+                val monthStr = cp.date.split('.', '/').getOrNull(1)
+                val isSpringMonth = (monthStr?.toIntOrNull() ?: 9) < 9
+                val fallbackYear = if (isSpringMonth && ratingEntity.yearId.contains("_")) baseYear + 1 else baseYear
+                
+                val parsedDate = parseControlPointDate(cp.date, fallbackYear)
                 if (parsedDate != null) {
                     allParsedCPs.add(ParsedCP(subject.title, normSubject, cp, parsedDate))
                 }
@@ -138,9 +148,32 @@ object SearchEngine {
 
         allParsedCPs.forEach { pcp ->
             val matchingLessons = lessonsGrouped[Pair(pcp.normalizedSubject, pcp.date)] ?: emptyList()
-            if (matchingLessons.size == 1) {
+            if (matchingLessons.isEmpty()) return@forEach
+
+            val cpNameLower = pcp.point.pointName.lowercase(Locale.ROOT)
+            
+            val typeMatches = matchingLessons.filter { lesson ->
+                val typeLower = lesson.type.lowercase(Locale.ROOT)
+                when {
+                    typeLower.contains("лекц") && cpNameLower.contains("лекц") -> true
+                    typeLower.contains("семин") && cpNameLower.contains("семин") -> true
+                    typeLower.contains("практ") && cpNameLower.contains("практ") -> true
+                    typeLower.contains("лаб") && cpNameLower.contains("лаб") -> true
+                    else -> false
+                }
+            }
+
+            if (typeMatches.size == 1) {
+                val lesson = typeMatches[0]
+                val lessonKey = "${lesson.date}_${lesson.number}_${lesson.startTime}"
+                resultMap.getOrPut(lessonKey) { mutableListOf() }.add(pcp.point)
+            } else if (typeMatches.isEmpty() && matchingLessons.size == 1) {
                 val lesson = matchingLessons[0]
-                resultMap.getOrPut(lesson.id) { mutableListOf() }.add(pcp.point)
+                val typeLower = lesson.type.lowercase(Locale.ROOT)
+                if (!typeLower.contains("лекц")) {
+                    val lessonKey = "${lesson.date}_${lesson.number}_${lesson.startTime}"
+                    resultMap.getOrPut(lessonKey) { mutableListOf() }.add(pcp.point)
+                }
             }
         }
 
@@ -343,6 +376,7 @@ object SearchEngine {
                 val normTitle = normalize(lesson.title)
                 val normTeacher = normalize(lesson.teacher)
                 val normRoom = normalize(lesson.room)
+                val normType = normalize(lesson.type)
 
                 for (token in queryTokens) {
                     when {
@@ -351,15 +385,16 @@ object SearchEngine {
                         normTitle.contains(token) -> score += 60
                         normTeacher.contains(token) -> score += 40
                         normRoom.contains(token) -> score += 30
+                        normType.contains(token) -> score += 20
                         isFuzzyMatch(token, normTitle) -> score += 20
                     }
                 }
                 score
             }.thenBy { lesson ->
                 when {
-                    lesson.date.isEqual(today) && lesson.endTime.isAfter(currentTime) -> 0
+                    lesson.date.isEqual(today) && lesson.endTime.isAfter(currentTime) -> 0L
                     lesson.date.isAfter(today) -> ChronoUnit.DAYS.between(today, lesson.date)
-                    else -> 10000 + ChronoUnit.DAYS.between(lesson.date, today)
+                    else -> 10000L + ChronoUnit.DAYS.between(lesson.date, today)
                 }
             }.thenBy { it.startTime }
         )

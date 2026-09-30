@@ -103,15 +103,16 @@ class ScheduleRepository(private val context: Context, private val database: App
         val today = LocalDate.now()
         
         // ВСЕГДА устанавливаем startDate на 1-е число месяца для корректного сравнения на сервере
-        val effectiveStart = if (today.monthValue == 8) {
+        val targetStartDate = today.minusDays(daysCount.toLong())
+        val effectiveStart = if (targetStartDate.monthValue == 8) {
             LocalDate.of(2026, 9, 1) // Август переводим на 1 сентября 2026
         } else {
-            today.withDayOfMonth(1)  // Всегда 1-е число текущего месяца
+            targetStartDate.withDayOfMonth(1)  // Всегда 1-е число текущего месяца
         }
 
-        // Конец выборки — последний день следующего месяца (гарантированный охват семестра)
-        val nextMonth = effectiveStart.plusMonths(1)
-        val effectiveEnd = nextMonth.withDayOfMonth(nextMonth.lengthOfMonth())
+        // Конец выборки — с учетом daysCount и до конца месяца
+        val targetEndDate = today.plusDays(daysCount.toLong())
+        val effectiveEnd = targetEndDate.withDayOfMonth(targetEndDate.lengthOfMonth())
 
         val formatter = DateTimeFormatter.ofPattern("dd.MM.yyyy")
         val startDateStr = effectiveStart.format(formatter)
@@ -164,6 +165,7 @@ class ScheduleRepository(private val context: Context, private val database: App
 
     // Lesson Tasks
     fun getTasksFlow(lessonKey: String) = addonsDao.getTasksFlow(lessonKey)
+    fun getAllTasksFlow() = addonsDao.getAllTasksFlow()
     suspend fun addTask(lessonKey: String, title: String, deadlineEpoch: Long? = null) {
         if (title.isNotBlank()) {
             addonsDao.insertTask(
@@ -179,6 +181,32 @@ class ScheduleRepository(private val context: Context, private val database: App
     }
     suspend fun toggleTaskCompleted(taskId: Long, isCompleted: Boolean) = addonsDao.setTaskCompleted(taskId, isCompleted)
     suspend fun deleteTask(taskId: Long) = addonsDao.deleteTask(taskId)
+
+    // Lesson Materials
+    fun getMaterialsFlow(lessonKey: String) = addonsDao.getMaterialsFlow(lessonKey)
+    suspend fun addMaterial(
+        lessonKey: String,
+        title: String,
+        type: String,
+        uriOrUrl: String,
+        fileName: String? = null,
+        mimeType: String? = null,
+        sizeBytes: Long? = null
+    ) {
+        addonsDao.insertMaterial(
+            LessonMaterialEntity(
+                lessonKey = lessonKey,
+                title = title.trim(),
+                type = type,
+                uriOrUrl = uriOrUrl,
+                fileName = fileName,
+                mimeType = mimeType,
+                sizeBytes = sizeBytes,
+                createdAt = System.currentTimeMillis()
+            )
+        )
+    }
+    suspend fun deleteMaterial(materialId: Long) = addonsDao.deleteMaterial(materialId)
 
     // Active Addons Overview
     fun getActiveAddonLessonKeysFlow() = addonsDao.getActiveAddonLessonKeysFlow()

@@ -94,7 +94,7 @@ The latest APK releases are available on the repository's [Releases](../../relea
 
 ## Development Status
 
-Current version: 0.19 Beta
+Current version: 0.20 Beta
 
 The project is currently in beta.
 

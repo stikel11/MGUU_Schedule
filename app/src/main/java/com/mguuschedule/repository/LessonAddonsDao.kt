@@ -26,6 +26,9 @@ interface LessonAddonsDao {
     @Query("SELECT * FROM lesson_tasks WHERE lessonKey = :lessonKey ORDER BY isCompleted ASC, createdAt DESC")
     fun getTasksFlow(lessonKey: String): Flow<List<LessonTaskEntity>>
 
+    @Query("SELECT * FROM lesson_tasks ORDER BY isCompleted ASC, deadlineEpoch ASC, createdAt DESC")
+    fun getAllTasksFlow(): Flow<List<LessonTaskEntity>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTask(task: LessonTaskEntity): Long
 
@@ -37,6 +40,16 @@ interface LessonAddonsDao {
 
     @Query("UPDATE lesson_tasks SET isCompleted = :isCompleted WHERE id = :taskId")
     suspend fun setTaskCompleted(taskId: Long, isCompleted: Boolean): Int
+
+    // Materials
+    @Query("SELECT * FROM lesson_materials WHERE lessonKey = :lessonKey ORDER BY createdAt DESC")
+    fun getMaterialsFlow(lessonKey: String): Flow<List<LessonMaterialEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMaterial(material: LessonMaterialEntity): Long
+
+    @Query("DELETE FROM lesson_materials WHERE id = :materialId")
+    suspend fun deleteMaterial(materialId: Long): Int
 
     // Keys with active addons (notes or uncompleted tasks)
     @Query("""

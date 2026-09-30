@@ -155,8 +155,6 @@ fun CollapsibleScreenTitle(
         color = MaterialTheme.colorScheme.onSurface,
         modifier = modifier.padding(
             top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp,
-            start = 20.dp,
-            end = 20.dp,
             bottom = 12.dp
         )
     )

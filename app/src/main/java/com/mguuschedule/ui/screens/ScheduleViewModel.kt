@@ -301,6 +301,56 @@ class ScheduleViewModel(
     fun getLessonById(id: String): Lesson? {
         return allLessonsFlow.value.find { it.id == id } ?: lessonsForSelectedDay.value.find { it.id == id }
     }
+
+    // Addons Extensions
+    fun getMaterialsFlow(lessonKey: String) = scheduleRepository.getMaterialsFlow(lessonKey)
+    fun getAllTasksFlow() = scheduleRepository.getAllTasksFlow()
+
+    fun addTask(lessonKey: String, title: String, deadlineEpoch: Long? = null) {
+        viewModelScope.launch(Dispatchers.IO) {
+            scheduleRepository.addTask(lessonKey, title, deadlineEpoch)
+        }
+    }
+
+    fun toggleTaskCompleted(taskId: Long, isCompleted: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            scheduleRepository.toggleTaskCompleted(taskId, isCompleted)
+        }
+    }
+
+    fun deleteTask(taskId: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            scheduleRepository.deleteTask(taskId)
+        }
+    }
+
+    fun addMaterial(
+        lessonKey: String,
+        title: String,
+        type: String,
+        uriOrUrl: String,
+        fileName: String? = null,
+        mimeType: String? = null,
+        sizeBytes: Long? = null
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            scheduleRepository.addMaterial(
+                lessonKey = lessonKey,
+                title = title,
+                type = type,
+                uriOrUrl = uriOrUrl,
+                fileName = fileName,
+                mimeType = mimeType,
+                sizeBytes = sizeBytes
+            )
+        }
+    }
+
+    fun deleteMaterial(materialId: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            scheduleRepository.deleteMaterial(materialId)
+        }
+    }
 }
 
 class ScheduleViewModelFactory(

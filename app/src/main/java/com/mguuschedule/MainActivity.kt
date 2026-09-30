@@ -177,8 +177,8 @@ fun MainAppScaffold(profileViewModel: ProfileViewModel, scheduleViewModel: Sched
                 } else {
                     slideIntoContainer(
                         towards = AnimatedContentTransitionScope.SlideDirection.Start,
-                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
-                    ) + fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow))
+                        animationSpec = AppMotionScheme.defaultSpatialSpec()
+                    ) + fadeIn(animationSpec = AppMotionScheme.fastEffectsSpec())
                 }
             },
             exitTransition = {
@@ -187,8 +187,8 @@ fun MainAppScaffold(profileViewModel: ProfileViewModel, scheduleViewModel: Sched
                 } else {
                     scaleOut(
                         targetScale = 0.9f,
-                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
-                    ) + fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMediumLow))
+                        animationSpec = AppMotionScheme.fastSpatialSpec()
+                    ) + fadeOut(animationSpec = AppMotionScheme.fastEffectsSpec())
                 }
             },
             popEnterTransition = {
@@ -197,8 +197,8 @@ fun MainAppScaffold(profileViewModel: ProfileViewModel, scheduleViewModel: Sched
                 } else {
                     scaleIn(
                         initialScale = 0.9f,
-                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
-                    ) + fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow))
+                        animationSpec = AppMotionScheme.fastSpatialSpec()
+                    ) + fadeIn(animationSpec = AppMotionScheme.fastEffectsSpec())
                 }
             },
             popExitTransition = {
@@ -207,10 +207,10 @@ fun MainAppScaffold(profileViewModel: ProfileViewModel, scheduleViewModel: Sched
                 } else {
                     slideOutOfContainer(
                         towards = AnimatedContentTransitionScope.SlideDirection.End,
-                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                        animationSpec = AppMotionScheme.defaultSpatialSpec()
                     ) + scaleOut(
                         targetScale = 0.85f,
-                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                        animationSpec = AppMotionScheme.fastSpatialSpec()
                     )
                 }
             }
@@ -273,6 +273,13 @@ fun MainAppScaffold(profileViewModel: ProfileViewModel, scheduleViewModel: Sched
                     
                     TeacherProfileScreen(
                         teacherName = teacherName,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+
+                composable(Screen.Todo.route) {
+                    TodoScreen(
+                        scheduleViewModel = scheduleViewModel,
                         onBack = { navController.popBackStack() }
                     )
                 }

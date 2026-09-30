@@ -29,3 +29,20 @@ data class LessonTaskEntity(
     val isCompleted: Boolean = false,
     val createdAt: Long
 )
+
+@Entity(
+    tableName = "lesson_materials",
+    indices = [Index(value = ["lessonKey"])]
+)
+data class LessonMaterialEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val lessonKey: String, // "${date}_${number}_${startTime}"
+    val title: String,
+    val type: String, // "URL", "PDF", "PPTX", "FILE"
+    val uriOrUrl: String,
+    val fileName: String? = null,
+    val mimeType: String? = null,
+    val sizeBytes: Long? = null,
+    val createdAt: Long = System.currentTimeMillis()
+)

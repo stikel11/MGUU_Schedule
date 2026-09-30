@@ -276,9 +276,9 @@ object ScheduleImageRenderer {
 
                 var cardY = currentY + 44f
 
-                // Number & Type Badge
+                // Type Badge
                 bgPaint.color = palette.primaryContainerColor
-                val badgeText = "${lesson.number} пара • ${lesson.type}"
+                val badgeText = lesson.type
                 val badgeWidth = badgePaint.measureText(badgeText) + 36f
                 val pillRect = RectF(cardX + 32f, cardY - 26f, cardX + 32f + badgeWidth, cardY + 18f)
                 canvas.drawRoundRect(pillRect, 22f, 22f, bgPaint)

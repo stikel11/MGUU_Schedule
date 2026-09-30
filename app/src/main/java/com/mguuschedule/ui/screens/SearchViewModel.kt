@@ -185,7 +185,7 @@ class SearchViewModel(
 
                         val matchedCps = mutableListOf<SearchResultItem.ControlPointCard>()
                         pointsMap.forEach { (subjectUrl, points) ->
-                            points.forEach { point ->
+                            points.forEachIndexed { index, point ->
                                 val normSubject = SearchEngine.normalize(subjectUrl)
                                 val normPoint = SearchEngine.normalize(point.pointName)
                                 
@@ -195,6 +195,7 @@ class SearchViewModel(
                                 if (matches) {
                                     matchedCps.add(
                                         SearchResultItem.ControlPointCard(
+                                            uniqueId = "${subjectUrl}_${point.pointName}_${point.date}_$index",
                                             subjectName = subjectUrl.substringAfter("subject=").substringBefore("&").replace("_", " "),
                                             pointName = point.pointName,
                                             dateText = point.date,
@@ -229,11 +230,13 @@ class SearchViewModel(
                         val normTitle = SearchEngine.normalize(lesson.title)
                         val normTeacher = SearchEngine.normalize(lesson.teacher)
                         val normRoom = SearchEngine.normalize(lesson.room)
+                        val normType = SearchEngine.normalize(lesson.type)
 
                         initialTokens.all { token ->
                             normTitle.contains(token) ||
                             normTeacher.contains(token) ||
                             normRoom.contains(token) ||
+                            normType.contains(token) ||
                             SearchEngine.isFuzzyMatch(token, normTitle) ||
                             SearchEngine.isFuzzyMatch(token, normTeacher)
                         }

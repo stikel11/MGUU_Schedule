@@ -7,6 +7,7 @@ import com.mguuschedule.model.EduGroup
 import com.mguuschedule.model.GroupRatingPage
 import com.mguuschedule.model.StudentRating
 import com.mguuschedule.model.SubjectScore
+import com.mguuschedule.util.SearchEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jsoup.Jsoup
@@ -15,6 +16,7 @@ import org.jsoup.nodes.Element
 import java.net.URLEncoder
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
+import java.time.LocalDate
 import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
@@ -214,7 +216,7 @@ class RatingRepository(
             }
 
             Log.d(TAG, "Успешно распарсено дисциплин: ${subjects.size}")
-            subjects
+            subjects.sortedWith(compareBy<SubjectScore> { it.title }.thenBy { it.controlType })
         }.getOrElse { e ->
             Log.e(TAG, "Ошибка при парсинге предметов студента: ${e.message}", e)
             emptyList()
@@ -262,7 +264,10 @@ class RatingRepository(
             }
 
             Log.d(TAG, "Успешно распарсено контрольных точек: ${points.size}")
-            points
+            val currentYear = LocalDate.now().year
+            points.sortedWith(compareBy<ControlPoint> { cp ->
+                SearchEngine.parseControlPointDate(cp.date, currentYear) ?: LocalDate.MAX
+            }.thenBy { it.pointName })
         }.getOrElse { e ->
             Log.e(TAG, "Ошибка при парсинге контрольных точек: ${e.message}", e)
             emptyList()
