@@ -1,5 +1,10 @@
 package com.mguuschedule.ui.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
@@ -14,9 +19,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.mguuschedule.model.EducationLevel
 import com.mguuschedule.model.Group
 import com.mguuschedule.ui.theme.AppMotionScheme
@@ -28,6 +35,36 @@ fun OnboardingScreen(
     onRetry: () -> Unit,
     onGroupSelected: (Group) -> Unit
 ) {
+    val context = LocalContext.current
+    var pendingGroupSelection by remember { mutableStateOf<Group?>(null) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { _ ->
+        pendingGroupSelection?.let { group ->
+            onGroupSelected(group)
+        }
+        pendingGroupSelection = null
+    }
+
+    val handleGroupSelection = { group: Group ->
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val hasPermission = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+
+            if (!hasPermission) {
+                pendingGroupSelection = group
+                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                onGroupSelected(group)
+            }
+        } else {
+            onGroupSelected(group)
+        }
+    }
+
     var searchQuery by remember { mutableStateOf("") }
     val expandedCourses = remember { mutableStateMapOf<String, Boolean>() }
     
@@ -103,7 +140,7 @@ fun OnboardingScreen(
                     searchQuery = searchQuery,
                     expandedCourses = expandedCourses,
                     onRetry = onRetry,
-                    onGroupSelected = onGroupSelected
+                    onGroupSelected = handleGroupSelection
                 )
             }
         }
