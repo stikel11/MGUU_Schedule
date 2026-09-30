@@ -9,6 +9,12 @@ interface ScheduleDao {
     @Query("SELECT * FROM lessons WHERE date = :date")
     fun getLessonsForDate(date: String): Flow<List<LessonEntity>>
 
+    @Query("SELECT * FROM lessons")
+    suspend fun getAllLessons(): List<LessonEntity>
+
+    @Query("SELECT * FROM lessons")
+    fun getAllLessonsFlow(): Flow<List<LessonEntity>>
+
     @Query("SELECT * FROM lessons WHERE date >= :startDate")
     suspend fun getUpcomingLessons(startDate: String): List<LessonEntity>
 

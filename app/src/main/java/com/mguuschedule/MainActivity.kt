@@ -299,6 +299,10 @@ fun MainAppScaffold(profileViewModel: ProfileViewModel, scheduleViewModel: Sched
                         allLessons = scheduleViewModel.lessons,
                         onLessonClick = { lesson ->
                             navController.navigate("lesson/${lesson.id}")
+                        },
+                        onTeacherClick = { teacherName ->
+                            val encodedName = URLEncoder.encode(teacherName, "UTF-8")
+                            navController.navigate("teacher/$encodedName")
                         }
                     )
                 }

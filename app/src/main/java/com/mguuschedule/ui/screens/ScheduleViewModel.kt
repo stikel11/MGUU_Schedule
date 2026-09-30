@@ -68,6 +68,19 @@ class ScheduleViewModel(
             initialValue = emptyList()
         )
 
+    val allLessonsFlow: StateFlow<List<Lesson>> = scheduleRepository.getAllLessonsFlow()
+        .map { entities ->
+            runCatching {
+                entities.mapNotNull { it.toLesson() }
+            }.getOrDefault(emptyList())
+        }
+        .flowOn(Dispatchers.Default)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
     val activeAddonLessonKeys: StateFlow<Set<String>> = scheduleRepository.getActiveAddonLessonKeysFlow()
         .map { it.toSet() }
         .stateIn(
@@ -266,7 +279,7 @@ class ScheduleViewModel(
     }
 
     fun getLessonById(id: String): Lesson? {
-        return lessonsForSelectedDay.value.find { it.id == id }
+        return allLessonsFlow.value.find { it.id == id } ?: lessonsForSelectedDay.value.find { it.id == id }
     }
 }
 

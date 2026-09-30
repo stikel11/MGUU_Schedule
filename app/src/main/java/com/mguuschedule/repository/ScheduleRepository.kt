@@ -143,6 +143,8 @@ class ScheduleRepository(private val context: Context, private val database: App
 
     fun getLessonsByDateFlow(date: String) = dao.getLessonsForDate(date)
 
+    fun getAllLessonsFlow() = dao.getAllLessonsFlow()
+
     // Lesson Notes
     fun getNoteFlow(lessonKey: String) = addonsDao.getNoteFlow(lessonKey)
     suspend fun saveNote(lessonKey: String, text: String) {
