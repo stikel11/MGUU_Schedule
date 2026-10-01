@@ -90,6 +90,8 @@ The latest APK releases are available on the repository's [Releases](../../relea
 3. Download the APK.
 4. Install it on an Android device.
 
+App also available on [Rustore](https://www.rustore.ru/catalog/app/com.mguuschedule) as Preorder
+
 > MGUU Schedule is distributed as an APK and is not an official application of Moscow Metropolitan Governance University.
 
 ## Development Status
