@@ -306,6 +306,10 @@ class ScheduleViewModel(
     }
 
     fun getLessonById(id: String): Lesson? {
+        if (id.contains("_")) {
+            return allLessonsFlow.value.find { "${it.date}_${it.number}_${it.startTime}" == id } 
+                ?: lessonsForSelectedDay.value.find { "${it.date}_${it.number}_${it.startTime}" == id }
+        }
         return allLessonsFlow.value.find { it.id == id } ?: lessonsForSelectedDay.value.find { it.id == id }
     }
 

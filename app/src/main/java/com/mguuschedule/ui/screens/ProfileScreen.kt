@@ -306,7 +306,7 @@ fun ProfileScreen(
                     SettingsContainer(title = "О приложении") {
                         SettingsClickItem(
                             title = "МГУУ Расписание",
-                            subtitle = "Версия 0.29 beta • Material 3 Expressive",
+                            subtitle = "Версия ${com.mguuschedule.BuildConfig.VERSION_NAME} beta • Material 3 Expressive",
                             icon = Icons.Default.Info,
                             onClick = {}
                         )

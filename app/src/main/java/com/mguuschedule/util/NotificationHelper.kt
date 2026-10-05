@@ -290,16 +290,20 @@ object NotificationHelper {
     fun scheduleClassReminder(context: Context, lesson: Lesson, minutesBefore: Int) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
         val roomFormatted = formatClassroom(lesson.room)
+        val stableId = "${lesson.date}_${lesson.number}_${lesson.startTime}".hashCode()
+
         val intent = Intent(context, ReminderReceiver::class.java).apply {
             putExtra("title", lesson.title)
             putExtra("time", lesson.startTime.toString())
             putExtra("room", roomFormatted)
-            putExtra("id", lesson.id.hashCode())
+            putExtra("id", stableId)
+            putExtra("date", lesson.date.toString())
+            putExtra("number", lesson.number)
         }
 
         val pendingIntent = PendingIntent.getBroadcast(
             context,
-            lesson.id.hashCode(),
+            stableId,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )

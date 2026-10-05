@@ -73,6 +73,7 @@ object LiveUpdateManager {
 
     private fun scheduleAlarm(context: Context, lesson: Lesson, action: String, time: LocalTime) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+        val stableId = "${lesson.date}_${lesson.number}_${lesson.startTime}"
         val intent = Intent(context, LiveUpdateReceiver::class.java).apply {
             this.action = action
             putExtra("title", lesson.title)
@@ -81,10 +82,10 @@ object LiveUpdateManager {
             putExtra("number", lesson.number)
             putExtra("startTime", lesson.startTime.toString())
             putExtra("endTime", lesson.endTime.toString())
-            putExtra("lessonId", lesson.id)
+            putExtra("lessonId", stableId)
         }
 
-        val requestCode = (lesson.id + action + time.toString()).hashCode()
+        val requestCode = (stableId + action + time.toString()).hashCode()
         val pendingIntent = PendingIntent.getBroadcast(
             context,
             requestCode,
@@ -122,6 +123,7 @@ object LiveUpdateManager {
         val message = "$roomFormatted • ${lesson.teacher}"
         val shortText = "${lesson.room} • 15м"
 
+        val stableId = "${lesson.date}_${lesson.number}_${lesson.startTime}"
         NotificationHelper.showLiveUpdateNotification(
             context = context,
             title = title,
@@ -131,7 +133,7 @@ object LiveUpdateManager {
             targetTimeMillis = startTimeMillis,
             startTimeMillis = leadTimeMillis,
             notificationId = LIVE_UPDATE_NOTIFICATION_ID,
-            lessonId = lesson.id
+            lessonId = stableId
         )
     }
 
@@ -149,6 +151,7 @@ object LiveUpdateManager {
         val message = "$roomFormatted • ${lesson.teacher}"
         val shortText = "${lesson.room} • Конец"
 
+        val stableId = "${lesson.date}_${lesson.number}_${lesson.startTime}"
         NotificationHelper.showLiveUpdateNotification(
             context = context,
             title = title,
@@ -158,7 +161,7 @@ object LiveUpdateManager {
             targetTimeMillis = endTimeMillis,
             startTimeMillis = startTimeMillis,
             notificationId = LIVE_UPDATE_NOTIFICATION_ID,
-            lessonId = lesson.id
+            lessonId = stableId
         )
     }
 
