@@ -525,6 +525,9 @@ fun LessonRow(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        val hasControlPoint = controlPoints.isNotEmpty()
+                        val typeText = if (hasControlPoint) "$typeName • КТ" else typeName
+
                         // Lesson Type Badge
                         Surface(
                             shape = CircleShape,
@@ -532,7 +535,7 @@ fun LessonRow(
                             modifier = Modifier.weight(1f, fill = false)
                         ) {
                             Text(
-                                text = typeName,
+                                text = typeText,
                                 style = MaterialTheme.typography.labelMedium,
                                 color = if (status == LessonStatus.CURRENT) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onTertiaryContainer,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
@@ -540,24 +543,6 @@ fun LessonRow(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
-                        }
-
-                        // Control Point Badge
-                        val hasControlPoint = controlPoints.isNotEmpty()
-
-                        if (hasControlPoint) {
-                            Surface(
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.tertiaryContainer
-                            ) {
-                                Text(
-                                    text = if (controlPoints.size > 1) "КТ · ${controlPoints.size}" else "КТ",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
                         }
                     }
 
@@ -604,7 +589,7 @@ fun LessonRow(
                         fontWeight = FontWeight.Normal,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f),
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                     

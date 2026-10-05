@@ -320,11 +320,9 @@ fun MainAppScaffold(profileViewModel: ProfileViewModel, scheduleViewModel: Sched
 
             val navBackStackEntry by navController.currentBackStackEntryAsState()
             val currentDestination = navBackStackEntry?.destination
-            val isDetailScreen = currentDestination?.route?.contains("lesson/") == true
-            val isSearchScreen = currentDestination?.route == Screen.Search.route
-            val isNotificationScreen = currentDestination?.route == "notification_history"
+            val isMainScreen = currentDestination?.route in bottomTabRoutes
 
-            if (!isDetailScreen && !isSearchScreen && !isNotificationScreen) {
+            if (isMainScreen) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
