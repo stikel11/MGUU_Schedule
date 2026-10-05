@@ -46,23 +46,22 @@ class TeacherRepository(private val context: Context) {
     suspend fun getTeacherProfile(teacherName: String): Result<CampusTeacher> = withContext(Dispatchers.IO) {
         try {
             val normalizedName = normalizeName(teacherName)
-            val searchUrl = "https://campusapp.ru/api/next/teachers?search=${URLEncoder.encode(normalizedName, "UTF-8")}&city=5f3ac415d91f50788747aa97&limit=20&offset=0"
+            val searchUrl = "https://campusapp.ru/api/next/teachers?search=${URLEncoder.encode(normalizedName, "UTF-8")}"
             
-            val jsonResponse = Jsoup.connect(searchUrl).ignoreContentType(true).execute().body()
-            val jsonObject = JsonParser.parseString(jsonResponse).asJsonObject
-            val items = jsonObject.getAsJsonArray("items")
+            AppLogger.d("TEACHER_PARSER", "Поиск преподавателя: $searchUrl")
             
-            var targetTeacherId: String? = null
-            var bestMatchName = ""
+            val searchResponse = Jsoup.connect(searchUrl).ignoreContentType(true).execute().body()
+            val searchJson = JsonParser.parseString(searchResponse).asJsonObject
+            val items = searchJson.getAsJsonArray("items")
+            
+            AppLogger.d("TEACHER_PARSER", "Найдено результатов поиска: ${items.size()}")
 
-            // Собираем точные совпадения по ФИО
+            var targetTeacherId: String? = null
+
+            // Ищем точные совпадения по нормализованному ФИО (case-insensitive)
             val exactMatches = items.map { it.asJsonObject }.filter { obj ->
                 val name = obj.get("name")?.asString ?: ""
-                val lastNameSearch = normalizedName.substringBefore(" ").trim()
-                val lastNameResult = name.substringBefore(" ").trim()
-                // Более точное совпадение можно сделать, но пока проверяем по нормализованному ФИО (как минимум фамилия)
-                // Для надежности берем совпадение фамилии
-                lastNameSearch.equals(lastNameResult, ignoreCase = true)
+                name.equals(normalizedName, ignoreCase = true)
             }
 
             if (exactMatches.isEmpty()) {
@@ -70,123 +69,130 @@ class TeacherRepository(private val context: Context) {
             }
 
             if (exactMatches.size == 1) {
-                // Если найдено ровно одно точное совпадение, берем его независимо от организации
-                val match = exactMatches[0]
-                targetTeacherId = match.get("_id").asString
-                bestMatchName = match.get("name").asString
+                targetTeacherId = exactMatches[0].get("_id").asString
             } else {
-                // Если найдено несколько совпадений, ищем того, кто из МГУУ
-                val mguuMatch = exactMatches.find { obj ->
+                // Пытаемся найти среди точных совпадений преподавателя из МГУУ
+                val mguuMatch = exactMatches.filter { obj ->
                     val orgName = obj.getAsJsonObject("organization")?.get("name")?.asString ?: ""
                     orgName.contains("МГУУ Правительства Москвы", ignoreCase = true) || 
-                    orgName.contains("Правительства Москвы", ignoreCase = true)
+                    orgName.contains("Университет Правительства Москвы", ignoreCase = true)
                 }
 
-                if (mguuMatch != null) {
-                    targetTeacherId = mguuMatch.get("_id").asString
-                    bestMatchName = mguuMatch.get("name").asString
+                if (mguuMatch.size == 1) {
+                    targetTeacherId = mguuMatch[0].get("_id").asString
                 } else {
-                    // Если никто не из МГУУ, и их несколько, то неоднозначность
                     return@withContext Result.failure(Exception("Найдено несколько профилей с таким ФИО (неоднозначно)"))
                 }
             }
-            
-            // Загружаем профиль преподавателя
-            val profileUrl = "https://campusapp.ru/reviews/teachers/teacher-$targetTeacherId"
-            val doc = Jsoup.connect(profileUrl).get()
+
+            AppLogger.d("TEACHER_PARSER", "Выбран teacher ID: $targetTeacherId")
+
+            // Шаг 2. Загружаем информацию о профиле преподавателя (JSON API)
+            val profileApiUrl = "https://campusapp.ru/api/next/teachers/$targetTeacherId"
+            val profileResponse = Jsoup.connect(profileApiUrl).ignoreContentType(true).execute().body()
+            val profileJson = JsonParser.parseString(profileResponse).asJsonObject
+
+            val bestMatchName = profileJson.get("name")?.asString ?: normalizedName
+            val department = profileJson.getAsJsonObject("extra")?.get("department")?.asString ?: ""
+            val university = profileJson.getAsJsonObject("organization")?.get("name")?.asString ?: ""
             
             var aggregateRating = 0f
             var reviewCount = 0
-            
-            // Парсинг JSON-LD (самый надежный способ извлечь общую информацию)
-            val scriptTags = doc.select("script[type=application/ld+json]")
-            for (script in scriptTags) {
-                try {
-                    val ldJson = JsonParser.parseString(script.html()).asJsonObject
-                    if (ldJson.has("aggregateRating")) {
-                        val agg = ldJson.getAsJsonObject("aggregateRating")
-                        aggregateRating = agg.get("ratingValue")?.asFloat ?: 0f
-                        reviewCount = agg.get("reviewCount")?.asInt ?: 0
+            val criteria = mutableListOf<CampusCriteria>()
+            val tags = mutableListOf<String>()
+
+            val ratingObj = profileJson.getAsJsonObject("rating")
+            if (ratingObj != null && !ratingObj.isJsonNull) {
+                aggregateRating = ratingObj.get("value")?.asFloat ?: 0f
+                reviewCount = ratingObj.get("count")?.asInt ?: 0
+                
+                if (ratingObj.has("criteria") && !ratingObj.get("criteria").isJsonNull) {
+                    val criteriaArr = ratingObj.getAsJsonArray("criteria")
+                    criteriaArr?.forEach { c ->
+                        val cObj = c.asJsonObject
+                        criteria.add(CampusCriteria(cObj.get("title").asString, cObj.get("value").asFloat))
                     }
-                } catch (e: Exception) {
-                    AppLogger.e("TEACHER_PARSER", "Ошибка парсинга JSON-LD: ${e.message}")
+                }
+
+                if (ratingObj.has("tags") && !ratingObj.get("tags").isJsonNull) {
+                    val tagsArr = ratingObj.getAsJsonArray("tags")
+                    tagsArr?.forEach { t ->
+                        val tObj = t.asJsonObject
+                        tags.add(tObj.get("title").asString)
+                    }
                 }
             }
-            
-            // Парсинг HTML
-            var department = ""
-            try {
-                // Поиск по текстовым признакам: обычно кафедра идет после имени или университета
-                val pTags = doc.select("p, span, div")
-                val deptTag = pTags.find { it.text().contains("Кафедра", ignoreCase = true) }
-                if (deptTag != null) {
-                    department = deptTag.text().trim()
-                }
-            } catch (e: Exception) {}
 
-            val criteria = mutableListOf<CampusCriteria>()
-            val criteriaNames = listOf(
-                "Компетентность", 
-                "Умение донести материал", 
-                "Справедливость оценивания", 
-                "Актуальность материала"
-            )
-            
-            criteriaNames.forEach { critName ->
+            // Шаг 3. Загружаем HTML страницу с отзывами
+            val reviewsUrl = "https://campusapp.ru/reviews/teachers/teacher-$targetTeacherId"
+            AppLogger.d("TEACHER_PARSER", "URL страницы с отзывами: $reviewsUrl")
+
+            val doc = Jsoup.connect(reviewsUrl).get()
+            val reviewArticles = doc.select("article")
+            AppLogger.d("TEACHER_PARSER", "Найдено DOM контейнеров отзывов: ${reviewArticles.size}")
+
+            val reviews = mutableListOf<CampusReview>()
+
+            for (article in reviewArticles) {
                 try {
-                    // Ищем элемент с названием критерия
-                    val critElems = doc.select("*:containsOwn($critName)")
-                    val critElem = critElems.lastOrNull()
-                    if (critElem != null) {
-                        // Значение обычно лежит рядом в том же родительском контейнере
-                        val parentText = critElem.parent()?.text() ?: ""
-                        val scoreMatch = Regex("(\\d[.,]\\d)").find(parentText)
-                        if (scoreMatch != null) {
-                            val score = scoreMatch.value.replace(",", ".").toFloat()
-                            criteria.add(CampusCriteria(critName, score))
+                    val divs = article.children().filter { it.tagName() == "div" }
+                    val p = article.selectFirst("p")
+                    
+                    var author = "Студент"
+                    var date = "Неизвестная дата"
+                    var rating = 0f
+                    
+                    val headerDiv = divs.getOrNull(0)
+                    if (headerDiv != null) {
+                        val spans = headerDiv.children().filter { it.tagName() == "span" }
+                        if (spans.size >= 2) {
+                            val authorDateText = spans[0].text()
+                            val parts = authorDateText.split("·", limit = 2).map { it.trim() }
+                            if (parts.size == 2) {
+                                author = parts[0]
+                                date = parts[1]
+                            } else {
+                                author = authorDateText
+                            }
+                            
+                            val ratingSpan = spans[1]
+                            val ratingText = ratingSpan.selectFirst("span")?.text() ?: ratingSpan.text()
+                            rating = ratingText.toFloatOrNull() ?: 0f
                         }
                     }
-                } catch (e: Exception) {}
-            }
-            
-            val tags = mutableListOf<String>()
-            val reviews = mutableListOf<CampusReview>()
-            
-            // Попытка извлечь отзывы из HTML 
-            // Отзывы на Campus обычно находятся внутри div или article
-            // Ориентируемся на наличие текста, даты и оценки
-            try {
-                val reviewBlocks = doc.select("div:has(span:matchesOwn(\\d{1,2}\\s[а-яА-Я]+\\s\\d{4})):has(div:matchesOwn(\\d[.,]\\d))")
-                // Это очень приблизительный селектор, если он не сработает - ничего страшного
-                for (block in reviewBlocks.take(10)) { // берем первые 10
-                    val textContent = block.text()
-                    // Здесь можно было бы сделать более детальный разбор, 
-                    // но без жесткой привязки к классам это сложно.
-                    // Для надежности берем базовые данные.
-                    val ratingMatch = Regex("(\\d[.,]\\d)").find(textContent)
-                    val rating = ratingMatch?.value?.replace(",", ".")?.toFloatOrNull() ?: 0f
                     
-                    val dateMatch = Regex("(\\d{1,2}\\s[а-яА-Я]+\\s\\d{4})").find(textContent)
-                    val date = dateMatch?.value ?: "Неизвестная дата"
+                    val text = p?.text() ?: ""
                     
-                    // Текст отзыва (пытаемся исключить служебные слова)
-                    var text = textContent
+                    val reviewTags = mutableListOf<String>()
+                    val tagsDiv = divs.getOrNull(1)
+                    if (tagsDiv != null) {
+                        tagsDiv.select("span").forEach { span ->
+                            val tagText = span.text().trim()
+                            if (tagText.isNotBlank()) reviewTags.add(tagText)
+                        }
+                    }
                     
-                    reviews.add(
-                        CampusReview(
-                            author = "Студент", // Campus часто не отдает имена
-                            date = date,
-                            rating = rating,
-                            text = text,
-                            tags = emptyList()
+                    if (text.isNotBlank() || reviewTags.isNotEmpty()) {
+                        reviews.add(
+                            CampusReview(
+                                author = author,
+                                date = date,
+                                rating = rating,
+                                text = text,
+                                tags = reviewTags
+                            )
                         )
-                    )
+                    }
+                } catch (e: Exception) {
+                    AppLogger.e("TEACHER_PARSER", "Ошибка парсинга отдельного отзыва: ${e.message}")
                 }
-            } catch (e: Exception) {}
+            }
+
+            AppLogger.d("TEACHER_PARSER", "Успешно распарсено отзывов: ${reviews.size}")
 
             val teacherProfile = CampusTeacher(
                 name = bestMatchName,
-                university = "МГУУ Правительства Москвы",
+                university = university,
                 department = department,
                 rating = aggregateRating,
                 reviewCount = reviewCount,
@@ -205,6 +211,8 @@ class TeacherRepository(private val context: Context) {
     }
 
     private fun normalizeName(name: String): String {
-        return name.replace("\u00A0", " ").trim()
+        return name.replace("\u00A0", " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
     }
 }
