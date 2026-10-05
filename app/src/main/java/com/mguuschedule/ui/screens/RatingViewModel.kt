@@ -103,11 +103,19 @@ class RatingViewModel(
                         }
                         val cachedSubjects: List<SubjectScore> = gson.fromJson(cachedEntity.subjectsJson, subjectsType) ?: emptyList()
 
+                        val pointsMapType = object : TypeToken<Map<String, List<ControlPoint>>>() {}.type
+                        val cachedPointsMap: Map<String, List<ControlPoint>> = runCatching {
+                            gson.fromJson<Map<String, List<ControlPoint>>>(cachedEntity.controlPointsJson, pointsMapType)
+                        }.getOrDefault(emptyMap())
+
                         if (cachedStudent != null || cachedSubjects.isNotEmpty()) {
+                            _subjectControlPoints.value = cachedPointsMap
                             uiState = RatingUiState.Success(
                                 student = cachedStudent,
                                 subjects = cachedSubjects,
-                                studentsList = cachedStudentsList
+                                studentsList = cachedStudentsList,
+                                availableYears = emptyList(), // Can be updated if needed
+                                availableSemesters = emptyList() // Can be updated if needed
                             )
                             AppLogger.d("RATING", "Отображен локальный кэш БРС для ${cachedStudent?.zachetka}")
                         }
@@ -169,6 +177,16 @@ class RatingViewModel(
                 AppLogger.d("RATING", "Запрос рейтинга студента: ${selectedStudent.zachetka} -> ${selectedStudent.detailUrl}")
                 val subjects = ratingRepository.parseStudentSubjects(selectedStudent.detailUrl)
 
+                val previousCache = ratingRepository.getCachedRating(groupId, selectedStudent.zachetka, activeYearId ?: "", activeSemId ?: "")
+                val mergedPointsMap = if (previousCache != null) {
+                    val pointsMapType = object : TypeToken<Map<String, List<ControlPoint>>>() {}.type
+                    runCatching {
+                        gson.fromJson<Map<String, List<ControlPoint>>>(previousCache.controlPointsJson, pointsMapType)
+                    }.getOrDefault(emptyMap())
+                } else emptyMap()
+
+                _subjectControlPoints.value = mergedPointsMap
+
                 // Сохраняем в локальную базу данных Room
                 val cacheEntity = RatingEntity(
                     groupId = groupId,
@@ -178,6 +196,7 @@ class RatingViewModel(
                     studentJson = gson.toJson(selectedStudent),
                     subjectsJson = gson.toJson(subjects),
                     studentsListJson = gson.toJson(students),
+                    controlPointsJson = gson.toJson(mergedPointsMap),
                     updatedAt = System.currentTimeMillis()
                 )
                 ratingRepository.saveCachedRating(cacheEntity)
@@ -218,9 +237,26 @@ class RatingViewModel(
 
         viewModelScope.launch {
             _loadingControlPoints.value = _loadingControlPoints.value + detailUrl
-            val points = ratingRepository.parseControlPoints(detailUrl)
-            _subjectControlPoints.value = _subjectControlPoints.value + (detailUrl to points)
-            _loadingControlPoints.value = _loadingControlPoints.value - detailUrl
+            try {
+                val points = ratingRepository.parseControlPoints(detailUrl)
+                val newMap = _subjectControlPoints.value + (detailUrl to points)
+                _subjectControlPoints.value = newMap
+                
+                val groupId = prefs.getString("selected_group_id", "000000283") ?: "000000283"
+                val zachetka = prefs.getString("selected_zachetka", "") ?: ""
+                val cachedEntity = ratingRepository.getCachedRating(groupId, zachetka, selectedYearId ?: "", selectedSemId ?: "")
+                if (cachedEntity != null) {
+                    val updatedEntity = cachedEntity.copy(
+                        controlPointsJson = gson.toJson(newMap),
+                        updatedAt = System.currentTimeMillis()
+                    )
+                    ratingRepository.saveCachedRating(updatedEntity)
+                }
+            } catch(e: Exception) {
+                AppLogger.e("RATING", "Ошибка загрузки КТ: ${e.message}")
+            } finally {
+                _loadingControlPoints.value = _loadingControlPoints.value - detailUrl
+            }
         }
     }
 }

@@ -77,7 +77,7 @@ fun RatingScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .hazeSource(hazeState),
-            containerColor = MaterialTheme.colorScheme.background
+            containerColor = Color.Transparent
         ) { innerPadding ->
             PhotosStyleRefreshContainer(
                 isRefreshing = isRefreshing,

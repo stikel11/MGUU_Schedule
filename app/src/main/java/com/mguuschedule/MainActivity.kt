@@ -327,6 +327,7 @@ fun MainAppScaffold(profileViewModel: ProfileViewModel, scheduleViewModel: Sched
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
+                        .navigationBarsPadding()
                         .background(
                             Brush.verticalGradient(
                                 colors = listOf(
@@ -336,7 +337,6 @@ fun MainAppScaffold(profileViewModel: ProfileViewModel, scheduleViewModel: Sched
                                 )
                             )
                         )
-                        .navigationBarsPadding()
                         .padding(top = 32.dp, bottom = 16.dp),
                     contentAlignment = Alignment.Center
                 ) {

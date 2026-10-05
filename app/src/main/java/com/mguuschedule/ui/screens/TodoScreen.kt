@@ -73,7 +73,7 @@ fun TodoScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .padding(top = padding.calculateTopPadding())
                 .padding(horizontal = 16.dp)
         ) {
             // New Task Bar
@@ -161,7 +161,7 @@ fun TodoScreen(
                 LazyColumn(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(bottom = 32.dp)
+                    contentPadding = PaddingValues(bottom = padding.calculateBottomPadding() + 32.dp)
                 ) {
                     items(filteredTasks, key = { it.id }) { task ->
                         TodoItemRow(

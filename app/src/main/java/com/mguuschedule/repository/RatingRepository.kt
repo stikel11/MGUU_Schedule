@@ -163,11 +163,7 @@ class RatingRepository(
             )
         }.getOrElse { e ->
             Log.e(TAG, "Ошибка при парсинге рейтинга группы: ${e.message}", e)
-            GroupRatingPage(
-                students = emptyList(),
-                availableYears = emptyList(),
-                availableSemesters = emptyList()
-            )
+            throw e
         }
     }
 
@@ -219,7 +215,7 @@ class RatingRepository(
             subjects.sortedWith(compareBy<SubjectScore> { it.title }.thenBy { it.controlType })
         }.getOrElse { e ->
             Log.e(TAG, "Ошибка при парсинге предметов студента: ${e.message}", e)
-            emptyList()
+            throw e
         }
     }
 

@@ -655,15 +655,14 @@ fun LessonDetailScreen(
                     )
                 )
             },
-            containerColor = MaterialTheme.colorScheme.background
+            containerColor = Color.Transparent
         ) { padding ->
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .consumeWindowInsets(padding)
                     .verticalScroll(rememberScrollState())
-                    .padding(padding)
-                    .padding(horizontal = 20.dp, vertical = 8.dp)
+                    .padding(top = padding.calculateTopPadding() + 8.dp, start = 20.dp, end = 20.dp)
             ) {
             // Lesson Main Card
             Card(
@@ -1137,7 +1136,7 @@ fun LessonDetailScreen(
                 }
             }
             
-            Spacer(modifier = Modifier.height(48.dp))
+            Spacer(modifier = Modifier.height(padding.calculateBottomPadding() + 48.dp))
         }
     }
 

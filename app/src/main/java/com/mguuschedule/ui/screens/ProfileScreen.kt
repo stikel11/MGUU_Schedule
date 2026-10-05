@@ -100,7 +100,7 @@ fun ProfileScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .hazeSource(hazeState),
-            containerColor = MaterialTheme.colorScheme.background,
+            containerColor = Color.Transparent,
             snackbarHost = {
                 SnackbarHost(snackbarHostState) { data ->
                     Snackbar(

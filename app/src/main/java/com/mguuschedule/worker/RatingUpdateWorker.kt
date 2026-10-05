@@ -176,12 +176,15 @@ class RatingUpdateWorker(
                 )
             }
 
+            val activeYearId = ratingPage.availableYears.find { it.isSelected }?.id ?: ""
+            val activeSemId = ratingPage.availableSemesters.find { it.isSelected }?.id ?: ""
+
             // Сохраняем свежий кэш с контрольными точками в базу Room
             val newCache = RatingEntity(
                 groupId = groupId,
                 zachetka = selectedStudent.zachetka,
-                yearId = "",
-                semId = "",
+                yearId = activeYearId,
+                semId = activeSemId,
                 studentJson = gson.toJson(selectedStudent),
                 subjectsJson = gson.toJson(newSubjects),
                 studentsListJson = gson.toJson(students),

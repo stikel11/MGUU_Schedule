@@ -116,8 +116,19 @@ fun NotificationHistoryScreen(
     val hazeState = rememberHazeState()
     var showClearDialog by remember { mutableStateOf(false) }
 
-    val groupedNotifications = remember(notifications) {
-        notifications.groupBy { item ->
+    var selectedFilterIndex by remember { mutableIntStateOf(0) }
+    val filters = listOf("Все", "Напоминания", "Изменения")
+
+    val filteredNotifications = remember(notifications, selectedFilterIndex) {
+        when (selectedFilterIndex) {
+            1 -> notifications.filter { it.type == "REMINDER" }
+            2 -> notifications.filter { it.type == "CHANGE" }
+            else -> notifications
+        }
+    }
+
+    val groupedNotifications = remember(filteredNotifications) {
+        filteredNotifications.groupBy { item ->
             formatNotificationGroupHeader(item.timestamp)
         }
     }
@@ -172,67 +183,93 @@ fun NotificationHistoryScreen(
             },
             containerColor = MaterialTheme.colorScheme.background
         ) { innerPadding ->
-            if (notifications.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 24.dp),
-                        shape = RoundedCornerShape(28.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerLow
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(28.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .consumeWindowInsets(innerPadding),
+                contentPadding = PaddingValues(
+                    top = innerPadding.calculateTopPadding(),
+                    bottom = innerPadding.calculateBottomPadding() + 24.dp,
+                    start = 16.dp,
+                    end = 16.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (notifications.isNotEmpty()) {
+                    item(key = "filter_row") {
+                        SingleChoiceSegmentedButtonRow(
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
                         ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                modifier = Modifier.size(64.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        Icons.Default.NotificationsNone,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(32.dp),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                            filters.forEachIndexed { index, title ->
+                                SegmentedButton(
+                                    selected = selectedFilterIndex == index,
+                                    onClick = { 
+                                        haptic.click()
+                                        selectedFilterIndex = index 
+                                    },
+                                    shape = SegmentedButtonDefaults.itemShape(index = index, count = filters.size)
+                                ) {
+                                    Text(title)
                                 }
                             }
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                text = "История пока пуста",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = "Здесь будут появляться изменения расписания и напоминания о занятиях",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center
-                            )
                         }
                     }
                 }
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .consumeWindowInsets(innerPadding),
-                    contentPadding = PaddingValues(
-                        top = innerPadding.calculateTopPadding(),
-                        bottom = innerPadding.calculateBottomPadding() + 24.dp,
-                        start = 16.dp,
-                        end = 16.dp
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+
+                if (filteredNotifications.isEmpty()) {
+                    item(key = "empty_state") {
+                        val emptyMessage = when (selectedFilterIndex) {
+                            1 -> "Напоминаний пока нет"
+                            2 -> "Изменений пока нет"
+                            else -> "История пока пуста"
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 64.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Surface(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                                shape = RoundedCornerShape(28.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerLow
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(28.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                        modifier = Modifier.size(64.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                Icons.Default.NotificationsNone,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(32.dp),
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Text(
+                                        text = emptyMessage,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "Здесь будут появляться изменения расписания и напоминания о занятиях",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else {
                     groupedNotifications.forEach { (header, items) ->
                         item(key = "header_$header") {
                             Text(
