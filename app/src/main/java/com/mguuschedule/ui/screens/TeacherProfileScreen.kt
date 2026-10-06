@@ -87,12 +87,9 @@ fun TeacherProfileScreen(
             )
         }
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = innerPadding.calculateTopPadding())
+        Box(
+            modifier = Modifier.fillMaxSize()
         ) {
-
             AnimatedContent(
                 targetState = uiState,
                 transitionSpec = {
@@ -104,7 +101,9 @@ fun TeacherProfileScreen(
                 when (state) {
                     is TeacherUiState.Loading -> {
                         Box(
-                            modifier = Modifier.fillMaxSize(),
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(top = innerPadding.calculateTopPadding()),
                             contentAlignment = Alignment.Center
                         ) {
                             ExpressiveLoadingIndicator(
@@ -115,7 +114,9 @@ fun TeacherProfileScreen(
                     }
                     is TeacherUiState.Error -> {
                         Box(
-                            modifier = Modifier.fillMaxSize(),
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(top = innerPadding.calculateTopPadding()),
                             contentAlignment = Alignment.Center
                         ) {
                             Column(
@@ -156,7 +157,9 @@ fun TeacherProfileScreen(
                     }
                     is TeacherUiState.NotFound -> {
                         Box(
-                            modifier = Modifier.fillMaxSize(),
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(top = innerPadding.calculateTopPadding()),
                             contentAlignment = Alignment.Center
                         ) {
                             Column(
@@ -194,7 +197,15 @@ fun TeacherProfileScreen(
                         }
                     }
                     is TeacherUiState.Success -> {
-                        TeacherProfileContent(teacher = state.teacher)
+                        TeacherProfileContent(
+                            teacher = state.teacher,
+                            contentPadding = PaddingValues(
+                                top = innerPadding.calculateTopPadding() + 8.dp,
+                                bottom = innerPadding.calculateBottomPadding() + 32.dp,
+                                start = 16.dp,
+                                end = 16.dp
+                            )
+                        )
                     }
                 }
             }
@@ -203,10 +214,13 @@ fun TeacherProfileScreen(
 }
 
 @Composable
-fun TeacherProfileContent(teacher: CampusTeacher) {
+fun TeacherProfileContent(
+    teacher: CampusTeacher,
+    contentPadding: PaddingValues = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp)
+) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp),
+        contentPadding = contentPadding,
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // Учреждение

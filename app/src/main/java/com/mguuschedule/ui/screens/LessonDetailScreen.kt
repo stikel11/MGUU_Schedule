@@ -6,6 +6,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,6 +18,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -221,6 +223,63 @@ fun InteractiveFloorMap(
                     translationY = offset.y
                 )
         )
+    }
+}
+
+@Composable
+fun FullscreenFloorMapDialog(
+    imageResId: Int,
+    title: String,
+    onDismiss: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        BackHandler(onBack = onDismiss)
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.95f))
+                .systemBarsPadding()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Закрыть",
+                        tint = Color.White
+                    )
+                }
+            }
+
+            InteractiveFloorMap(
+                imageResId = imageResId,
+                contentDescription = title,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 60.dp, bottom = 16.dp, start = 16.dp, end = 16.dp)
+            )
+        }
     }
 }
 
@@ -662,14 +721,16 @@ fun LessonDetailScreen(
                     .fillMaxSize()
                     .consumeWindowInsets(padding)
                     .verticalScroll(rememberScrollState())
-                    .padding(top = padding.calculateTopPadding() + 8.dp, start = 20.dp, end = 20.dp)
+                    .padding(horizontal = 20.dp)
             ) {
-            // Lesson Main Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(28.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-            ) {
+                Spacer(modifier = Modifier.height(padding.calculateTopPadding() + 8.dp))
+
+                // Lesson Main Card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(28.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                ) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -778,8 +839,6 @@ fun LessonDetailScreen(
                     }
                 }
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
 
             // Control Points Section (if linked to this lesson)
             if (linkedControlPoints.isNotEmpty()) {
@@ -1104,34 +1163,78 @@ fun LessonDetailScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Floor Plan Section (In existing block on LessonDetailScreen)
+            // Floor Plan Section
             val floorImageResId = remember(lesson.room) { getFloorImageResId(lesson.room) }
             val floorNumber = remember(lesson.room) {
                 Regex("\\b([1-5])\\d{2}\\b").find(lesson.room)?.groupValues?.get(1) ?: ""
             }
+            var showFloorMapDialog by remember { mutableStateOf(false) }
 
             if (floorImageResId != null) {
+                val titleText = if (floorNumber.isNotBlank()) "Схема $floorNumber этажа" else "Схема этажа"
+
                 Text(
-                    text = if (floorNumber.isNotBlank()) "Схема $floorNumber этажа" else "Схема этажа",
+                    text = titleText,
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.padding(start = 4.dp)
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(280.dp),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
                 ) {
-                    InteractiveFloorMap(
+                    Surface(
+                        onClick = {
+                            haptic.lightTick()
+                            showFloorMapDialog = true
+                        },
+                        shape = RoundedCornerShape(20.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        modifier = Modifier
+                            .widthIn(max = 220.dp)
+                            .wrapContentHeight()
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Image(
+                                painter = painterResource(id = floorImageResId),
+                                contentDescription = titleText,
+                                contentScale = ContentScale.FillWidth,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(8.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                            )
+
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.85f),
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .padding(12.dp)
+                                    .size(32.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.ZoomIn,
+                                        contentDescription = "Увеличить схему",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (showFloorMapDialog) {
+                    FullscreenFloorMapDialog(
                         imageResId = floorImageResId,
-                        contentDescription = "Схема $floorNumber этажа для $roomFormatted",
-                        modifier = Modifier.fillMaxSize()
+                        title = if (roomFormatted.isNotBlank()) "$titleText ($roomFormatted)" else titleText,
+                        onDismiss = { showFloorMapDialog = false }
                     )
                 }
             }

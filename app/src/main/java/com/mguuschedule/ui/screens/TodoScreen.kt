@@ -73,9 +73,10 @@ fun TodoScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = padding.calculateTopPadding())
                 .padding(horizontal = 16.dp)
         ) {
+            Spacer(modifier = Modifier.height(padding.calculateTopPadding()))
+
             // New Task Bar
             Row(
                 modifier = Modifier
