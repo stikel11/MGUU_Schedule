@@ -129,7 +129,14 @@ class ScheduleUpdateWorker(
 
             // Обновляем кэш только после успешного завершения всех операций
             saveToCache(groupId, newLessons)
-            AppLogger.d("WORKER", "Расписание успешно обновлено в кэше")
+            
+            // Синхронизируем базу данных, чтобы интерфейс увидел свежее расписание
+            val db = com.mguuschedule.repository.AppDatabase.getDatabase(applicationContext)
+            db.scheduleDao().replaceAll(newLessons)
+            val nowStr = java.time.LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))
+            prefs.edit().putString("last_sync_time", nowStr).apply()
+            
+            AppLogger.d("WORKER", "Расписание успешно обновлено в кэше и БД")
             Result.success()
         } catch (e: Exception) {
             AppLogger.e("WORKER", "Ошибка в Worker: ${e.message}", e)

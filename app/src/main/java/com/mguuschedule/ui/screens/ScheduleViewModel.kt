@@ -193,7 +193,7 @@ class ScheduleViewModel(
         currentGroupId = groupId
         
         viewModelScope.launch {
-            if (isGroupChanged || forceRefresh) {
+            if (isGroupChanged) {
                 scheduleRepository.clearDatabase()
                 uiState = ScheduleUiState.Loading
             }

@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -52,9 +53,18 @@ data class StorageUiState(
     val statusText: String = "Локальный кэш пуст",
     val lessonsCount: Int = 0,
     val sizeBytes: Long = 0L,
-    val lastUpdated: String = "Данные не загружены",
-    val periodDays: Int = 14
+    val lastUpdated: String = "Данные не загружены"
 )
+
+sealed class UpdateUiState {
+    object Idle : UpdateUiState()
+    object Checking : UpdateUiState()
+    data class UpdateAvailable(val release: com.mguuschedule.util.GitHubRelease) : UpdateUiState()
+    object NoUpdate : UpdateUiState()
+    data class Downloading(val progress: Int) : UpdateUiState()
+    data class Downloaded(val file: java.io.File) : UpdateUiState()
+    data class Error(val message: String) : UpdateUiState()
+}
 
 class ProfileViewModel(
     private val repository: ScheduleRepository,
@@ -76,35 +86,28 @@ class ProfileViewModel(
     var zachetkasUiState: ZachetkasUiState by mutableStateOf(ZachetkasUiState.Loading)
         private set
 
-    private val _periodState = MutableStateFlow(prefs.getInt("cache_days_count", 14))
-
-    val storageState: StateFlow<StorageUiState> = combine(
-        repository.getTotalLessonsCountFlow(),
-        _periodState
-    ) { count, period ->
+    val storageState: StateFlow<StorageUiState> = repository.getTotalLessonsCountFlow().map { count ->
         val lastUpdateText = prefs.getString("last_sync_time", "Данные не загружены") ?: "Данные не загружены"
         
         if (count == 0) {
             StorageUiState(
-                statusText = "Локальный кэш пуст",
+                statusText = "Расписание не загружено",
                 lessonsCount = 0,
                 sizeBytes = 0L,
-                lastUpdated = lastUpdateText,
-                periodDays = period
+                lastUpdated = lastUpdateText
             )
         } else {
             StorageUiState(
                 statusText = "Сохранено: $count пар",
                 lessonsCount = count,
                 sizeBytes = getDatabaseSizeBytes(application),
-                lastUpdated = lastUpdateText,
-                periodDays = period
+                lastUpdated = lastUpdateText
             )
         }
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
-        initialValue = StorageUiState(periodDays = prefs.getInt("cache_days_count", 14))
+        initialValue = StorageUiState()
     )
     
     var selectedGroup by mutableStateOf<Group?>(loadSavedGroup())
@@ -112,6 +115,14 @@ class ProfileViewModel(
 
     var selectedZachetka by mutableStateOf(prefs.getString("selected_zachetka", "") ?: "")
         private set
+
+    var isDeveloperMode by mutableStateOf(prefs.getBoolean("is_developer_mode_enabled", false))
+        private set
+
+    fun enableDeveloperMode() {
+        isDeveloperMode = true
+        prefs.edit().putBoolean("is_developer_mode_enabled", true).apply()
+    }
 
     // Notification Settings
     var remindersEnabled by mutableStateOf(prefs.getBoolean("reminders_enabled", true))
@@ -285,13 +296,51 @@ class ProfileViewModel(
     fun updateCacheDaysCount(days: Int) {
         cacheDaysCount = days
         prefs.edit().putInt("cache_days_count", days).apply()
-        _periodState.value = days
     }
 
     fun clearStorage(scheduleViewModel: ScheduleViewModel) {
         viewModelScope.launch(Dispatchers.IO) {
             repository.clearDatabase()
             scheduleViewModel.clearCache()
+        }
+    }
+
+    var updateState by mutableStateOf<UpdateUiState>(UpdateUiState.Idle)
+        private set
+
+    fun checkForUpdates() {
+        viewModelScope.launch {
+            updateState = UpdateUiState.Checking
+            val result = com.mguuschedule.util.UpdateManager.checkUpdate()
+            result.onSuccess { release ->
+                if (release != null) {
+                    val currentVersion = com.mguuschedule.BuildConfig.VERSION_NAME
+                    if (com.mguuschedule.util.UpdateManager.isNewerVersion(currentVersion, release.versionName)) {
+                        updateState = UpdateUiState.UpdateAvailable(release)
+                    } else {
+                        updateState = UpdateUiState.NoUpdate
+                    }
+                } else {
+                    updateState = UpdateUiState.NoUpdate
+                }
+            }.onFailure { e ->
+                updateState = UpdateUiState.Error(e.localizedMessage ?: "Ошибка проверки обновлений")
+            }
+        }
+    }
+
+    fun downloadAndInstallUpdate(context: Context, downloadUrl: String) {
+        viewModelScope.launch {
+            updateState = UpdateUiState.Downloading(0)
+            val result = com.mguuschedule.util.UpdateManager.downloadAndInstall(context, downloadUrl) { progress ->
+                updateState = UpdateUiState.Downloading(progress)
+            }
+            result.onSuccess { file ->
+                updateState = UpdateUiState.Downloaded(file)
+                com.mguuschedule.util.UpdateManager.installApk(context, file)
+            }.onFailure { e ->
+                updateState = UpdateUiState.Error(e.localizedMessage ?: "Ошибка скачивания файла")
+            }
         }
     }
 

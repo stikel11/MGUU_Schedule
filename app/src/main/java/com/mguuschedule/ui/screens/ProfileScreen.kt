@@ -1,6 +1,8 @@
 package com.mguuschedule.ui.screens
 
 import android.Manifest
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -22,6 +24,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.mguuschedule.model.EducationLevel
@@ -94,6 +97,7 @@ fun ProfileScreen(
     var showZachetkaSheet by remember { mutableStateOf(false) }
     var showCachePeriodSheet by remember { mutableStateOf(false) }
     var showReminderTimeSheet by remember { mutableStateOf(false) }
+    var showClearScheduleDialog by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
@@ -270,56 +274,173 @@ fun ProfileScreen(
                     }
                 }
 
-                // Section 4: Данные и хранилище
+                // Section 4: Данные
                 item {
-                    SettingsContainer(title = "Данные и хранилище") {
+                    SettingsContainer(title = "Данные") {
                         SettingsClickItem(
-                            title = "Период автокэширования",
-                            subtitle = "$cacheDaysCount дней",
-                            icon = Icons.Default.DateRange,
+                            title = "Расписание",
+                            subtitle = if (isForcedLoading) "Обновление расписания..." else "${storageState.statusText} • Обновлено: ${storageState.lastUpdated}",
+                            icon = Icons.Default.Sync,
+                            enabled = !isForcedLoading,
                             onClick = {
-                                haptic.lightTick()
-                                showCachePeriodSheet = true
+                                haptic.click()
+                                scheduleViewModel.refreshSchedule()
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("Запущено обновление расписания")
+                                }
                             }
                         )
 
                         SettingsClickItem(
-                            title = "Очистить локальный кэш",
-                            subtitle = "${storageState.statusText} • ${storageState.lastUpdated}",
+                            title = "Очистить данные расписания",
+                            subtitle = "Удалит только сохраненные пары расписания",
                             icon = Icons.Default.DeleteSweep,
                             enabled = !isForcedLoading && storageState.lessonsCount > 0,
                             titleColor = MaterialTheme.colorScheme.error,
                             iconTint = MaterialTheme.colorScheme.error,
                             onClick = {
                                 haptic.error()
-                                viewModel.clearStorage(scheduleViewModel)
-                                scope.launch {
-                                    snackbarHostState.showSnackbar("Кэш успешно очищен")
+                                showClearScheduleDialog = true
+                            }
+                        )
+                    }
+                }
+
+                // Section 5: Обновления
+                item {
+                    val updateState = viewModel.updateState
+                    val context = LocalContext.current
+
+                    val updateSubtitle = when (updateState) {
+                        is UpdateUiState.Idle -> "Нажмите для проверки наличия обновлений"
+                        is UpdateUiState.Checking -> "Проверка наличия обновлений..."
+                        is UpdateUiState.NoUpdate -> "У вас установлена последняя версия"
+                        is UpdateUiState.UpdateAvailable -> "Доступна версия ${updateState.release.versionName}! Нажмите для скачивания."
+                        is UpdateUiState.Downloading -> "Загрузка: ${updateState.progress}%"
+                        is UpdateUiState.Downloaded -> "Скачано. Нажмите для установки."
+                        is UpdateUiState.Error -> "Ошибка: ${updateState.message} • Нажмите для повтора"
+                    }
+
+                    val updateIcon = when (updateState) {
+                        is UpdateUiState.UpdateAvailable, is UpdateUiState.Downloaded -> Icons.Default.DownloadForOffline
+                        is UpdateUiState.Downloading -> Icons.Default.CloudDownload
+                        is UpdateUiState.Error -> Icons.Default.ErrorOutline
+                        else -> Icons.Default.SystemUpdate
+                    }
+
+                    SettingsContainer(title = "Обновления") {
+                        SettingsClickItem(
+                            title = if (updateState is UpdateUiState.UpdateAvailable) "Скачать обновление" else "Проверить обновления",
+                            subtitle = updateSubtitle,
+                            icon = updateIcon,
+                            enabled = updateState !is UpdateUiState.Checking && updateState !is UpdateUiState.Downloading,
+                            onClick = {
+                                haptic.click()
+                                when (updateState) {
+                                    is UpdateUiState.UpdateAvailable -> {
+                                        viewModel.downloadAndInstallUpdate(context, updateState.release.downloadUrl)
+                                    }
+                                    is UpdateUiState.Downloaded -> {
+                                        com.mguuschedule.util.UpdateManager.installApk(context, updateState.file)
+                                    }
+                                    else -> {
+                                        viewModel.checkForUpdates()
+                                    }
                                 }
                             }
                         )
                     }
                 }
 
-                // Section 5: О приложении & Отладка
+                // Section 6: О приложении
                 item {
+                    val context = LocalContext.current
+                    var versionTapCount by remember { mutableIntStateOf(0) }
+                    var lastVersionTapTime by remember { mutableLongStateOf(0L) }
+
                     SettingsContainer(title = "О приложении") {
                         SettingsClickItem(
                             title = "МГУУ Расписание",
-                            subtitle = "Версия ${com.mguuschedule.BuildConfig.VERSION_NAME} beta • Material 3 Expressive",
+                            subtitle = "Версия ${com.mguuschedule.BuildConfig.VERSION_NAME} beta",
                             icon = Icons.Default.Info,
-                            onClick = {}
+                            onClick = {
+                                val now = System.currentTimeMillis()
+                                if (now - lastVersionTapTime > 2000L) {
+                                    versionTapCount = 1
+                                } else {
+                                    versionTapCount++
+                                }
+                                lastVersionTapTime = now
+
+                                if (versionTapCount >= 5) {
+                                    haptic.success()
+                                    versionTapCount = 0
+                                    if (!viewModel.isDeveloperMode) {
+                                        viewModel.enableDeveloperMode()
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("Режим разработчика включён")
+                                        }
+                                    } else {
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("Режим разработчика уже включён")
+                                        }
+                                    }
+                                } else {
+                                    haptic.lightTick()
+                                }
+                            }
                         )
 
                         SettingsClickItem(
-                            title = "Панель отладки",
-                            subtitle = "Инструменты тестирования и логи",
-                            icon = Icons.Default.BugReport,
+                            title = "GitHub",
+                            subtitle = "Исходный код проекта",
+                            icon = Icons.Default.Code,
                             onClick = {
-                                haptic.lightTick()
-                                onNavigateToDebug()
+                                haptic.click()
+                                runCatching {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/stikel11/MGUU_Schedule"))
+                                    context.startActivity(intent)
+                                }.onFailure {
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar("Не удалось открыть браузер")
+                                    }
+                                }
                             }
                         )
+
+                        SettingsClickItem(
+                            title = "Обратная связь",
+                            subtitle = "Сообщить о проблеме или связаться с разработчиком",
+                            icon = Icons.Default.Feedback,
+                            onClick = {
+                                haptic.click()
+                                runCatching {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/stikel11/MGUU_Schedule/issues"))
+                                    context.startActivity(intent)
+                                }.onFailure {
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar("Не удалось открыть ссылку")
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
+
+                // Section 7: Для разработчиков (показывается только если включен режим разработчика)
+                if (viewModel.isDeveloperMode) {
+                    item {
+                        SettingsContainer(title = "Для разработчиков") {
+                            SettingsClickItem(
+                                title = "Панель отладки",
+                                subtitle = "Инструменты тестирования и логи",
+                                icon = Icons.Default.BugReport,
+                                onClick = {
+                                    haptic.lightTick()
+                                    onNavigateToDebug()
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -349,6 +470,31 @@ fun ProfileScreen(
                     showShareStyleDialog = false
                 },
                 onDismiss = { showShareStyleDialog = false }
+            )
+        }
+
+        if (showClearScheduleDialog) {
+            AlertDialog(
+                onDismissRequest = { showClearScheduleDialog = false },
+                title = { Text("Очистить данные расписания?", fontWeight = FontWeight.Bold) },
+                text = { Text("Это удалит локально сохраненные пары расписания. Ваша группа, зачетка, заметки и настройки затронуты не будут.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        haptic.error()
+                        viewModel.clearStorage(scheduleViewModel)
+                        showClearScheduleDialog = false
+                        scope.launch {
+                            snackbarHostState.showSnackbar("Данные расписания очищены")
+                        }
+                    }) {
+                        Text("Очистить", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showClearScheduleDialog = false }) {
+                        Text("Отмена")
+                    }
+                }
             )
         }
 

@@ -5,44 +5,51 @@ import com.mguuschedule.model.LessonEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao
-interface ScheduleDao {
+abstract class ScheduleDao {
     @Query("SELECT * FROM lessons WHERE date = :date")
-    fun getLessonsForDate(date: String): Flow<List<LessonEntity>>
+    abstract fun getLessonsForDate(date: String): Flow<List<LessonEntity>>
 
     @Query("SELECT * FROM lessons")
-    suspend fun getAllLessons(): List<LessonEntity>
+    abstract suspend fun getAllLessons(): List<LessonEntity>
 
     @Query("SELECT * FROM lessons")
-    fun getAllLessonsFlow(): Flow<List<LessonEntity>>
+    abstract fun getAllLessonsFlow(): Flow<List<LessonEntity>>
 
     @Query("SELECT * FROM lessons WHERE date >= :startDate")
-    suspend fun getUpcomingLessons(startDate: String): List<LessonEntity>
+    abstract suspend fun getUpcomingLessons(startDate: String): List<LessonEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertLessons(lessons: List<LessonEntity>): List<Long>
+    abstract suspend fun insertLessons(lessons: List<LessonEntity>): List<Long>
 
     @Query("DELETE FROM lessons WHERE date BETWEEN :startDate AND :endDate")
-    suspend fun deleteRange(startDate: String, endDate: String): Int
+    abstract suspend fun deleteRange(startDate: String, endDate: String): Int
 
     @Query("DELETE FROM lessons")
-    suspend fun clearSchedule(): Int
+    abstract suspend fun clearSchedule(): Int
 
     @Transaction
-    suspend fun replacePeriod(lessons: List<LessonEntity>, startDate: String, endDate: String): Int {
+    open suspend fun replacePeriod(lessons: List<LessonEntity>, startDate: String, endDate: String): Int {
         deleteRange(startDate, endDate)
         insertLessons(lessons)
         return 0
     }
 
-    @Query("SELECT COUNT(*) FROM lessons")
-    suspend fun getLessonsCount(): Int
+    @Transaction
+    open suspend fun replaceAll(lessons: List<LessonEntity>): Int {
+        clearSchedule()
+        insertLessons(lessons)
+        return 0
+    }
 
     @Query("SELECT COUNT(*) FROM lessons")
-    fun getTotalLessonsCountFlow(): Flow<Int>
+    abstract suspend fun getLessonsCount(): Int
+
+    @Query("SELECT COUNT(*) FROM lessons")
+    abstract fun getTotalLessonsCountFlow(): Flow<Int>
 
     @Query("SELECT MIN(date) FROM lessons")
-    suspend fun getEarliestDate(): String?
+    abstract suspend fun getEarliestDate(): String?
 
     @Query("SELECT MAX(date) FROM lessons")
-    suspend fun getLatestDate(): String?
+    abstract suspend fun getLatestDate(): String?
 }

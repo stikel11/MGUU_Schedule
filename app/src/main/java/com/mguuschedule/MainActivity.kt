@@ -114,22 +114,27 @@ class MainActivity : ComponentActivity() {
                 themeMode = profileViewModel.themeMode,
                 dynamicColor = profileViewModel.dynamicColorEnabled
             ) {
-                AnimatedContent(
-                    targetState = selectedGroup,
-                    transitionSpec = {
-                        fadeIn(animationSpec = AppMotionScheme.defaultEffectsSpec()) togetherWith
-                        fadeOut(animationSpec = AppMotionScheme.defaultEffectsSpec())
-                    },
-                    label = "MainAppTransition"
-                ) { group ->
-                    if (group == null) {
-                        OnboardingScreen(
-                            groupsUiState = profileViewModel.groupsUiState,
-                            onRetry = { profileViewModel.loadGroups() },
-                            onGroupSelected = { profileViewModel.selectGroup(it) }
-                        )
-                    } else {
-                        MainAppScaffold(profileViewModel, scheduleViewModel)
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    AnimatedContent(
+                        targetState = selectedGroup,
+                        transitionSpec = {
+                            fadeIn(animationSpec = AppMotionScheme.defaultEffectsSpec()) togetherWith
+                            fadeOut(animationSpec = AppMotionScheme.defaultEffectsSpec())
+                        },
+                        label = "MainAppTransition"
+                    ) { group ->
+                        if (group == null) {
+                            OnboardingScreen(
+                                groupsUiState = profileViewModel.groupsUiState,
+                                onRetry = { profileViewModel.loadGroups() },
+                                onGroupSelected = { profileViewModel.selectGroup(it) }
+                            )
+                        } else {
+                            MainAppScaffold(profileViewModel, scheduleViewModel)
+                        }
                     }
                 }
             }
@@ -327,7 +332,6 @@ fun MainAppScaffold(profileViewModel: ProfileViewModel, scheduleViewModel: Sched
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .navigationBarsPadding()
                         .background(
                             Brush.verticalGradient(
                                 colors = listOf(
@@ -337,6 +341,7 @@ fun MainAppScaffold(profileViewModel: ProfileViewModel, scheduleViewModel: Sched
                                 )
                             )
                         )
+                        .navigationBarsPadding()
                         .padding(top = 32.dp, bottom = 16.dp),
                     contentAlignment = Alignment.Center
                 ) {

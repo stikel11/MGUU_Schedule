@@ -84,13 +84,12 @@ class ScheduleRepository(private val context: Context, private val database: App
 
         // Сохраняем в базу
         if (lessons.isNotEmpty()) {
-            dao.clearSchedule()
-            dao.insertLessons(lessons)
+            dao.replaceAll(lessons)
 
             val nowStr = LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))
             prefs.edit().putString("last_sync_time", nowStr).apply()
 
-            AppLogger.d("PORTAL_PARSER", "Обновлено расписание в БД (очистка + вставка)")
+            AppLogger.d("PORTAL_PARSER", "Обновлено расписание в БД (очистка + вставка транзакцией)")
         }
         lessons
     }
