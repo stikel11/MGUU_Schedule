@@ -1,1 +1,1 @@
-<?xml version="1.0" encoding="utf-8"?><resources xmlns:tools="http://schemas.android.com/tools" tools:keep="@drawable/floor_*" /> 
+<?xml version="1.0" encoding="utf-8"?><resources xmlns:tools="http://schemas.android.com/tools" tools:keep="@drawable/floor_*,@drawable/v_floor_*" />

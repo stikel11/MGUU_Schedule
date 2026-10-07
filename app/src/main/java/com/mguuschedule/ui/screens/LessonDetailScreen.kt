@@ -150,18 +150,31 @@ class LessonDetailViewModelFactory(
 fun getFloorImageResId(room: String): Int? {
     if (room.isBlank() || room.trim() == "—") return null
     if (room.contains("онлайн", ignoreCase = true) || room.contains("дистант", ignoreCase = true)) return null
+    if (room.contains("спорт", ignoreCase = true)) return null
 
     val regex = Regex("([1-5])\\d{2}")
     val match = regex.find(room) ?: return null
     val floorDigit = match.groupValues[1].toIntOrNull() ?: return null
 
-    return when (floorDigit) {
-        1 -> R.drawable.floor_1
-        2 -> R.drawable.floor_2
-        3 -> R.drawable.floor_3
-        4 -> R.drawable.floor_4
-        5 -> R.drawable.floor_5
-        else -> null
+    val isVoykovskaya = Regex("[1-5]\\d{2}[\\s\\-]*[кКkK]?[\\s\\-]*[ВвBb](?![а-яА-Яa-zA-Z])").containsMatchIn(room)
+
+    return if (isVoykovskaya) {
+        when (floorDigit) {
+            1 -> R.drawable.v_floor_1
+            2 -> R.drawable.v_floor_2
+            3 -> R.drawable.v_floor_3
+            4 -> R.drawable.v_floor_4
+            else -> null
+        }
+    } else {
+        when (floorDigit) {
+            1 -> R.drawable.floor_1
+            2 -> R.drawable.floor_2
+            3 -> R.drawable.floor_3
+            4 -> R.drawable.floor_4
+            5 -> R.drawable.floor_5
+            else -> null
+        }
     }
 }
 
@@ -1166,7 +1179,7 @@ fun LessonDetailScreen(
             // Floor Plan Section
             val floorImageResId = remember(lesson.room) { getFloorImageResId(lesson.room) }
             val floorNumber = remember(lesson.room) {
-                Regex("\\b([1-5])\\d{2}\\b").find(lesson.room)?.groupValues?.get(1) ?: ""
+                Regex("([1-5])\\d{2}").find(lesson.room)?.groupValues?.get(1) ?: ""
             }
             var showFloorMapDialog by remember { mutableStateOf(false) }
 
