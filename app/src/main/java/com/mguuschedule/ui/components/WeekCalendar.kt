@@ -23,7 +23,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.mguuschedule.repository.WeatherData
 import com.mguuschedule.ui.theme.AppMotionScheme
 import com.mguuschedule.util.SemanticHapticFeedback
 import com.mguuschedule.util.rememberHapticFeedback
@@ -39,7 +38,6 @@ import java.util.*
 fun WeekCalendar(
     selectedDate: LocalDate,
     onDateSelected: (LocalDate) -> Unit,
-    weatherData: WeatherData? = null,
     unreadNotificationCount: Int = 0,
     onNotificationHistoryClick: () -> Unit = {},
     onShareDayClick: () -> Unit = {},
@@ -183,10 +181,6 @@ fun WeekCalendar(
                         )
                     }
                 }
-
-                weatherData?.let { data ->
-                    WeatherChip(data = data)
-                }
             }
         }
 
@@ -300,50 +294,6 @@ fun WeekCalendar(
         
         if (!weekMonday.isEqual(currentSelectedMonday)) {
             onDateSelected(weekMonday)
-        }
-    }
-}
-
-@Composable
-fun WeatherChip(data: WeatherData) {
-    val icon = remember(data.weatherCode) {
-        when (data.weatherCode) {
-            0 -> Icons.Default.WbSunny
-            in 1..3 -> Icons.Default.Cloud
-            in 51..67, in 80..82 -> Icons.Default.WaterDrop
-            in 71..77 -> Icons.Default.AcUnit
-            in 95..99 -> Icons.Default.FlashOn
-            else -> Icons.Default.WbCloudy
-        }
-    }
-    
-    val tempText = remember(data.temperature) {
-        val sign = if (data.temperature > 0) "+" else ""
-        "$sign${data.temperature.toInt()}°"
-    }
-
-    Surface(
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        modifier = Modifier.height(40.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = tempText,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
         }
     }
 }

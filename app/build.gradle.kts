@@ -12,8 +12,8 @@ android {
         applicationId = "com.mguuschedule"
         minSdk = 26
         targetSdk = 37
-        versionCode = 34
-        versionName = "0.34"
+        versionCode = 38
+        versionName = "0.38"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

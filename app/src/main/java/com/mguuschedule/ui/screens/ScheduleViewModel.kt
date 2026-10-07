@@ -15,8 +15,6 @@ import com.mguuschedule.model.Lesson
 import com.mguuschedule.model.toLesson
 import com.mguuschedule.repository.AppDatabase
 import com.mguuschedule.repository.ScheduleRepository
-import com.mguuschedule.repository.WeatherData
-import com.mguuschedule.repository.WeatherRepository
 import com.mguuschedule.util.AppLogger
 import com.mguuschedule.util.LiveUpdateManager
 import com.mguuschedule.util.NetworkMonitor
@@ -142,12 +140,7 @@ class ScheduleViewModel(
             initialValue = true
         )
 
-    private val weatherRepository = WeatherRepository(application)
-    var weatherData by mutableStateOf<WeatherData?>(null)
-        private set
-
     init {
-        fetchWeather()
         AppLogger.d("SCHEDULE_TRACE", ">>> ScheduleViewModel инициализирована")
         viewModelScope.launch(Dispatchers.IO) {
             val savedGroupId = appPrefs.getString("selected_group_id", null)
@@ -166,12 +159,6 @@ class ScheduleViewModel(
                     LiveUpdateManager.scheduleLiveUpdatesForDay(getApplication(), lessons)
                 }
             }
-        }
-    }
-
-    private fun fetchWeather() {
-        viewModelScope.launch {
-            weatherData = weatherRepository.getWeatherData()
         }
     }
 

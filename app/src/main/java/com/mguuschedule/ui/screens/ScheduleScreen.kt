@@ -64,7 +64,6 @@ fun ScheduleScreen(
     val uiState = viewModel.uiState
     val isRefreshing = viewModel.isRefreshing
     val isOnline by viewModel.isOnline.collectAsState()
-    val weatherData = viewModel.weatherData
     val activeAddonLessonKeys by viewModel.activeAddonLessonKeys.collectAsState()
     val lessonControlPointsMap by viewModel.lessonControlPointsFlow.collectAsState()
     val haptic = rememberHapticFeedback()
@@ -140,7 +139,6 @@ fun ScheduleScreen(
                         WeekCalendar(
                             selectedDate = selectedDate,
                             onDateSelected = { viewModel.onDateSelected(it) },
-                            weatherData = weatherData,
                             unreadNotificationCount = unreadNotificationCount,
                             onNotificationHistoryClick = onNotificationHistoryClick,
                             onShareDayClick = {

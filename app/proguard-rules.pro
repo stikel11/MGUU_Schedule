@@ -1,6 +1,9 @@
 # Keep model classes for Gson serialization
 -keep class com.mguuschedule.model.** { *; }
 
+# Keep database entities for Room and Gson
+-keep class com.mguuschedule.repository.*Entity { *; }
+
 # Keep GSON annotations
 -keepattributes Signature
 -keepattributes *Annotation*
@@ -14,3 +17,9 @@
 
 # Jsoup
 -keep class org.jsoup.** { *; }
+
+# WorkManager
+-keep class androidx.work.impl.WorkDatabase_Impl { *; }
+
+# Room
+-keep class com.mguuschedule.repository.AppDatabase_Impl { *; }
