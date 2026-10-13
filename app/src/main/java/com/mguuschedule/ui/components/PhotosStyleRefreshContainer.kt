@@ -20,8 +20,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -55,15 +55,17 @@ fun PhotosStyleRefreshContainer(
     val scope = rememberCoroutineScope()
 
     val statusBarTopPx = WindowInsets.statusBars.getTop(density).toFloat()
-    val triggerPx = with(density) { 108.dp.toPx() }
+    val triggerPx = with(density) { 104.dp.toPx() }
     val maxPullPx = with(density) { 180.dp.toPx() }
-    val activeHoldPx = with(density) { 96.dp.toPx() } + statusBarTopPx
+    val activeHoldPx = with(density) { 92.dp.toPx() } + statusBarTopPx
 
     val offsetAnim = remember { Animatable(0f) }
     var phase by remember { mutableStateOf(RefreshStatePhase.Idle) }
     var wasRefreshing by remember { mutableStateOf(false) }
 
-    // Реакция на изменение isRefreshing из ViewModel
+    val currentPhase by rememberUpdatedState(phase)
+    val currentOnRefresh by rememberUpdatedState(onRefresh)
+
     LaunchedEffect(isRefreshing) {
         if (isRefreshing) {
             wasRefreshing = true
@@ -74,7 +76,6 @@ fun PhotosStyleRefreshContainer(
             )
         } else if (wasRefreshing) {
             wasRefreshing = false
-            // Удерживаем выезжающий блок открытым и показываем статус "Обновлено"
             phase = RefreshStatePhase.Done
             offsetAnim.animateTo(
                 targetValue = activeHoldPx,
@@ -89,10 +90,11 @@ fun PhotosStyleRefreshContainer(
         }
     }
 
-    val nestedScrollConnection = remember(isRefreshing, phase) {
+    // ВАЖНО: remember БЕЗ ключей phase/isRefreshing, чтобы жест никогда не прерывался во время свайпа!
+    val nestedScrollConnection = remember {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                if (source == NestedScrollSource.UserInput && available.y < 0f && offsetAnim.value > 0f && phase == RefreshStatePhase.Pulling) {
+                if (source == NestedScrollSource.UserInput && available.y < 0f && offsetAnim.value > 0f && currentPhase == RefreshStatePhase.Pulling) {
                     val consumed = available.y.coerceAtLeast(-offsetAnim.value)
                     scope.launch { offsetAnim.snapTo(offsetAnim.value + consumed) }
                     return Offset(0f, consumed)
@@ -101,9 +103,13 @@ fun PhotosStyleRefreshContainer(
             }
 
             override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
-                if (source == NestedScrollSource.UserInput && available.y > 0f && phase != RefreshStatePhase.Refreshing && phase != RefreshStatePhase.Done) {
-                    phase = RefreshStatePhase.Pulling
-                    val damping = (1f - (offsetAnim.value / (maxPullPx * 1.6f))).coerceIn(0.18f, 0.55f)
+                if (source == NestedScrollSource.UserInput && available.y > 0f &&
+                    currentPhase != RefreshStatePhase.Refreshing && currentPhase != RefreshStatePhase.Done
+                ) {
+                    if (currentPhase != RefreshStatePhase.Pulling) {
+                        phase = RefreshStatePhase.Pulling
+                    }
+                    val damping = (1f - (offsetAnim.value / (maxPullPx * 1.6f))).coerceIn(0.20f, 0.55f)
                     val newOffset = (offsetAnim.value + available.y * damping).coerceAtMost(maxPullPx + statusBarTopPx)
                     scope.launch { offsetAnim.snapTo(newOffset) }
                     return Offset(0f, available.y)
@@ -112,9 +118,8 @@ fun PhotosStyleRefreshContainer(
             }
 
             override suspend fun onPreFling(available: Velocity): Velocity {
-                if (phase == RefreshStatePhase.Pulling) {
-                    if (offsetAnim.value >= triggerPx + statusBarTopPx * 0.5f) {
-                        // Запускаем обновление и сразу фиксируем открытый блок, чтобы он не схлопнулся
+                if (currentPhase == RefreshStatePhase.Pulling) {
+                    if (offsetAnim.value >= triggerPx) {
                         wasRefreshing = true
                         phase = RefreshStatePhase.Refreshing
                         scope.launch {
@@ -123,7 +128,7 @@ fun PhotosStyleRefreshContainer(
                                 animationSpec = spring(dampingRatio = 0.85f, stiffness = 240f)
                             )
                         }
-                        onRefresh()
+                        currentOnRefresh()
                     } else {
                         scope.launch {
                             offsetAnim.animateTo(
@@ -133,7 +138,7 @@ fun PhotosStyleRefreshContainer(
                             phase = RefreshStatePhase.Idle
                         }
                     }
-                    return available
+                    return Velocity(0f, available.y * 0.5f)
                 }
                 return Velocity.Zero
             }
@@ -141,19 +146,19 @@ fun PhotosStyleRefreshContainer(
     }
 
     val currentOffset = offsetAnim.value
-    val pullProgress = (currentOffset / (triggerPx + statusBarTopPx)).coerceIn(0f, 1f)
+    val pullProgress = (currentOffset / triggerPx).coerceIn(0f, 1f)
     val contentTopCornerRadius = (28.dp * pullProgress).coerceIn(0.dp, 28.dp)
 
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(
-                if (currentOffset > 1f) MaterialTheme.colorScheme.surfaceContainerHigh
+                if (currentOffset > 2f) MaterialTheme.colorScheme.surfaceContainerHigh
                 else MaterialTheme.colorScheme.background
             )
             .nestedScroll(nestedScrollConnection)
     ) {
-        // 1. Утопленная область индикатора сверху (под оттягиваемым листом контента)
+        // 1. Ниша под статус-баром с экспрессивным полигоном и капсулой статуса
         if (currentOffset > 2f) {
             val blockHeightDp = with(density) { currentOffset.toDp() }
             Box(
@@ -205,17 +210,18 @@ fun PhotosStyleRefreshContainer(
             }
         }
 
-        // 2. Основной экран (лист контента), который при оттягивании вниз получает скругленные ВЕРХНИЕ углы (/‾\)
-        Surface(
+        // 2. Сдвигающийся вниз основной экран со скругленными верхними углами (/‾\)
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .offset { IntOffset(0, currentOffset.roundToInt()) },
-            shape = RoundedCornerShape(
-                topStart = contentTopCornerRadius,
-                topEnd = contentTopCornerRadius
-            ),
-            color = MaterialTheme.colorScheme.background,
-            shadowElevation = if (currentOffset > 4f) 6.dp else 0.dp
+                .offset { IntOffset(0, currentOffset.roundToInt()) }
+                .clip(
+                    RoundedCornerShape(
+                        topStart = contentTopCornerRadius,
+                        topEnd = contentTopCornerRadius
+                    )
+                )
+                .background(MaterialTheme.colorScheme.background)
         ) {
             content()
         }
@@ -227,27 +233,11 @@ private fun GoogleExpressivePolygonIndicator(
     pullProgress: Float,
     isSpinning: Boolean
 ) {
-    // Официальные полигоны Google Material 3 через androidx.graphics.shapes
     val shapes = remember {
         listOf(
-            // 1. Пятиугольник (как в Google Photos)
-            RoundedPolygon(
-                numVertices = 5,
-                rounding = CornerRounding(radius = 0.32f)
-            ),
-            // 2. Мягкая 8-лучевая звезда (Sunny)
-            RoundedPolygon.star(
-                numVerticesPerRadius = 8,
-                innerRadius = 0.72f,
-                rounding = CornerRounding(radius = 0.28f)
-            ),
-            // 3. Четырехлистник (Cookie / Clover)
-            RoundedPolygon.star(
-                numVerticesPerRadius = 4,
-                innerRadius = 0.62f,
-                rounding = CornerRounding(radius = 0.38f)
-            ),
-            // 4. Мягкий многогранник
+            RoundedPolygon(numVertices = 5, rounding = CornerRounding(radius = 0.32f)),
+            RoundedPolygon.star(numVerticesPerRadius = 8, innerRadius = 0.72f, rounding = CornerRounding(radius = 0.28f)),
+            RoundedPolygon.star(numVerticesPerRadius = 4, innerRadius = 0.62f, rounding = CornerRounding(radius = 0.38f)),
             RoundedPolygon.circle(numVertices = 6)
         )
     }
@@ -263,7 +253,7 @@ private fun GoogleExpressivePolygonIndicator(
         initialValue = 0f,
         targetValue = morphs.size.toFloat(),
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2600, easing = LinearEasing),
+            animation = tween(durationMillis = 2400, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "morph_phase"
@@ -272,7 +262,7 @@ private fun GoogleExpressivePolygonIndicator(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 3200, easing = LinearEasing),
+            animation = tween(durationMillis = 3000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "rotation_phase"
@@ -285,12 +275,11 @@ private fun GoogleExpressivePolygonIndicator(
     val androidPath = remember { android.graphics.Path() }
     val matrix = remember { android.graphics.Matrix() }
     val color = MaterialTheme.colorScheme.primary
-
-    val scale = (0.4f + 0.6f * pullProgress).coerceIn(0f, 1f)
+    val scale = (0.35f + 0.65f * pullProgress).coerceIn(0f, 1f)
 
     Canvas(
         modifier = Modifier
-            .size(42.dp)
+            .size(44.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale

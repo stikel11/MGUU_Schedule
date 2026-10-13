@@ -18,6 +18,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -27,6 +28,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
@@ -193,173 +195,172 @@ fun MainAppScaffold(
             startDestination = Screen.Schedule.route,
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.surfaceContainerLowest),
-            // 1. Прямой переход вперед (или переключение табов по клику на нижнее меню)
+                .background(Color.Black),
             enterTransition = {
-                if (initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes) {
-                    // При клике на таб: новый экран появляется после того, как старый почти исчез (без наложения текстов!)
-                    fadeIn(animationSpec = tween(durationMillis = 160, delayMillis = 60, easing = LinearOutSlowInEasing)) +
-                        scaleIn(initialScale = 0.98f, animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing))
+                val isTabSwitch = initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes
+                if (isTabSwitch) {
+                    fadeIn(animationSpec = tween(durationMillis = 150, delayMillis = 90, easing = LinearOutSlowInEasing)) +
+                        scaleIn(initialScale = 0.98f, animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing))
                 } else {
                     slideIntoContainer(
                         towards = AnimatedContentTransitionScope.SlideDirection.Start,
-                        initialOffset = { fullWidth -> (fullWidth * 0.25f).toInt() },
-                        animationSpec = tween(durationMillis = 320, easing = PredictiveBackEasing)
-                    ) + fadeIn(animationSpec = tween(durationMillis = 120, easing = LinearEasing)) +
-                        scaleIn(initialScale = 0.95f, animationSpec = tween(durationMillis = 320, easing = PredictiveBackEasing))
+                        initialOffset = { fullWidth -> (fullWidth * 0.14f).toInt() },
+                        animationSpec = tween(durationMillis = 300, easing = PredictiveBackEasing)
+                    ) + fadeIn(animationSpec = tween(durationMillis = 110, easing = LinearEasing)) +
+                        scaleIn(initialScale = 0.94f, animationSpec = tween(durationMillis = 300, easing = PredictiveBackEasing))
                 }
             },
             exitTransition = {
-                if (initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes) {
-                    // При клике на таб: старый экран быстро гаснет первым
+                val isTabSwitch = initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes
+                if (isTabSwitch) {
                     fadeOut(animationSpec = tween(durationMillis = 90, easing = FastOutLinearInEasing))
                 } else {
                     scaleOut(
-                        targetScale = 0.92f,
-                        animationSpec = tween(durationMillis = 320, easing = PredictiveBackEasing)
-                    ) + slideOutOfContainer(
-                        towards = AnimatedContentTransitionScope.SlideDirection.Start,
-                        targetOffset = { fullWidth -> (fullWidth * 0.12f).toInt() },
-                        animationSpec = tween(durationMillis = 320, easing = PredictiveBackEasing)
+                        targetScale = 0.95f,
+                        animationSpec = tween(durationMillis = 300, easing = PredictiveBackEasing)
+                    ) + fadeOut(
+                        targetAlpha = 0.55f,
+                        animationSpec = tween(durationMillis = 300, easing = LinearEasing)
                     )
                 }
             },
-            // 2. ЕДИНЫЙ ЭТАЛОННЫЙ PREDICTIVE BACK ДЛЯ ВСЕХ ЭКРАНОВ (включая возврат с Рейтинга/Настроек и из Деталей пары)
             popEnterTransition = {
-                scaleIn(
-                    initialScale = 0.92f,
-                    animationSpec = tween(durationMillis = 340, easing = PredictiveBackEasing)
-                ) + slideIntoContainer(
-                    towards = AnimatedContentTransitionScope.SlideDirection.End,
-                    initialOffset = { fullWidth -> (fullWidth * 0.15f).toInt() },
-                    animationSpec = tween(durationMillis = 340, easing = PredictiveBackEasing)
-                )
+                val isTabSwitch = initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes
+                if (isTabSwitch) {
+                    fadeIn(animationSpec = tween(durationMillis = 110, delayMillis = 230, easing = LinearOutSlowInEasing)) +
+                        scaleIn(initialScale = 0.98f, animationSpec = tween(durationMillis = 340, easing = PredictiveBackEasing))
+                } else {
+                    scaleIn(
+                        initialScale = 0.95f,
+                        animationSpec = tween(durationMillis = 340, easing = PredictiveBackEasing)
+                    ) + fadeIn(
+                        initialAlpha = 0.55f,
+                        animationSpec = tween(durationMillis = 340, easing = LinearEasing)
+                    )
+                }
             },
             popExitTransition = {
-                // Во время свайпа пальцем (0..230ms) экран 100% непрозрачен, уменьшается до 0.86f и сдвигается за пальцем.
-                // И только после отпускания пальца (последние 110ms) плавно гаснет!
-                scaleOut(
-                    targetScale = 0.86f,
-                    animationSpec = tween(durationMillis = 340, easing = PredictiveBackEasing)
-                ) + slideOutOfContainer(
-                    towards = AnimatedContentTransitionScope.SlideDirection.End,
-                    targetOffset = { fullWidth -> (fullWidth * 0.28f).toInt() },
-                    animationSpec = tween(durationMillis = 340, easing = PredictiveBackEasing)
-                ) + fadeOut(
-                    animationSpec = tween(durationMillis = 110, delayMillis = 230, easing = LinearEasing)
-                )
+                val isTabSwitch = initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes
+                if (isTabSwitch) {
+                    scaleOut(
+                        targetScale = 0.97f,
+                        animationSpec = tween(durationMillis = 340, easing = PredictiveBackEasing)
+                    ) + fadeOut(
+                        animationSpec = tween(durationMillis = 100, delayMillis = 230, easing = LinearEasing)
+                    )
+                } else {
+                    scaleOut(
+                        targetScale = 0.88f,
+                        animationSpec = tween(durationMillis = 340, easing = PredictiveBackEasing)
+                    ) + slideOutOfContainer(
+                        towards = AnimatedContentTransitionScope.SlideDirection.End,
+                        targetOffset = { fullWidth -> (fullWidth * 0.04f).toInt() },
+                        animationSpec = tween(durationMillis = 340, easing = PredictiveBackEasing)
+                    ) + fadeOut(
+                        animationSpec = tween(durationMillis = 100, delayMillis = 240, easing = LinearEasing)
+                    )
+                }
             }
         ) {
                 composable(Screen.Schedule.route) {
-                    ScheduleScreen(
-                        viewModel = scheduleViewModel,
-                        unreadNotificationCount = unreadCount,
-                        onNotificationHistoryClick = { navController.navigate("notification_history") },
-                        onLessonClick = { lesson -> 
-                            haptic.click()
-                            navController.navigate("lesson/${lesson.id}") 
-                        }
-                    )
+                    ExpressiveScreenContainer(isDetailScreen = false) {
+                        ScheduleScreen(
+                            viewModel = scheduleViewModel,
+                            unreadNotificationCount = unreadCount,
+                            onNotificationHistoryClick = { navController.navigate("notification_history") },
+                            onLessonClick = { lesson -> 
+                                haptic.click()
+                                navController.navigate("lesson/${lesson.id}") 
+                            }
+                        )
+                    }
                 }
                 composable(Screen.Rating.route) {
-                    RatingScreen(viewModel = ratingViewModel)
+                    ExpressiveScreenContainer(isDetailScreen = false) {
+                        RatingScreen(viewModel = ratingViewModel)
+                    }
                 }
                 composable("notification_history") {
-                    NotificationHistoryScreen(
-                        onBack = { navController.popBackStack() }
-                    )
+                    ExpressiveScreenContainer(isDetailScreen = true) {
+                        NotificationHistoryScreen(
+                            onBack = { navController.popBackStack() }
+                        )
+                    }
                 }
                 composable(Screen.Settings.route) {
-                    ProfileScreen(
-                        viewModel = profileViewModel,
-                        scheduleViewModel = scheduleViewModel,
-                        onNavigateToDebug = { navController.navigate(Screen.Debug.route) }
-                    )
+                    ExpressiveScreenContainer(isDetailScreen = false) {
+                        ProfileScreen(
+                            viewModel = profileViewModel,
+                            scheduleViewModel = scheduleViewModel,
+                            onNavigateToDebug = { navController.navigate(Screen.Debug.route) }
+                        )
+                    }
                 }
                 composable(Screen.Debug.route) {
-                    DebugScreen(
-                        viewModel = profileViewModel,
-                        onBack = { navController.popBackStack() }
-                    )
+                    ExpressiveScreenContainer(isDetailScreen = true) {
+                        DebugScreen(
+                            viewModel = profileViewModel,
+                            onBack = { navController.popBackStack() }
+                        )
+                    }
                 }
                 composable(
                     route = Screen.LessonDetail.route,
                     arguments = listOf(navArgument("lessonId") { type = NavType.StringType })
                 ) { backStackEntry ->
-                    val lessonId = backStackEntry.arguments?.getString("lessonId")
-                    val lesson = lessonId?.let { scheduleViewModel.getLessonById(it) }
-                    LessonDetailScreen(
-                        lesson = lesson, 
-                        onBack = { navController.popBackStack() },
-                        onTeacherClick = { teacherName ->
-                            val encodedName = URLEncoder.encode(teacherName, "UTF-8")
-                            navController.navigate("teacher/$encodedName")
-                        }
-                    )
+                    ExpressiveScreenContainer(isDetailScreen = true) {
+                        val lessonId = backStackEntry.arguments?.getString("lessonId")
+                        val lesson = lessonId?.let { scheduleViewModel.getLessonById(it) }
+                        LessonDetailScreen(
+                            lesson = lesson, 
+                            onBack = { navController.popBackStack() },
+                            onTeacherClick = { teacherName ->
+                                val encodedName = URLEncoder.encode(teacherName, "UTF-8")
+                                navController.navigate("teacher/$encodedName")
+                            }
+                        )
+                    }
                 }
 
                 composable(
                     route = Screen.TeacherProfile.route,
                     arguments = listOf(navArgument("teacherName") { type = NavType.StringType })
                 ) { backStackEntry ->
-                    val teacherName = backStackEntry.arguments?.getString("teacherName")?.let {
-                        URLDecoder.decode(it, "UTF-8")
-                    } ?: "Неизвестный преподаватель"
-                    
-                    TeacherProfileScreen(
-                        teacherName = teacherName,
-                        onBack = { navController.popBackStack() }
-                    )
+                    ExpressiveScreenContainer(isDetailScreen = true) {
+                        val teacherName = backStackEntry.arguments?.getString("teacherName")?.let {
+                            URLDecoder.decode(it, "UTF-8")
+                        } ?: "Неизвестный преподаватель"
+                        
+                        TeacherProfileScreen(
+                            teacherName = teacherName,
+                            onBack = { navController.popBackStack() }
+                        )
+                    }
                 }
 
                 composable(Screen.Todo.route) {
-                    TodoScreen(
-                        scheduleViewModel = scheduleViewModel,
-                        onBack = { navController.popBackStack() }
-                    )
+                    ExpressiveScreenContainer(isDetailScreen = true) {
+                        TodoScreen(
+                            scheduleViewModel = scheduleViewModel,
+                            onBack = { navController.popBackStack() }
+                        )
+                    }
                 }
 
-                composable(
-                    route = Screen.Search.route,
-                    enterTransition = {
-                        scaleIn(
-                            initialScale = 0.1f,
-                            transformOrigin = TransformOrigin(pivotFractionX = 0.88f, pivotFractionY = 0.95f),
-                            animationSpec = AppMotionScheme.defaultSpatialSpec()
-                        ) + fadeIn(animationSpec = AppMotionScheme.fastEffectsSpec())
-                    },
-                    exitTransition = {
-                        scaleOut(
-                            targetScale = 0.1f,
-                            transformOrigin = TransformOrigin(pivotFractionX = 0.88f, pivotFractionY = 0.95f),
-                            animationSpec = AppMotionScheme.defaultSpatialSpec()
-                        ) + fadeOut(animationSpec = AppMotionScheme.fastEffectsSpec())
-                    },
-                    popEnterTransition = {
-                        scaleIn(
-                            initialScale = 0.92f,
-                            animationSpec = AppMotionScheme.fastSpatialSpec()
-                        ) + fadeIn(animationSpec = AppMotionScheme.fastEffectsSpec())
-                    },
-                    popExitTransition = {
-                        scaleOut(
-                            targetScale = 0.1f,
-                            transformOrigin = TransformOrigin(pivotFractionX = 0.88f, pivotFractionY = 0.95f),
-                            animationSpec = AppMotionScheme.defaultSpatialSpec()
-                        ) + fadeOut(animationSpec = AppMotionScheme.fastEffectsSpec())
+                composable(Screen.Search.route) {
+                    ExpressiveScreenContainer(isDetailScreen = true) {
+                        SearchOverlay(
+                            onDismiss = { navController.popBackStack() },
+                            allLessons = scheduleViewModel.lessons,
+                            onLessonClick = { lesson ->
+                                navController.navigate("lesson/${lesson.id}")
+                            },
+                            onTeacherClick = { teacherName ->
+                                val encodedName = URLEncoder.encode(teacherName, "UTF-8")
+                                navController.navigate("teacher/$encodedName")
+                            }
+                        )
                     }
-                ) {
-                    SearchOverlay(
-                        onDismiss = { navController.popBackStack() },
-                        allLessons = scheduleViewModel.lessons,
-                        onLessonClick = { lesson ->
-                            navController.navigate("lesson/${lesson.id}")
-                        },
-                        onTeacherClick = { teacherName ->
-                            val encodedName = URLEncoder.encode(teacherName, "UTF-8")
-                            navController.navigate("teacher/$encodedName")
-                        }
-                    )
                 }
             }
 
@@ -456,3 +457,24 @@ fun MainAppScaffold(
             }
         }
     }
+
+@Composable
+private fun AnimatedVisibilityScope.ExpressiveScreenContainer(
+    isDetailScreen: Boolean = true,
+    content: @Composable () -> Unit
+) {
+    val isTransitioning = transition.isRunning || transition.currentState != transition.targetState
+    val cornerRadius by animateDpAsState(
+        targetValue = if (isDetailScreen && isTransitioning) 28.dp else 0.dp,
+        animationSpec = tween(durationMillis = 120),
+        label = "predictive_corner_radius"
+    )
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        shape = RoundedCornerShape(cornerRadius),
+        color = MaterialTheme.colorScheme.background,
+        shadowElevation = if (isDetailScreen && isTransitioning) 12.dp else 0.dp
+    ) {
+        content()
+    }
+}
