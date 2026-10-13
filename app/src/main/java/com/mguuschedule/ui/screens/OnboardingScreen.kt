@@ -1,10 +1,5 @@
 package com.mguuschedule.ui.screens
 
-import android.Manifest
-import android.content.pm.PackageManager
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
@@ -35,34 +30,8 @@ fun OnboardingScreen(
     onRetry: () -> Unit,
     onGroupSelected: (Group) -> Unit
 ) {
-    val context = LocalContext.current
-    var pendingGroupSelection by remember { mutableStateOf<Group?>(null) }
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { _ ->
-        pendingGroupSelection?.let { group ->
-            onGroupSelected(group)
-        }
-        pendingGroupSelection = null
-    }
-
     val handleGroupSelection = { group: Group ->
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val hasPermission = ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.POST_NOTIFICATIONS
-            ) == PackageManager.PERMISSION_GRANTED
-
-            if (!hasPermission) {
-                pendingGroupSelection = group
-                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            } else {
-                onGroupSelected(group)
-            }
-        } else {
-            onGroupSelected(group)
-        }
+        onGroupSelected(group)
     }
 
     var searchQuery by remember { mutableStateOf("") }

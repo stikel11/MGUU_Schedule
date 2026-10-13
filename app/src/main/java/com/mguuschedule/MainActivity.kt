@@ -32,6 +32,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,6 +48,9 @@ import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
+import com.mguuschedule.model.Group
+import com.mguuschedule.ui.screens.FeatureTourScreen
+import com.mguuschedule.ui.screens.OnboardingScreen
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
@@ -66,6 +70,8 @@ import com.mguuschedule.util.rememberHapticFeedback
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.time.LocalDate
+
+private data class MainScreenState(val group: Group?, val isFeatureTourCompleted: Boolean)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -119,6 +125,15 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            val prefs = remember { applicationContext.getSharedPreferences("mguu_prefs", android.content.Context.MODE_PRIVATE) }
+            var isFeatureTourCompleted by remember {
+                mutableStateOf(prefs.getBoolean("feature_tour_completed", false))
+            }
+
+            val appState = remember(selectedGroup, isFeatureTourCompleted) {
+                MainScreenState(selectedGroup, isFeatureTourCompleted)
+            }
+
             MGUUScheduleTheme(
                 themeMode = profileViewModel.themeMode,
                 dynamicColor = profileViewModel.dynamicColorEnabled
@@ -128,18 +143,25 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     AnimatedContent(
-                        targetState = selectedGroup,
+                        targetState = appState,
                         transitionSpec = {
                             fadeIn(animationSpec = AppMotionScheme.defaultEffectsSpec()) togetherWith
                             fadeOut(animationSpec = AppMotionScheme.defaultEffectsSpec())
                         },
                         label = "MainAppTransition"
-                    ) { group ->
-                        if (group == null) {
+                    ) { currentState: MainScreenState ->
+                        if (currentState.group == null) {
                             OnboardingScreen(
                                 groupsUiState = profileViewModel.groupsUiState,
                                 onRetry = { profileViewModel.loadGroups() },
                                 onGroupSelected = { profileViewModel.selectGroup(it) }
+                            )
+                        } else if (!currentState.isFeatureTourCompleted) {
+                            FeatureTourScreen(
+                                onFinish = {
+                                    prefs.edit().putBoolean("feature_tour_completed", true).apply()
+                                    isFeatureTourCompleted = true
+                                }
                             )
                         } else {
                             val ratingViewModel: RatingViewModel = viewModel(
@@ -285,7 +307,15 @@ fun MainAppScaffold(
                         ProfileScreen(
                             viewModel = profileViewModel,
                             scheduleViewModel = scheduleViewModel,
-                            onNavigateToDebug = { navController.navigate(Screen.Debug.route) }
+                            onNavigateToDebug = { navController.navigate(Screen.Debug.route) },
+                            onOpenFeatureTour = { navController.navigate("feature_tour") }
+                        )
+                    }
+                }
+                composable("feature_tour") {
+                    ExpressiveScreenContainer(isDetailScreen = true) {
+                        FeatureTourScreen(
+                            onFinish = { navController.popBackStack() }
                         )
                     }
                 }
@@ -452,21 +482,14 @@ fun MainAppScaffold(
     }
 
 @Composable
-private fun AnimatedVisibilityScope.ExpressiveScreenContainer(
+private fun ExpressiveScreenContainer(
     isDetailScreen: Boolean = true,
     content: @Composable () -> Unit
 ) {
-    val isTransitioning = transition.isRunning || transition.currentState != transition.targetState
-    val cornerRadius by animateDpAsState(
-        targetValue = if (isDetailScreen && isTransitioning) 28.dp else 0.dp,
-        animationSpec = tween(durationMillis = 120),
-        label = "predictive_corner_radius"
-    )
     Surface(
         modifier = Modifier.fillMaxSize(),
-        shape = RoundedCornerShape(cornerRadius),
-        color = MaterialTheme.colorScheme.background,
-        shadowElevation = if (isDetailScreen && isTransitioning) 12.dp else 0.dp
+        shape = if (isDetailScreen) RoundedCornerShape(28.dp) else RoundedCornerShape(0.dp),
+        color = MaterialTheme.colorScheme.background
     ) {
         content()
     }

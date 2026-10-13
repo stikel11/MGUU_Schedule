@@ -46,7 +46,8 @@ import kotlinx.coroutines.launch
 fun ProfileScreen(
     viewModel: ProfileViewModel,
     scheduleViewModel: ScheduleViewModel,
-    onNavigateToDebug: () -> Unit
+    onNavigateToDebug: () -> Unit = {},
+    onOpenFeatureTour: () -> Unit = {}
 ) {
     val groupsUiState = viewModel.groupsUiState
     val zachetkasUiState = viewModel.zachetkasUiState
@@ -271,6 +272,16 @@ fun ProfileScreen(
                                 }
                             )
                         }
+
+                        SettingsClickItem(
+                            title = "Возможности приложения",
+                            subtitle = "Показать интерактивное мини-обучение",
+                            icon = Icons.Default.AutoAwesome,
+                            onClick = {
+                                haptic.lightTick()
+                                onOpenFeatureTour()
+                            }
+                        )
                     }
                 }
 
