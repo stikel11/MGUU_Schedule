@@ -110,6 +110,8 @@ class RatingViewModel(
 
                         if (cachedStudent != null || cachedSubjects.isNotEmpty()) {
                             _subjectControlPoints.value = cachedPointsMap
+                            selectedYearId = cachedEntity.yearId.ifBlank { null }
+                            selectedSemId = cachedEntity.semId.ifBlank { null }
                             uiState = RatingUiState.Success(
                                 student = cachedStudent,
                                 subjects = cachedSubjects,
@@ -155,6 +157,65 @@ class RatingViewModel(
                 }
 
                 if (students.isEmpty()) {
+                    if (forceRefresh && previousSuccess?.student != null && yearId == selectedYearId && semId == selectedSemId) {
+                        isRefreshing = false
+                        return@launch
+                    }
+                    if (forceRefresh && (yearId != null || semId != null)) {
+                        // Fallback: try without parameters
+                        val fallbackUrl = ratingRepository.buildGroupUrl(groupId, groupName, null, null)
+                        val fallbackPage = ratingRepository.parseGroupList(fallbackUrl)
+                        if (fallbackPage.students.isNotEmpty()) {
+                            val activeFallbackYearId = fallbackPage.availableYears.find { it.isSelected }?.id
+                            val activeFallbackSemId = fallbackPage.availableSemesters.find { it.isSelected }?.id
+                            selectedYearId = activeFallbackYearId
+                            selectedSemId = activeFallbackSemId
+                            
+                            val fallbackSelectedStudent = if (savedZachetka.isNotBlank()) {
+                                fallbackPage.students.find { it.zachetka.equals(savedZachetka, ignoreCase = true) } ?: fallbackPage.students.first()
+                            } else {
+                                fallbackPage.students.first()
+                            }
+                            
+                            prefs.edit().putString("selected_zachetka", fallbackSelectedStudent.zachetka).apply()
+                            
+                            val fallbackSubjects = ratingRepository.parseStudentSubjects(fallbackSelectedStudent.detailUrl)
+                            val fallbackCache = ratingRepository.getCachedRating(groupId, fallbackSelectedStudent.zachetka, activeFallbackYearId ?: "", activeFallbackSemId ?: "")
+                            
+                            val fallbackPointsMap = if (fallbackCache != null) {
+                                val pointsMapType = object : TypeToken<Map<String, List<ControlPoint>>>() {}.type
+                                runCatching {
+                                    gson.fromJson<Map<String, List<ControlPoint>>>(fallbackCache.controlPointsJson, pointsMapType)
+                                }.getOrDefault(emptyMap())
+                            } else emptyMap()
+                            
+                            _subjectControlPoints.value = fallbackPointsMap
+                            
+                            val cacheEntity = RatingEntity(
+                                groupId = groupId,
+                                zachetka = fallbackSelectedStudent.zachetka,
+                                yearId = activeFallbackYearId ?: "",
+                                semId = activeFallbackSemId ?: "",
+                                studentJson = gson.toJson(fallbackSelectedStudent),
+                                subjectsJson = gson.toJson(fallbackSubjects),
+                                studentsListJson = gson.toJson(fallbackPage.students),
+                                controlPointsJson = gson.toJson(fallbackPointsMap),
+                                updatedAt = System.currentTimeMillis()
+                            )
+                            ratingRepository.saveCachedRating(cacheEntity)
+                            
+                            uiState = RatingUiState.Success(
+                                student = fallbackSelectedStudent,
+                                subjects = fallbackSubjects,
+                                studentsList = fallbackPage.students,
+                                availableYears = fallbackPage.availableYears,
+                                availableSemesters = fallbackPage.availableSemesters
+                            )
+                            isRefreshing = false
+                            return@launch
+                        }
+                    }
+                    
                     uiState = RatingUiState.Success(
                         student = null,
                         subjects = emptyList(),
@@ -210,7 +271,8 @@ class RatingViewModel(
                 )
             } catch (e: Exception) {
                 AppLogger.e("RATING", "Ошибка загрузки рейтинга: ${e.message}", e)
-                if (uiState !is RatingUiState.Success) {
+                val previousSuccess = uiState as? RatingUiState.Success
+                if (previousSuccess?.student == null) {
                     uiState = RatingUiState.Error(e.message ?: "Ошибка подключения к порталу БРС")
                 }
             }

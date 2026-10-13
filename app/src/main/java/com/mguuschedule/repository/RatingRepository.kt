@@ -95,76 +95,71 @@ class RatingRepository(
      * Парсинг страницы рейтинга группы (Уровень 1): список студентов + селекторы учебных годов и семестров.
      */
     suspend fun parseGroupList(url: String): GroupRatingPage = withContext(Dispatchers.IO) {
-        runCatching {
-            val doc = fetchDocument(url)
+        val doc = fetchDocument(url)
 
-            // 1. Парсинг доступных учебных годов (select#year option)
-            val years = mutableListOf<AcademicPeriod>()
-            val yearOptions = doc.select("select#year option")
-            for (option in yearOptions) {
-                val id = option.attr("value").trim()
-                val title = normalizeText(option.text())
-                val isSelected = option.hasAttr("selected") || option.attr("selected") == "selected"
-                if (id.isNotBlank() && title.isNotBlank()) {
-                    years.add(AcademicPeriod(id = id, title = title, isSelected = isSelected))
-                }
+        // 1. Парсинг доступных учебных годов (select#year option)
+        val years = mutableListOf<AcademicPeriod>()
+        val yearOptions = doc.select("select#year option")
+        for (option in yearOptions) {
+            val id = option.attr("value").trim()
+            val title = normalizeText(option.text())
+            val isSelected = option.hasAttr("selected") || option.attr("selected") == "selected"
+            if (id.isNotBlank() && title.isNotBlank()) {
+                years.add(AcademicPeriod(id = id, title = title, isSelected = isSelected))
             }
-
-            // 2. Парсинг доступных семестров (select#semestr option)
-            val semesters = mutableListOf<AcademicPeriod>()
-            val semOptions = doc.select("select#semestr option, select#sem option")
-            for (option in semOptions) {
-                val id = option.attr("value").trim()
-                val title = normalizeText(option.text())
-                val isSelected = option.hasAttr("selected") || option.attr("selected") == "selected"
-                if (id.isNotBlank() && title.isNotBlank()) {
-                    semesters.add(AcademicPeriod(id = id, title = title, isSelected = isSelected))
-                }
-            }
-
-            // 3. Парсинг списка студентов
-            val rows = doc.select("div.brs div.ct-action")
-            val students = mutableListOf<StudentRating>()
-
-            for ((index, row) in rows.withIndex()) {
-                // Пропускаем заголовок (первая строка)
-                if (index == 0) continue
-
-                val link = row.selectFirst("a[href]") ?: continue
-                val zachetkaText = normalizeText(link.selectFirst("h5.brs-fio")?.text() ?: link.text())
-
-                if (zachetkaText.isBlank() || isHeaderOrSummaryRow(zachetkaText)) continue
-
-                val detailUrl = resolveAbsoluteUrl(link, "href")
-                val module1Text = row.selectFirst("h5.brs-data1, .brs-data1")?.text()
-                val module2Text = row.selectFirst("h5.brs-data2, .brs-data2")?.text()
-                val totalScoreText = row.selectFirst("h5.brs-rating, .brs-rating")?.text()
-
-                val module1 = parseNullableFloat(module1Text)
-                val module2 = parseNullableFloat(module2Text)
-                val totalScore = parseNullableFloat(totalScoreText)
-
-                students.add(
-                    StudentRating(
-                        zachetka = zachetkaText,
-                        module1 = module1,
-                        module2 = module2,
-                        totalScore = totalScore,
-                        detailUrl = detailUrl
-                    )
-                )
-            }
-
-            Log.d(TAG, "Успешно распарсено: студентов = ${students.size}, годов = ${years.size}, семестров = ${semesters.size}")
-            GroupRatingPage(
-                students = students,
-                availableYears = years,
-                availableSemesters = semesters
-            )
-        }.getOrElse { e ->
-            Log.e(TAG, "Ошибка при парсинге рейтинга группы: ${e.message}", e)
-            throw e
         }
+
+        // 2. Парсинг доступных семестров (select#semestr option)
+        val semesters = mutableListOf<AcademicPeriod>()
+        val semOptions = doc.select("select#semestr option, select#sem option")
+        for (option in semOptions) {
+            val id = option.attr("value").trim()
+            val title = normalizeText(option.text())
+            val isSelected = option.hasAttr("selected") || option.attr("selected") == "selected"
+            if (id.isNotBlank() && title.isNotBlank()) {
+                semesters.add(AcademicPeriod(id = id, title = title, isSelected = isSelected))
+            }
+        }
+
+        // 3. Парсинг списка студентов
+        val rows = doc.select("div.brs div.ct-action")
+        val students = mutableListOf<StudentRating>()
+
+        for ((index, row) in rows.withIndex()) {
+            // Пропускаем заголовок (первая строка)
+            if (index == 0) continue
+
+            val link = row.selectFirst("a[href]") ?: continue
+            val zachetkaText = normalizeText(link.selectFirst("h5.brs-fio")?.text() ?: link.text())
+
+            if (zachetkaText.isBlank() || isHeaderOrSummaryRow(zachetkaText)) continue
+
+            val detailUrl = resolveAbsoluteUrl(link, "href")
+            val module1Text = row.selectFirst("h5.brs-data1, .brs-data1")?.text()
+            val module2Text = row.selectFirst("h5.brs-data2, .brs-data2")?.text()
+            val totalScoreText = row.selectFirst("h5.brs-rating, .brs-rating")?.text()
+
+            val module1 = parseNullableFloat(module1Text)
+            val module2 = parseNullableFloat(module2Text)
+            val totalScore = parseNullableFloat(totalScoreText)
+
+            students.add(
+                StudentRating(
+                    zachetka = zachetkaText,
+                    module1 = module1,
+                    module2 = module2,
+                    totalScore = totalScore,
+                    detailUrl = detailUrl
+                )
+            )
+        }
+
+        Log.d(TAG, "Успешно распарсено: студентов = ${students.size}, годов = ${years.size}, семестров = ${semesters.size}")
+        GroupRatingPage(
+            students = students,
+            availableYears = years,
+            availableSemesters = semesters
+        )
     }
 
     /**
