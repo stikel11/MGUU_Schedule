@@ -13,7 +13,6 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
@@ -124,34 +123,44 @@ fun MGUUScheduleTheme(
                 dynamicDarkColorScheme(context)
             } else {
                 val rawLight = dynamicLightColorScheme(context)
-                
-                val harmonizedBackground = lerp(Color.White, rawLight.primary, 0.045f)
-                val harmonizedNested = lerp(Color.White, rawLight.primary, 0.08f)
-                val softPrimaryContainer = lerp(Color.White, rawLight.primary, 0.16f)
-                val softSecondaryContainer = lerp(Color.White, rawLight.secondary, 0.14f)
-                val softTertiaryContainer = lerp(Color.White, rawLight.primary, 0.12f) // Убираем кислотный оттенок tertiary
 
                 rawLight.copy(
-                    background = harmonizedBackground,
-                    surface = harmonizedBackground,
-                    
-                    // Карточки первого уровня — ЧИСТО БЕЛЫЕ, чтобы они светились на мягком фоне
+                    // Фон экрана — родной воздушный Tone 95/96 из HCT (без грязных серых примесей):
+                    background = rawLight.surfaceContainerLow,
+                    surface = rawLight.surfaceContainerLow,
+                    onBackground = rawLight.onSurface,
+                    onSurface = rawLight.onSurface,
+                    onSurfaceVariant = rawLight.onSurfaceVariant,
+
+                    // Все основные карточки, кнопки шапки и плавающий бар — ЧИСТО БЕЛЫЕ (Tone 100):
                     surfaceContainerLowest = Color.White,
                     surfaceContainerLow = Color.White,
                     surfaceContainer = Color.White,
                     surfaceVariant = Color.White,
-                    
-                    // Вложенные элементы (чипы аудиторий, плашки)
-                    surfaceContainerHigh = harmonizedNested,
-                    surfaceContainerHighest = lerp(Color.White, rawLight.primary, 0.11f),
-                    
-                    // Спокойные пастельные контейнеры
-                    primaryContainer = softPrimaryContainer,
+                    surfaceContainerHigh = Color.White,
+
+                    // Вложенные чипы внутри белых карточек (Ауд. 419к, Модуль 1/2) — легкий, чистый Tone 94 из HCT:
+                    surfaceContainerHighest = rawLight.surfaceContainer,
+
+                    // Акцентные контейнеры — БЕРЕМ НАПРЯМУЮ ИЗ HCT (Tone 90, высокая Chroma, никакой грязи от lerp!):
+                    primary = rawLight.primary,
+                    onPrimary = rawLight.onPrimary,
+                    primaryContainer = rawLight.primaryContainer,
                     onPrimaryContainer = rawLight.onPrimaryContainer,
-                    secondaryContainer = softSecondaryContainer,
+                    secondary = rawLight.secondary,
+                    onSecondary = rawLight.onSecondary,
+                    secondaryContainer = rawLight.secondaryContainer,
                     onSecondaryContainer = rawLight.onSecondaryContainer,
-                    tertiaryContainer = softTertiaryContainer,
-                    onTertiaryContainer = rawLight.onPrimaryContainer
+
+                    // Убираем кислотный разброс третьего цвета, приводя его к единой гамме с primaryContainer:
+                    tertiary = rawLight.primary,
+                    onTertiary = rawLight.onPrimary,
+                    tertiaryContainer = rawLight.primaryContainer,
+                    onTertiaryContainer = rawLight.onPrimaryContainer,
+
+                    // Мягкие, почти невидимые границы, чтобы убрать темную серую рамку вокруг белых карточек:
+                    outline = rawLight.outline,
+                    outlineVariant = rawLight.surfaceContainerHighest.copy(alpha = 0.5f)
                 )
             }
         }

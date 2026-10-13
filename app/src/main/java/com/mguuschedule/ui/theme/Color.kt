@@ -11,40 +11,44 @@ val Purple40 = Color(0xFF6650a4)
 val PurpleGrey40 = Color(0xFF625b71)
 val Pink40 = Color(0xFF7D5260)
 
-// Material 3 Baseline - Light Palette (Graphite & Slate)
-val PrimaryLight = Color(0xFF1E293B)
+// Material 3 Baseline - Light Palette (Google Blue - Airy Clean Light Mode)
+val PrimaryLight = Color(0xFF0B57D0)
 val OnPrimaryLight = Color(0xFFFFFFFF)
-val PrimaryContainerLight = Color(0xFFE2E8F0)
-val OnPrimaryContainerLight = Color(0xFF0F172A)
+val PrimaryContainerLight = Color(0xFFD3E3FD)
+val OnPrimaryContainerLight = Color(0xFF041E49)
 
-val SecondaryLight = Color(0xFF334155)
+val SecondaryLight = Color(0xFF0B57D0)
 val OnSecondaryLight = Color(0xFFFFFFFF)
-val SecondaryContainerLight = Color(0xFFE2E8F0)
-val OnSecondaryContainerLight = Color(0xFF1E293B)
+val SecondaryContainerLight = Color(0xFFD3E3FD)
+val OnSecondaryContainerLight = Color(0xFF041E49)
 
-val TertiaryLight = Color(0xFF475569)
+val TertiaryLight = Color(0xFF0B57D0)
 val OnTertiaryLight = Color(0xFFFFFFFF)
-val TertiaryContainerLight = Color(0xFFEDF2F7)
-val OnTertiaryContainerLight = Color(0xFF1E293B)
+val TertiaryContainerLight = Color(0xFFD3E3FD)
+val OnTertiaryContainerLight = Color(0xFF041E49)
 
-val BackgroundLight = Color(0xFFF3F4F6)
-val OnBackgroundLight = Color(0xFF111827)
-val SurfaceLight = Color(0xFFF3F4F6)
-val OnSurfaceLight = Color(0xFF111827)
+val BackgroundLight = Color(0xFFF3F5F8)
+val OnBackgroundLight = Color(0xFF111318)
+val SurfaceLight = Color(0xFFF3F5F8)
+val OnSurfaceLight = Color(0xFF111318)
 
 val SurfaceVariantLight = Color(0xFFFFFFFF)
-val OnSurfaceVariantLight = Color(0xFF4B5563)
+val OnSurfaceVariantLight = Color(0xFF44474E)
 
 val SurfaceDimLight = Color(0xFFD8DADF)
-val SurfaceBrightLight = Color(0xFFF3F4F6)
+val SurfaceBrightLight = Color(0xFFF3F5F8)
+
+// Карточки первого уровня - строго белые
 val SurfaceContainerLowestLight = Color(0xFFFFFFFF)
 val SurfaceContainerLowLight = Color(0xFFFFFFFF)
 val SurfaceContainerLight = Color(0xFFFFFFFF)
-val SurfaceContainerHighLight = Color(0xFFEFF1F5)
-val SurfaceContainerHighestLight = Color(0xFFE5E7EB)
+val SurfaceContainerHighLight = Color(0xFFFFFFFF)
 
-val OutlineLight = Color(0xFF9CA3AF)
-val OutlineVariantLight = Color(0xFFE5E7EB)
+// Вложенные элементы внутри белых карточек
+val SurfaceContainerHighestLight = Color(0xFFEEF1F6)
+
+val OutlineLight = Color(0xFF74777F)
+val OutlineVariantLight = Color(0x80E1E3E8) // Полупрозрачный для мягкой рамки
 
 // Material 3 Baseline - Dark Palette (Graphite & Slate)
 val PrimaryDark = Color(0xFFCBD5E1)
