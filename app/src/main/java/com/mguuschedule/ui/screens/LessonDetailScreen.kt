@@ -44,6 +44,8 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
+import kotlin.coroutines.cancellation.CancellationException
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -253,12 +255,31 @@ fun FullscreenFloorMapDialog(
             decorFitsSystemWindows = false
         )
     ) {
-        BackHandler(onBack = onDismiss)
+        var backProgress by remember { mutableFloatStateOf(0f) }
+        var swipeEdge by remember { mutableIntStateOf(0) }
+        PredictiveBackHandler { progressFlow ->
+            try {
+                progressFlow.collect { event ->
+                    backProgress = event.progress
+                    swipeEdge = event.swipeEdge
+                }
+                backProgress = 0f
+                onDismiss()
+            } catch (_: CancellationException) {
+                backProgress = 0f
+            }
+        }
 
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.95f))
+                .graphicsLayer {
+                    val scale = 1f - (backProgress * 0.18f)
+                    scaleX = scale
+                    scaleY = scale
+                    translationX = (if (swipeEdge == 0) 1f else -1f) * backProgress * 48f
+                }
+                .background(Color.Black.copy(alpha = 0.95f * (1f - backProgress)))
                 .systemBarsPadding()
         ) {
             Row(
@@ -366,12 +387,31 @@ fun FullscreenImagePreviewDialog(
             decorFitsSystemWindows = false
         )
     ) {
-        BackHandler(onBack = onDismiss)
+        var backProgress by remember { mutableFloatStateOf(0f) }
+        var swipeEdge by remember { mutableIntStateOf(0) }
+        PredictiveBackHandler { progressFlow ->
+            try {
+                progressFlow.collect { event ->
+                    backProgress = event.progress
+                    swipeEdge = event.swipeEdge
+                }
+                backProgress = 0f
+                onDismiss()
+            } catch (_: CancellationException) {
+                backProgress = 0f
+            }
+        }
 
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.95f))
+                .graphicsLayer {
+                    val scale = 1f - (backProgress * 0.18f)
+                    scaleX = scale
+                    scaleY = scale
+                    translationX = (if (swipeEdge == 0) 1f else -1f) * backProgress * 48f
+                }
+                .background(Color.Black.copy(alpha = 0.95f * (1f - backProgress)))
                 .systemBarsPadding()
         ) {
             Row(

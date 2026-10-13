@@ -155,12 +155,26 @@ fun ScheduleScreen(
                         }
                     }
 
-                    // Items 3..N: Schedule lessons or loading/error/empty states wrapped in Crossfade
+                    // Items 3..N: Schedule lessons or loading/error/empty states wrapped in AnimatedContent
                     item {
-                        Crossfade(
+                        AnimatedContent(
                             targetState = selectedDate,
-                            animationSpec = AppMotionScheme.defaultEffectsSpec(),
-                            label = "day_crossfade"
+                            transitionSpec = {
+                                val isForward = targetState.isAfter(initialState)
+                                val slideDir = if (isForward) 1 else -1
+                                (slideInHorizontally(
+                                    animationSpec = AppMotionScheme.defaultSpatialSpec(),
+                                    initialOffsetX = { fullWidth -> slideDir * (fullWidth / 5) }
+                                ) + fadeIn(animationSpec = AppMotionScheme.fastEffectsSpec()))
+                                    .togetherWith(
+                                        slideOutHorizontally(
+                                            animationSpec = AppMotionScheme.fastSpatialSpec(),
+                                            targetOffsetX = { fullWidth -> -slideDir * (fullWidth / 5) }
+                                        ) + fadeOut(animationSpec = AppMotionScheme.fastEffectsSpec())
+                                    )
+                                    .using(SizeTransform(clip = false))
+                            },
+                            label = "day_spatial_transition"
                         ) { targetDate ->
                             val lessonsForTargetDate = if (targetDate == selectedDate) lessons else emptyList()
                             

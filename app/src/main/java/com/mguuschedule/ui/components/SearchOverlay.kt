@@ -81,7 +81,9 @@ fun SearchOverlay(
         onDismiss()
     }
 
-    BackHandler(onBack = handleBack)
+    BackHandler(enabled = query.isNotEmpty()) {
+        viewModel.onQueryChanged("")
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),

@@ -13,10 +13,13 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.*
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -25,6 +28,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
@@ -183,7 +187,7 @@ fun MainAppScaffold(
             modifier = Modifier.fillMaxSize(),
             enterTransition = {
                 if (initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes) {
-                    EnterTransition.None
+                    fadeIn(animationSpec = AppMotionScheme.fastEffectsSpec()) + scaleIn(initialScale = 0.96f, animationSpec = AppMotionScheme.fastSpatialSpec())
                 } else {
                     slideIntoContainer(
                         towards = AnimatedContentTransitionScope.SlideDirection.Start,
@@ -193,7 +197,7 @@ fun MainAppScaffold(
             },
             exitTransition = {
                 if (initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes) {
-                    ExitTransition.None
+                    fadeOut(animationSpec = AppMotionScheme.fastEffectsSpec()) + scaleOut(targetScale = 0.96f, animationSpec = AppMotionScheme.fastSpatialSpec())
                 } else {
                     scaleOut(
                         targetScale = 0.9f,
@@ -203,7 +207,7 @@ fun MainAppScaffold(
             },
             popEnterTransition = {
                 if (initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes) {
-                    EnterTransition.None
+                    fadeIn(animationSpec = AppMotionScheme.fastEffectsSpec()) + scaleIn(initialScale = 0.96f, animationSpec = AppMotionScheme.fastSpatialSpec())
                 } else {
                     scaleIn(
                         initialScale = 0.9f,
@@ -213,15 +217,15 @@ fun MainAppScaffold(
             },
             popExitTransition = {
                 if (initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes) {
-                    ExitTransition.None
+                    fadeOut(animationSpec = AppMotionScheme.fastEffectsSpec()) + scaleOut(targetScale = 0.96f, animationSpec = AppMotionScheme.fastSpatialSpec())
                 } else {
                     slideOutOfContainer(
                         towards = AnimatedContentTransitionScope.SlideDirection.End,
                         animationSpec = AppMotionScheme.defaultSpatialSpec()
                     ) + scaleOut(
-                        targetScale = 0.85f,
+                        targetScale = 0.88f,
                         animationSpec = AppMotionScheme.fastSpatialSpec()
-                    )
+                    ) + fadeOut(animationSpec = AppMotionScheme.fastEffectsSpec())
                 }
             }
         ) {
@@ -309,6 +313,19 @@ fun MainAppScaffold(
                             transformOrigin = TransformOrigin(pivotFractionX = 0.88f, pivotFractionY = 0.95f),
                             animationSpec = AppMotionScheme.defaultSpatialSpec()
                         ) + fadeOut(animationSpec = AppMotionScheme.fastEffectsSpec())
+                    },
+                    popEnterTransition = {
+                        scaleIn(
+                            initialScale = 0.92f,
+                            animationSpec = AppMotionScheme.fastSpatialSpec()
+                        ) + fadeIn(animationSpec = AppMotionScheme.fastEffectsSpec())
+                    },
+                    popExitTransition = {
+                        scaleOut(
+                            targetScale = 0.1f,
+                            transformOrigin = TransformOrigin(pivotFractionX = 0.88f, pivotFractionY = 0.95f),
+                            animationSpec = AppMotionScheme.defaultSpatialSpec()
+                        ) + fadeOut(animationSpec = AppMotionScheme.fastEffectsSpec())
                     }
                 ) {
                     SearchOverlay(
@@ -382,16 +399,27 @@ fun MainAppScaffold(
 
                         Spacer(modifier = Modifier.width(10.dp))
 
+                        val searchInteractionSource = remember { MutableInteractionSource() }
+                        val isSearchPressed by searchInteractionSource.collectIsPressedAsState()
+                        val searchScale by animateFloatAsState(
+                            targetValue = if (isSearchPressed) 0.93f else 1f,
+                            animationSpec = spring(dampingRatio = 0.65f, stiffness = 600f),
+                            label = "searchScale"
+                        )
+
                         Surface(
                             onClick = {
                                 haptic.lightTick()
                                 navController.navigate(Screen.Search.route)
                             },
+                            interactionSource = searchInteractionSource,
                             shape = CircleShape,
                             color = MaterialTheme.colorScheme.surfaceContainerHigh,
                             shadowElevation = 3.dp,
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)),
-                            modifier = Modifier.size(56.dp)
+                            modifier = Modifier
+                                .size(56.dp)
+                                .scale(searchScale)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
