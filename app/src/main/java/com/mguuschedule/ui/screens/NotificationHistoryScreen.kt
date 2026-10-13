@@ -29,13 +29,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mguuschedule.repository.AppDatabase
 import com.mguuschedule.repository.NotificationDao
 import com.mguuschedule.repository.NotificationEntity
-import com.mguuschedule.ui.components.TopScrimProtection
+import com.mguuschedule.ui.components.StatusBarBlurOverlay
 import com.mguuschedule.util.rememberHapticFeedback
-import dev.chrisbanes.haze.HazeDefaults
-import dev.chrisbanes.haze.HazeTint
-import dev.chrisbanes.haze.hazeEffect
-import dev.chrisbanes.haze.hazeSource
-import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -112,8 +107,6 @@ fun NotificationHistoryScreen(
         viewModel.markAllAsRead()
     }
 
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-    val hazeState = rememberHazeState()
     var showClearDialog by remember { mutableStateOf(false) }
 
     var selectedFilterIndex by remember { mutableIntStateOf(0) }
@@ -135,52 +128,7 @@ fun NotificationHistoryScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
-            modifier = Modifier
-                .fillMaxSize()
-                .hazeSource(hazeState)
-                .nestedScroll(scrollBehavior.nestedScrollConnection),
-            topBar = {
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .hazeEffect(
-                                state = hazeState,
-                                style = HazeDefaults.style(
-                                    backgroundColor = MaterialTheme.colorScheme.surface,
-                                    blurRadius = 16.dp,
-                                    tint = HazeTint(MaterialTheme.colorScheme.surface.copy(alpha = 0.75f))
-                                )
-                            )
-                    )
-                    MediumTopAppBar(
-                        title = { Text("История уведомлений", fontWeight = FontWeight.Bold) },
-                        navigationIcon = {
-                            IconButton(onClick = {
-                                haptic.lightTick()
-                                onBack()
-                            }) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
-                            }
-                        },
-                        actions = {
-                            if (notifications.isNotEmpty()) {
-                                IconButton(onClick = {
-                                    haptic.click()
-                                    showClearDialog = true
-                                }) {
-                                    Icon(Icons.Default.DeleteSweep, contentDescription = "Очистить историю")
-                                }
-                            }
-                        },
-                        scrollBehavior = scrollBehavior,
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = Color.Transparent,
-                            scrolledContainerColor = Color.Transparent
-                        )
-                    )
-                }
-            },
+            modifier = Modifier.fillMaxSize(),
             containerColor = MaterialTheme.colorScheme.background
         ) { innerPadding ->
             LazyColumn(
@@ -188,13 +136,45 @@ fun NotificationHistoryScreen(
                     .fillMaxSize()
                     .consumeWindowInsets(innerPadding),
                 contentPadding = PaddingValues(
-                    top = innerPadding.calculateTopPadding(),
-                    bottom = innerPadding.calculateBottomPadding() + 24.dp,
+                    bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp,
                     start = 16.dp,
                     end = 16.dp
                 ),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                item {
+                    Spacer(modifier = Modifier.height(WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp))
+                    
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = {
+                            haptic.lightTick()
+                            onBack()
+                        }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "История",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (notifications.isNotEmpty()) {
+                            IconButton(onClick = {
+                                haptic.click()
+                                showClearDialog = true
+                            }) {
+                                Icon(Icons.Default.DeleteSweep, contentDescription = "Очистить историю")
+                            }
+                        }
+                    }
+                }
+
                 if (notifications.isNotEmpty()) {
                     item(key = "filter_row") {
                         SingleChoiceSegmentedButtonRow(
@@ -289,7 +269,7 @@ fun NotificationHistoryScreen(
             }
         }
 
-        TopScrimProtection()
+        StatusBarBlurOverlay()
 
         if (showClearDialog) {
             AlertDialog(

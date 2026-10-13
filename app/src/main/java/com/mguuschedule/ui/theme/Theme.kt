@@ -12,6 +12,7 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
@@ -99,7 +100,16 @@ fun MGUUScheduleTheme(
         val activity = view.context.findActivity()
         if (activity != null) {
             SideEffect {
-                val controller = WindowCompat.getInsetsController(activity.window, view)
+                val window = activity.window
+                // Полный сброс цвета баров для правильного Edge-to-Edge
+                window.statusBarColor = android.graphics.Color.TRANSPARENT
+                window.navigationBarColor = android.graphics.Color.TRANSPARENT
+                
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    window.isNavigationBarContrastEnforced = false
+                }
+                
+                val controller = WindowCompat.getInsetsController(window, view)
                 controller.isAppearanceLightStatusBars = !darkTheme
                 controller.isAppearanceLightNavigationBars = !darkTheme
             }
@@ -109,7 +119,22 @@ fun MGUUScheduleTheme(
     val colorScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            if (darkTheme) {
+                dynamicDarkColorScheme(context)
+            } else {
+                val dynamicLight = dynamicLightColorScheme(context)
+                // Очистка светлой динамической темы от "грязных" оттенков обоев
+                dynamicLight.copy(
+                    background = Color(0xFFFAF9FC),
+                    surface = Color(0xFFFAF9FC),
+                    surfaceVariant = Color(0xFFEFF1F6),
+                    surfaceContainerLowest = Color(0xFFFFFFFF),
+                    surfaceContainerLow = Color(0xFFF3F4F8),
+                    surfaceContainer = Color(0xFFECEEF4),
+                    surfaceContainerHigh = Color(0xFFE6E8EE),
+                    surfaceContainerHighest = Color(0xFFE1E2E8)
+                )
+            }
         }
         darkTheme -> DarkColorScheme
         else -> LightColorScheme

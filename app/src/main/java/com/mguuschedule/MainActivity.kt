@@ -63,19 +63,7 @@ class MainActivity : ComponentActivity() {
         
         CrashHandler.init(applicationContext)
         
-        enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.auto(
-                android.graphics.Color.TRANSPARENT,
-                android.graphics.Color.TRANSPARENT
-            ),
-            navigationBarStyle = SystemBarStyle.auto(
-                android.graphics.Color.TRANSPARENT,
-                android.graphics.Color.TRANSPARENT
-            )
-        )
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            window.isNavigationBarContrastEnforced = false
-        }
+        enableEdgeToEdge()
         
         splashScreen.setOnExitAnimationListener { splashScreenProvider ->
             val splashView = splashScreenProvider.view

@@ -74,59 +74,30 @@ fun BoxScope.StatusBarScrim(
 }
 
 /**
- * Легкая градиентная защита статус-бара с поддержкой матового стекла (Haze Backdrop Blur).
+ * Легкая градиентная защита статус-бара.
  */
-@OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
 fun TopScrimProtection(
     modifier: Modifier = Modifier,
-    hazeState: HazeState? = null,
-    color: Color = MaterialTheme.colorScheme.surface
+    color: Color = MaterialTheme.colorScheme.background
 ) {
     val density = LocalDensity.current
-    val statusBarHeight = WindowInsets.statusBars.getTop(density)
-    val heightDp = with(density) { maxOf(statusBarHeight * 1.35f, 40.dp.toPx()).toDp() }
+    val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val heightDp = statusBarHeight + 24.dp
 
-    if (hazeState != null) {
-        Box(
-            modifier = modifier
-                .fillMaxWidth()
-                .height(heightDp)
-                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-                .drawWithContent {
-                    drawContent()
-                    drawRect(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(Color.Black, Color.Black.copy(alpha = 0.85f), Color.Transparent)
-                        ),
-                        blendMode = BlendMode.DstIn
-                    )
-                }
-                .hazeEffect(
-                    state = hazeState,
-                    style = HazeMaterials.thin(containerColor = color)
-                ) {
-                    blurRadius = 24.dp
-                    tints = listOf(HazeTint(color.copy(alpha = 0.55f)))
-                    noiseFactor = 0.08f
-                }
-        )
-    } else {
-        Box(
-            modifier = modifier
-                .fillMaxWidth()
-                .height(heightDp)
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            color,
-                            color.copy(alpha = 0.85f),
-                            Color.Transparent
-                        )
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(heightDp)
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        color.copy(alpha = 0.85f),
+                        Color.Transparent
                     )
                 )
-        )
-    }
+            )
+    )
 }
 
 /**
@@ -161,15 +132,11 @@ fun CollapsibleScreenTitle(
 }
 
 /**
- * Переиспользуемая полоса матового стекла (Haze Blur) в зоне статус-бара.
+ * Переиспользуемая полоса градиента в зоне статус-бара.
  */
 @Composable
 fun StatusBarBlurOverlay(
-    hazeState: HazeState,
     modifier: Modifier = Modifier
 ) {
-    TopScrimProtection(
-        modifier = modifier,
-        hazeState = hazeState
-    )
+    TopScrimProtection(modifier = modifier)
 }

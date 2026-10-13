@@ -64,6 +64,7 @@ import com.mguuschedule.repository.LessonTaskEntity
 import com.mguuschedule.util.SearchEngine
 import com.mguuschedule.repository.ScheduleRepository
 import com.mguuschedule.ui.components.TopScrimProtection
+import com.mguuschedule.ui.components.StatusBarBlurOverlay
 import com.mguuschedule.util.formatClassroom
 import com.mguuschedule.util.rememberHapticFeedback
 import kotlinx.coroutines.launch
@@ -702,31 +703,9 @@ fun LessonDetailScreen(
         formatClassroom(lesson.room)
     }
 
-    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
-
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
-            modifier = Modifier
-                .fillMaxSize()
-                .nestedScroll(scrollBehavior.nestedScrollConnection),
-            topBar = {
-                TopAppBar(
-                    title = { Text("Информация о паре", fontWeight = FontWeight.Bold) },
-                    navigationIcon = {
-                        IconButton(onClick = {
-                            haptic.click()
-                            onBack()
-                        }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
-                        }
-                    },
-                    scrollBehavior = scrollBehavior,
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background,
-                        scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                    )
-                )
-            },
+            modifier = Modifier.fillMaxSize(),
             containerColor = Color.Transparent
         ) { padding ->
             Column(
@@ -736,7 +715,25 @@ fun LessonDetailScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp)
             ) {
-                Spacer(modifier = Modifier.height(padding.calculateTopPadding() + 8.dp))
+                Spacer(modifier = Modifier.height(WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp))
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = {
+                        haptic.click()
+                        onBack()
+                    }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Информация о паре",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
 
                 // Lesson Main Card
                 Card(
@@ -1252,9 +1249,11 @@ fun LessonDetailScreen(
                 }
             }
             
-            Spacer(modifier = Modifier.height(padding.calculateBottomPadding() + 48.dp))
+            Spacer(modifier = Modifier.navigationBarsPadding().height(24.dp))
         }
     }
+
+    StatusBarBlurOverlay()
 
     // Note Dialog
     if (showNoteDialog) {

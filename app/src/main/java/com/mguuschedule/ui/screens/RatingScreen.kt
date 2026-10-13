@@ -364,8 +364,8 @@ fun RatingScreen(
             }
         }
 
-        // Переиспользуемая матовая блюр-полоса в зоне статус-бара
-        StatusBarBlurOverlay(hazeState = hazeState)
+        // Переиспользуемая полоса градиента в зоне статус-бара
+        StatusBarBlurOverlay()
     }
 }
 
