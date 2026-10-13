@@ -131,7 +131,10 @@ class MainActivity : ComponentActivity() {
                                 onGroupSelected = { profileViewModel.selectGroup(it) }
                             )
                         } else {
-                            MainAppScaffold(profileViewModel, scheduleViewModel)
+                            val ratingViewModel: RatingViewModel = viewModel(
+                                factory = RatingViewModelFactory(app)
+                            )
+                            MainAppScaffold(profileViewModel, scheduleViewModel, ratingViewModel)
                         }
                     }
                 }
@@ -141,7 +144,11 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun MainAppScaffold(profileViewModel: ProfileViewModel, scheduleViewModel: ScheduleViewModel) {
+fun MainAppScaffold(
+    profileViewModel: ProfileViewModel,
+    scheduleViewModel: ScheduleViewModel,
+    ratingViewModel: RatingViewModel
+) {
     val navController = rememberNavController()
     val items = listOf(Screen.Schedule, Screen.Rating, Screen.Settings)
     val selectedGroup = profileViewModel.selectedGroup
@@ -149,9 +156,6 @@ fun MainAppScaffold(profileViewModel: ProfileViewModel, scheduleViewModel: Sched
 
     val currentContext = LocalContext.current
     val app = currentContext.applicationContext as Application
-    val ratingViewModel: RatingViewModel = viewModel(
-        factory = RatingViewModelFactory(app)
-    )
     val notificationViewModel: NotificationHistoryViewModel = viewModel(
         factory = NotificationHistoryViewModelFactory(app)
     )

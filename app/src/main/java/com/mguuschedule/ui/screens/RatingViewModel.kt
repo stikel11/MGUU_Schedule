@@ -23,6 +23,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 
 sealed class RatingUiState {
     object Loading : RatingUiState()
@@ -70,6 +73,67 @@ class RatingViewModel(
     val loadingControlPoints: StateFlow<Set<String>> = _loadingControlPoints.asStateFlow()
 
     init {
+        restoreCacheSynchronously()
+    }
+
+    private fun restoreCacheSynchronously() {
+        val groupId = prefs.getString("selected_group_id", "000000283") ?: "000000283"
+        val savedZachetka = prefs.getString("selected_zachetka", "") ?: ""
+        
+        val instantCacheJson = prefs.getString("rating_latest_instant_cache_$groupId", null)
+        if (instantCacheJson != null) {
+            runCatching {
+                val cachedEntity = gson.fromJson(instantCacheJson, RatingEntity::class.java)
+                if (cachedEntity != null) {
+                    val studentType = object : TypeToken<StudentRating>() {}.type
+                    val subjectsType = object : TypeToken<List<SubjectScore>>() {}.type
+                    val studentsListType = object : TypeToken<List<StudentRating>>() {}.type
+                    val periodsType = object : TypeToken<List<AcademicPeriod>>() {}.type
+                    val pointsMapType = object : TypeToken<Map<String, List<ControlPoint>>>() {}.type
+
+                    val cachedStudentsList: List<StudentRating> = gson.fromJson(cachedEntity.studentsListJson, studentsListType) ?: emptyList()
+                    val cachedStudent = if (savedZachetka.isNotBlank() && cachedStudentsList.isNotEmpty()) {
+                        cachedStudentsList.find { it.zachetka.equals(savedZachetka, ignoreCase = true) }
+                    } else {
+                        gson.fromJson(cachedEntity.studentJson, studentType)
+                    }
+                    
+                    val cachedSubjects: List<SubjectScore> = gson.fromJson(cachedEntity.subjectsJson, subjectsType) ?: emptyList()
+                    val cachedPointsMap: Map<String, List<ControlPoint>> = runCatching {
+                        gson.fromJson<Map<String, List<ControlPoint>>>(cachedEntity.controlPointsJson, pointsMapType)
+                    }.getOrDefault(emptyMap())
+
+                    val cachedYears: List<AcademicPeriod> = runCatching { gson.fromJson<List<AcademicPeriod>>(cachedEntity.availableYearsJson, periodsType) }.getOrDefault(emptyList())
+                    val cachedSemesters: List<AcademicPeriod> = runCatching { gson.fromJson<List<AcademicPeriod>>(cachedEntity.availableSemestersJson, periodsType) }.getOrDefault(emptyList())
+
+                    if (cachedStudent != null || cachedSubjects.isNotEmpty()) {
+                        _subjectControlPoints.value = cachedPointsMap
+                        val resolvedYearId = cachedEntity.yearId.ifBlank { null }
+                        val resolvedSemId = cachedEntity.semId.ifBlank { null }
+                        selectedYearId = resolvedYearId
+                        selectedSemId = resolvedSemId
+                        
+                        val updatedYears = cachedYears.map { it.copy(isSelected = it.id == resolvedYearId) }
+                        val updatedSemesters = cachedSemesters.map { it.copy(isSelected = it.id == resolvedSemId) }
+
+                        if (savedZachetka.isBlank() && cachedStudent != null) {
+                            prefs.edit().putString("selected_zachetka", cachedStudent.zachetka).apply()
+                        }
+
+                        uiState = RatingUiState.Success(
+                            student = cachedStudent,
+                            subjects = cachedSubjects,
+                            studentsList = cachedStudentsList,
+                            availableYears = updatedYears,
+                            availableSemesters = updatedSemesters
+                        )
+                        AppLogger.d("RATING", "Отображен СИНХРОННЫЙ кэш БРС для ${cachedStudent?.zachetka}")
+                    }
+                }
+            }
+        }
+        
+        // Asynchronously check Room for newer/other period cache or load network
         loadRating()
     }
 
@@ -260,7 +324,24 @@ class RatingViewModel(
                     }.getOrDefault(emptyMap())
                 } else emptyMap()
 
-                _subjectControlPoints.value = mergedPointsMap
+                // Параллельная загрузка контрольных точек для всех предметов
+                val fetchedPointsPairs = coroutineScope {
+                    subjects.filter { it.detailUrl.isNotBlank() }.map { subj ->
+                        async {
+                            val pts = runCatching { ratingRepository.parseControlPoints(subj.detailUrl) }.getOrDefault(emptyList())
+                            subj.detailUrl to pts
+                        }
+                    }.awaitAll()
+                }
+                
+                val finalPointsMap = mergedPointsMap.toMutableMap()
+                fetchedPointsPairs.forEach { (url, points) ->
+                    if (points.isNotEmpty()) {
+                        finalPointsMap[url] = points
+                    }
+                }
+
+                _subjectControlPoints.value = finalPointsMap
 
                 // Сохраняем в локальную базу данных Room
                 val cacheEntity = RatingEntity(
@@ -273,10 +354,15 @@ class RatingViewModel(
                     studentsListJson = gson.toJson(students),
                     availableYearsJson = gson.toJson(years),
                     availableSemestersJson = gson.toJson(semesters),
-                    controlPointsJson = gson.toJson(mergedPointsMap),
+                    controlPointsJson = gson.toJson(finalPointsMap),
                     updatedAt = System.currentTimeMillis()
                 )
                 ratingRepository.saveCachedRating(cacheEntity)
+                
+                // Сохраняем синхронный кэш в prefs
+                prefs.edit()
+                    .putString("rating_latest_instant_cache_$groupId", gson.toJson(cacheEntity))
+                    .apply()
 
                 uiState = RatingUiState.Success(
                     student = selectedStudent,
@@ -299,13 +385,13 @@ class RatingViewModel(
 
     fun selectStudent(student: StudentRating) {
         prefs.edit().putString("selected_zachetka", student.zachetka).apply()
-        loadRating(forceRefresh = true)
+        loadRating(forceRefresh = false)
     }
 
     fun selectPeriod(yearId: String, semId: String) {
         selectedYearId = yearId
         selectedSemId = semId
-        loadRating(forceRefresh = true, yearId = yearId, semId = semId)
+        loadRating(forceRefresh = false, yearId = yearId, semId = semId)
     }
 
     fun fetchControlPointsForSubject(subject: SubjectScore) {
@@ -344,7 +430,8 @@ class RatingViewModelFactory(
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        val repo = RatingRepository()
+        val database = AppDatabase.getDatabase(application)
+        val repo = RatingRepository(database.ratingDao())
         return RatingViewModel(repo, application) as T
     }
 }

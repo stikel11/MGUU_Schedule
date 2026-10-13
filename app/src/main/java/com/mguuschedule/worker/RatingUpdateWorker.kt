@@ -22,9 +22,9 @@ class RatingUpdateWorker(
     workerParams: WorkerParameters
 ) : CoroutineWorker(context, workerParams) {
 
-    private val repository = RatingRepository()
     private val database = AppDatabase.getDatabase(context)
     private val ratingDao = database.ratingDao()
+    private val repository = RatingRepository(ratingDao)
     private val gson = Gson()
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {

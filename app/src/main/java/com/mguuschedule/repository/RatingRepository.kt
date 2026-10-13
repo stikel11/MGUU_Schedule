@@ -26,7 +26,7 @@ import kotlin.math.roundToInt
  * Репозиторий и парсер балльно-рейтинговой системы (БРС) МГУУ на основе Jsoup.
  */
 class RatingRepository(
-    private val ratingDao: RatingDao? = null
+    private val ratingDao: RatingDao
 ) {
 
     companion object {
@@ -40,8 +40,8 @@ class RatingRepository(
      * Загрузка кэша рейтинга из базы данных Room.
      */
     suspend fun getCachedRating(groupId: String, zachetka: String = "", yearId: String = "", semId: String = ""): RatingEntity? {
-        return ratingDao?.getRatingCache(groupId, zachetka, yearId, semId)
-            ?: ratingDao?.getLatestRatingCache()
+        return ratingDao.getRatingCache(groupId, zachetka, yearId, semId)
+            ?: ratingDao.getLatestRatingCache()
     }
 
     /**
@@ -49,16 +49,16 @@ class RatingRepository(
      */
     suspend fun getCachedOrLatestRating(groupId: String, zachetka: String, yearId: String?, semId: String?): RatingEntity? {
         if (yearId.isNullOrBlank() || semId.isNullOrBlank()) {
-            return ratingDao?.getLatestRatingCacheForStudent(groupId, zachetka)
+            return ratingDao.getLatestRatingCacheForStudent(groupId, zachetka)
         }
-        return ratingDao?.getRatingCache(groupId, zachetka, yearId, semId)
+        return ratingDao.getRatingCache(groupId, zachetka, yearId, semId)
     }
 
     /**
      * Сохранение кэша рейтинга в базу данных Room.
      */
     suspend fun saveCachedRating(entity: RatingEntity) {
-        ratingDao?.saveRatingCache(entity)
+        ratingDao.saveRatingCache(entity)
     }
 
     /**

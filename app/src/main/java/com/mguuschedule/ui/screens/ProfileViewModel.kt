@@ -13,6 +13,7 @@ import com.mguuschedule.repository.ScheduleRepository
 import com.mguuschedule.util.NotificationHelper
 import androidx.lifecycle.viewModelScope
 import androidx.work.*
+import com.mguuschedule.repository.AppDatabase
 import com.mguuschedule.model.EducationLevel
 import com.mguuschedule.model.Group
 import com.mguuschedule.model.Lesson
@@ -78,7 +79,7 @@ class ProfileViewModel(
         _scrollToTopTrigger.value += 1
     }
     private val prefs = application.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-    private val ratingRepository = RatingRepository()
+    private val ratingRepository = RatingRepository(AppDatabase.getDatabase(application).ratingDao())
 
     var groupsUiState: GroupsUiState by mutableStateOf(GroupsUiState.Loading)
         private set
