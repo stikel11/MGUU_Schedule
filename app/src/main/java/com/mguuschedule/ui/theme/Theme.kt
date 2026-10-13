@@ -13,6 +13,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
@@ -122,17 +123,35 @@ fun MGUUScheduleTheme(
             if (darkTheme) {
                 dynamicDarkColorScheme(context)
             } else {
-                val dynamicLight = dynamicLightColorScheme(context)
-                // Очистка светлой динамической темы от "грязных" оттенков обоев
-                dynamicLight.copy(
-                    background = Color(0xFFFAF9FC),
-                    surface = Color(0xFFFAF9FC),
-                    surfaceVariant = Color(0xFFEFF1F6),
-                    surfaceContainerLowest = Color(0xFFFFFFFF),
-                    surfaceContainerLow = Color(0xFFF3F4F8),
-                    surfaceContainer = Color(0xFFECEEF4),
-                    surfaceContainerHigh = Color(0xFFE6E8EE),
-                    surfaceContainerHighest = Color(0xFFE1E2E8)
+                val rawLight = dynamicLightColorScheme(context)
+                
+                val harmonizedBackground = lerp(Color.White, rawLight.primary, 0.045f)
+                val harmonizedNested = lerp(Color.White, rawLight.primary, 0.08f)
+                val softPrimaryContainer = lerp(Color.White, rawLight.primary, 0.16f)
+                val softSecondaryContainer = lerp(Color.White, rawLight.secondary, 0.14f)
+                val softTertiaryContainer = lerp(Color.White, rawLight.primary, 0.12f) // Убираем кислотный оттенок tertiary
+
+                rawLight.copy(
+                    background = harmonizedBackground,
+                    surface = harmonizedBackground,
+                    
+                    // Карточки первого уровня — ЧИСТО БЕЛЫЕ, чтобы они светились на мягком фоне
+                    surfaceContainerLowest = Color.White,
+                    surfaceContainerLow = Color.White,
+                    surfaceContainer = Color.White,
+                    surfaceVariant = Color.White,
+                    
+                    // Вложенные элементы (чипы аудиторий, плашки)
+                    surfaceContainerHigh = harmonizedNested,
+                    surfaceContainerHighest = lerp(Color.White, rawLight.primary, 0.11f),
+                    
+                    // Спокойные пастельные контейнеры
+                    primaryContainer = softPrimaryContainer,
+                    onPrimaryContainer = rawLight.onPrimaryContainer,
+                    secondaryContainer = softSecondaryContainer,
+                    onSecondaryContainer = rawLight.onSecondaryContainer,
+                    tertiaryContainer = softTertiaryContainer,
+                    onTertiaryContainer = rawLight.onPrimaryContainer
                 )
             }
         }
