@@ -195,69 +195,62 @@ fun MainAppScaffold(
             startDestination = Screen.Schedule.route,
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black),
+                .background(MaterialTheme.colorScheme.background), // Убираем Color.Black, чтобы экран никогда не гас!
             enterTransition = {
                 val isTabSwitch = initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes
                 if (isTabSwitch) {
-                    fadeIn(animationSpec = tween(durationMillis = 150, delayMillis = 90, easing = LinearOutSlowInEasing)) +
-                        scaleIn(initialScale = 0.98f, animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing))
+                    // Плавное появление вкладки БЕЗ задержки и БЕЗ изменения масштаба
+                    fadeIn(animationSpec = tween(durationMillis = 180, easing = LinearOutSlowInEasing))
                 } else {
                     slideIntoContainer(
                         towards = AnimatedContentTransitionScope.SlideDirection.Start,
                         initialOffset = { fullWidth -> (fullWidth * 0.14f).toInt() },
                         animationSpec = tween(durationMillis = 300, easing = PredictiveBackEasing)
-                    ) + fadeIn(animationSpec = tween(durationMillis = 110, easing = LinearEasing)) +
-                        scaleIn(initialScale = 0.94f, animationSpec = tween(durationMillis = 300, easing = PredictiveBackEasing))
+                    ) + fadeIn(animationSpec = tween(durationMillis = 120, easing = LinearEasing))
                 }
             },
             exitTransition = {
                 val isTabSwitch = initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes
                 if (isTabSwitch) {
-                    fadeOut(animationSpec = tween(durationMillis = 90, easing = FastOutLinearInEasing))
+                    // Мягкое затухание старой вкладки БЕЗ изменения масштаба
+                    fadeOut(animationSpec = tween(durationMillis = 140, easing = FastOutLinearInEasing))
                 } else {
+                    // Нижний экран слегка отдаляется без ухода в темноту
                     scaleOut(
-                        targetScale = 0.95f,
+                        targetScale = 0.96f,
                         animationSpec = tween(durationMillis = 300, easing = PredictiveBackEasing)
-                    ) + fadeOut(
-                        targetAlpha = 0.55f,
-                        animationSpec = tween(durationMillis = 300, easing = LinearEasing)
                     )
                 }
             },
             popEnterTransition = {
                 val isTabSwitch = initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes
                 if (isTabSwitch) {
-                    fadeIn(animationSpec = tween(durationMillis = 110, delayMillis = 230, easing = LinearOutSlowInEasing)) +
-                        scaleIn(initialScale = 0.98f, animationSpec = tween(durationMillis = 340, easing = PredictiveBackEasing))
+                    // Возврат на вкладку «Расписание» БЕЗ scaleIn и БЕЗ delayMillis (не отдаляется и не гаснет!)
+                    fadeIn(animationSpec = tween(durationMillis = 180, easing = LinearOutSlowInEasing))
                 } else {
+                    // Возврат из детального экрана: нижний экран просто восстанавливает масштаб 0.96f -> 1.0f
                     scaleIn(
-                        initialScale = 0.95f,
-                        animationSpec = tween(durationMillis = 340, easing = PredictiveBackEasing)
-                    ) + fadeIn(
-                        initialAlpha = 0.55f,
-                        animationSpec = tween(durationMillis = 340, easing = LinearEasing)
+                        initialScale = 0.96f,
+                        animationSpec = tween(durationMillis = 320, easing = PredictiveBackEasing)
                     )
                 }
             },
             popExitTransition = {
                 val isTabSwitch = initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes
                 if (isTabSwitch) {
-                    scaleOut(
-                        targetScale = 0.97f,
-                        animationSpec = tween(durationMillis = 340, easing = PredictiveBackEasing)
-                    ) + fadeOut(
-                        animationSpec = tween(durationMillis = 100, delayMillis = 230, easing = LinearEasing)
-                    )
+                    // Уход с вкладки «Рейтинг»/«Настройки» на «Расписание» БЕЗ scaleOut и БЕЗ задержки
+                    fadeOut(animationSpec = tween(durationMillis = 140, easing = FastOutLinearInEasing))
                 } else {
+                    // Predictive Back только для детальных экранов (Информация о паре, Поиск и т.д.)
                     scaleOut(
                         targetScale = 0.88f,
-                        animationSpec = tween(durationMillis = 340, easing = PredictiveBackEasing)
+                        animationSpec = tween(durationMillis = 320, easing = PredictiveBackEasing)
                     ) + slideOutOfContainer(
                         towards = AnimatedContentTransitionScope.SlideDirection.End,
-                        targetOffset = { fullWidth -> (fullWidth * 0.04f).toInt() },
-                        animationSpec = tween(durationMillis = 340, easing = PredictiveBackEasing)
+                        targetOffset = { fullWidth -> (fullWidth * 0.05f).toInt() },
+                        animationSpec = tween(durationMillis = 320, easing = PredictiveBackEasing)
                     ) + fadeOut(
-                        animationSpec = tween(durationMillis = 100, delayMillis = 240, easing = LinearEasing)
+                        animationSpec = tween(durationMillis = 90, delayMillis = 230, easing = LinearEasing)
                     )
                 }
             }
