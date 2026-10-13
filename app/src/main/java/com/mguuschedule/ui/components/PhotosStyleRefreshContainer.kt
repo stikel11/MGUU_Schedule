@@ -1,298 +1,310 @@
 package com.mguuschedule.ui.components
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.pulltorefresh.pullToRefresh
-import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import androidx.graphics.shapes.CornerRounding
+import androidx.graphics.shapes.Morph
+import androidx.graphics.shapes.RoundedPolygon
+import androidx.graphics.shapes.circle
+import androidx.graphics.shapes.star
+import androidx.graphics.shapes.toPath
 import kotlinx.coroutines.delay
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.ln
-import kotlin.math.sin
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
-enum class RefreshPhase {
-    Pulling, Refreshing, Done
-}
+private enum class RefreshStatePhase { Idle, Pulling, Refreshing, Done }
 
-/**
- * Контейнер Pull-to-refresh в стиле Google Фото (Material 3 Expressive):
- * Физическое сдвигание контента с логарифмическим сопротивлением,
- * открытие чистого фона и появление крупного залитого морфинг-индикатора.
- */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PhotosStyleRefreshContainer(
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
-    @Suppress("UNUSED_PARAMETER") statusRowHeight: Dp = 56.dp, // Сохранено для совместимости сигнатуры, хотя используются фиксированные отступы
-    content: @Composable () -> Unit,
+    content: @Composable () -> Unit
 ) {
-    val state = rememberPullToRefreshState()
-    val haptics = LocalHapticFeedback.current
     val density = LocalDensity.current
+    val scope = rememberCoroutineScope()
 
-    var currentPhase by remember { mutableStateOf(RefreshPhase.Pulling) }
-    var wasRefreshing by remember { mutableStateOf(isRefreshing) }
+    val statusBarTopPx = WindowInsets.statusBars.getTop(density).toFloat()
+    val triggerPx = with(density) { 108.dp.toPx() }
+    val maxPullPx = with(density) { 180.dp.toPx() }
+    val activeHoldPx = with(density) { 96.dp.toPx() } + statusBarTopPx
 
+    val offsetAnim = remember { Animatable(0f) }
+    var phase by remember { mutableStateOf(RefreshStatePhase.Idle) }
+    var wasRefreshing by remember { mutableStateOf(false) }
+
+    // Реакция на изменение isRefreshing из ViewModel
     LaunchedEffect(isRefreshing) {
         if (isRefreshing) {
-            currentPhase = RefreshPhase.Refreshing
+            wasRefreshing = true
+            phase = RefreshStatePhase.Refreshing
+            offsetAnim.animateTo(
+                targetValue = activeHoldPx,
+                animationSpec = spring(dampingRatio = 0.85f, stiffness = 240f)
+            )
         } else if (wasRefreshing) {
-            currentPhase = RefreshPhase.Done
-            delay(650)
-            currentPhase = RefreshPhase.Pulling
-        } else {
-            currentPhase = RefreshPhase.Pulling
-        }
-        wasRefreshing = isRefreshing
-    }
-
-    // Легкая тактильная отдача при пересечении порога скролла
-    var hasVibratedThreshold by remember { mutableStateOf(false) }
-    LaunchedEffect(state.distanceFraction) {
-        if (state.distanceFraction >= 1f && !hasVibratedThreshold) {
-            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-            hasVibratedThreshold = true
-        } else if (state.distanceFraction < 1f) {
-            hasVibratedThreshold = false
+            wasRefreshing = false
+            // Удерживаем выезжающий блок открытым и показываем статус "Обновлено"
+            phase = RefreshStatePhase.Done
+            offsetAnim.animateTo(
+                targetValue = activeHoldPx,
+                animationSpec = spring(dampingRatio = 0.85f, stiffness = 260f)
+            )
+            delay(850L)
+            offsetAnim.animateTo(
+                targetValue = 0f,
+                animationSpec = spring(dampingRatio = 0.88f, stiffness = 220f)
+            )
+            phase = RefreshStatePhase.Idle
         }
     }
 
-    val thresholdPx = with(density) { 90.dp.toPx() }
-    val targetOffsetPx = when (currentPhase) {
-        RefreshPhase.Refreshing, RefreshPhase.Done -> thresholdPx
-        RefreshPhase.Pulling -> {
-            val fraction = state.distanceFraction
-            // Логарифмическое сопротивление (rubber-band effect)
-            thresholdPx * ln(1f + fraction)
-        }
-    }
+    val nestedScrollConnection = remember(isRefreshing, phase) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (source == NestedScrollSource.UserInput && available.y < 0f && offsetAnim.value > 0f && phase == RefreshStatePhase.Pulling) {
+                    val consumed = available.y.coerceAtLeast(-offsetAnim.value)
+                    scope.launch { offsetAnim.snapTo(offsetAnim.value + consumed) }
+                    return Offset(0f, consumed)
+                }
+                return Offset.Zero
+            }
 
-    val offsetSpringSpec = if (currentPhase == RefreshPhase.Pulling && !isRefreshing) {
-        spring<Float>(dampingRatio = 0.82f, stiffness = 400f)
-    } else {
-        spring<Float>(dampingRatio = 0.78f, stiffness = 380f)
-    }
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                if (source == NestedScrollSource.UserInput && available.y > 0f && phase != RefreshStatePhase.Refreshing && phase != RefreshStatePhase.Done) {
+                    phase = RefreshStatePhase.Pulling
+                    val damping = (1f - (offsetAnim.value / (maxPullPx * 1.6f))).coerceIn(0.18f, 0.55f)
+                    val newOffset = (offsetAnim.value + available.y * damping).coerceAtMost(maxPullPx + statusBarTopPx)
+                    scope.launch { offsetAnim.snapTo(newOffset) }
+                    return Offset(0f, available.y)
+                }
+                return Offset.Zero
+            }
 
-    val animatedOffsetPx by animateFloatAsState(
-        targetValue = targetOffsetPx,
-        animationSpec = offsetSpringSpec,
-        label = "content_offset"
-    )
-
-    Box(modifier = modifier.fillMaxSize()) {
-        
-        // Область индикатора (прозрачная, лежит под контентом, отступ под статус-бар)
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(with(density) { animatedOffsetPx.toDp() })
-                .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()),
-            contentAlignment = Alignment.Center
-        ) {
-            AnimatedContent(
-                targetState = currentPhase,
-                transitionSpec = {
-                    if (targetState == RefreshPhase.Done) {
-                        (scaleIn(spring(stiffness = 500f)) + fadeIn()) togetherWith 
-                        (scaleOut(spring(stiffness = 500f)) + fadeOut())
-                    } else {
-                        fadeIn() togetherWith fadeOut()
-                    }
-                },
-                label = "refresh_indicator"
-            ) { phase ->
-                when (phase) {
-                    RefreshPhase.Pulling, RefreshPhase.Refreshing -> {
-                        val rawScale = if (phase == RefreshPhase.Refreshing) 1f else {
-                            val frac = state.distanceFraction
-                            // Упругий овершут при натяжении
-                            if (frac < 1f) frac else 1f + 0.2f * (frac - 1f)
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (phase == RefreshStatePhase.Pulling) {
+                    if (offsetAnim.value >= triggerPx + statusBarTopPx * 0.5f) {
+                        // Запускаем обновление и сразу фиксируем открытый блок, чтобы он не схлопнулся
+                        wasRefreshing = true
+                        phase = RefreshStatePhase.Refreshing
+                        scope.launch {
+                            offsetAnim.animateTo(
+                                targetValue = activeHoldPx,
+                                animationSpec = spring(dampingRatio = 0.85f, stiffness = 240f)
+                            )
                         }
-                        MorphingPolygonIndicator(
-                            modifier = Modifier.size(44.dp),
-                            progress = rawScale.coerceIn(0f, 1.2f)
-                        )
+                        onRefresh()
+                    } else {
+                        scope.launch {
+                            offsetAnim.animateTo(
+                                targetValue = 0f,
+                                animationSpec = spring(dampingRatio = 0.88f, stiffness = 240f)
+                            )
+                            phase = RefreshStatePhase.Idle
+                        }
                     }
-                    RefreshPhase.Done -> {
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            tonalElevation = 2.dp,
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    return available
+                }
+                return Velocity.Zero
+            }
+        }
+    }
+
+    val currentOffset = offsetAnim.value
+    val pullProgress = (currentOffset / (triggerPx + statusBarTopPx)).coerceIn(0f, 1f)
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .nestedScroll(nestedScrollConnection)
+    ) {
+        // Выезжающий сверху выделенный цветом блок (как шторка/карточка статуса в Google Photos)
+        if (currentOffset > 2f) {
+            val blockHeightDp = with(density) { currentOffset.toDp() }
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(blockHeightDp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                shape = RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp),
+                tonalElevation = 2.dp
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = with(density) { (statusBarTopPx * pullProgress).toDp() }),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AnimatedContent(
+                        targetState = phase == RefreshStatePhase.Done,
+                        transitionSpec = {
+                            (scaleIn(spring(0.8f, 300f)) + fadeIn(tween(180)))
+                                .togetherWith(scaleOut(spring(0.85f, 300f)) + fadeOut(tween(120)))
+                        },
+                        label = "refresh_indicator_content"
+                    ) { isDone ->
+                        if (isDone) {
+                            Surface(
+                                shape = RoundedCornerShape(20.dp),
+                                color = MaterialTheme.colorScheme.secondaryContainer
                             ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Check,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Text(
-                                    text = "Обновлено",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.CheckCircle,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Text(
+                                        text = "Данные обновлены",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                }
                             }
+                        } else {
+                            GoogleExpressivePolygonIndicator(
+                                pullProgress = pullProgress,
+                                isSpinning = phase == RefreshStatePhase.Refreshing
+                            )
                         }
                     }
                 }
             }
         }
 
-        // Основной контент — уезжает вниз, открывая чистый фон экрана
+        // Основной контент экрана, сдвигающийся вниз
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .graphicsLayer { translationY = animatedOffsetPx }
-                .pullToRefresh(
-                    state = state,
-                    isRefreshing = isRefreshing,
-                    onRefresh = onRefresh
-                )
-                .background(Color.Transparent)
+                .offset { IntOffset(0, currentOffset.roundToInt()) }
         ) {
             content()
         }
     }
 }
 
-/**
- * MD3 Expressive: Крупный залитый бесконечно вращающийся полигон, плавно меняющий форму.
- */
 @Composable
-fun MorphingPolygonIndicator(
-    modifier: Modifier = Modifier,
-    progress: Float = 1f,
-    color: Color = MaterialTheme.colorScheme.primaryContainer
+private fun GoogleExpressivePolygonIndicator(
+    pullProgress: Float,
+    isSpinning: Boolean
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "morphing_polygon")
-    
-    val time by infiniteTransition.animateFloat(
+    // Официальные полигоны Google Material 3 через androidx.graphics.shapes
+    val shapes = remember {
+        listOf(
+            // 1. Пятиугольник (как в Google Photos)
+            RoundedPolygon(
+                numVertices = 5,
+                rounding = CornerRounding(radius = 0.32f)
+            ),
+            // 2. Мягкая 8-лучевая звезда (Sunny)
+            RoundedPolygon.star(
+                numVerticesPerRadius = 8,
+                innerRadius = 0.72f,
+                rounding = CornerRounding(radius = 0.28f)
+            ),
+            // 3. Четырехлистник (Cookie / Clover)
+            RoundedPolygon.star(
+                numVerticesPerRadius = 4,
+                innerRadius = 0.62f,
+                rounding = CornerRounding(radius = 0.38f)
+            ),
+            // 4. Мягкий многогранник
+            RoundedPolygon.circle(numVertices = 6)
+        )
+    }
+
+    val morphs = remember(shapes) {
+        shapes.indices.map { i ->
+            Morph(shapes[i], shapes[(i + 1) % shapes.size])
+        }
+    }
+
+    val infiniteTransition = rememberInfiniteTransition(label = "m3_expressive_morph")
+    val continuousPhase by infiniteTransition.animateFloat(
         initialValue = 0f,
-        targetValue = (PI * 2).toFloat(),
+        targetValue = morphs.size.toFloat(),
         animationSpec = infiniteRepeatable(
-            animation = tween(3500, easing = LinearEasing),
+            animation = tween(durationMillis = 2600, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
-        label = "morph_time"
+        label = "morph_phase"
     )
-    
     val rotation by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
-            animation = tween(7000, easing = LinearEasing),
+            animation = tween(durationMillis = 3200, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
-        label = "morph_rotation"
+        label = "rotation_phase"
     )
 
+    val activeMorphValue = if (isSpinning) continuousPhase else (pullProgress * 1.5f)
+    val morphIndex = activeMorphValue.toInt() % morphs.size
+    val morphFraction = activeMorphValue - activeMorphValue.toInt()
+
+    val androidPath = remember { android.graphics.Path() }
+    val matrix = remember { android.graphics.Matrix() }
+    val color = MaterialTheme.colorScheme.primary
+
+    val scale = (0.4f + 0.6f * pullProgress).coerceIn(0f, 1f)
+
     Canvas(
-        modifier = modifier
-            .scale(progress)
-            .graphicsLayer { rotationZ = rotation }
-    ) {
-        val center = Offset(size.width / 2f, size.height / 2f)
-        val baseRadius = size.width / 2f * 0.75f 
-        
-        // Фигуры: Pair(лепестки, амплитуда)
-        val shapes = listOf(
-            Pair(5, 0.15f), // Мягкий 5-угольник
-            Pair(4, 0.20f), // 4-листник "cookie"
-            Pair(7, 0.12f), // Мягкая 7-лучевая звезда
-            Pair(0, 0.00f)  // Круг
-        )
-        
-        val progressTime = (time / (PI * 2)) * shapes.size
-        val index1 = progressTime.toInt() % shapes.size
-        val index2 = (index1 + 1) % shapes.size
-        val fraction = (progressTime - progressTime.toInt()).toFloat()
-        
-        // Плавное перетекание (smoothstep)
-        val smoothFraction = fraction * fraction * (3f - 2f * fraction)
-        
-        val path = Path()
-        val steps = 120
-        for (i in 0..steps) {
-            val angle = (i.toFloat() / steps) * (PI * 2).toFloat()
-            
-            val l1 = shapes[index1].first
-            val a1 = shapes[index1].second
-            val r1 = baseRadius * (1f + a1 * cos(l1 * angle))
-            
-            val l2 = shapes[index2].first
-            val a2 = shapes[index2].second
-            val r2 = baseRadius * (1f + a2 * cos(l2 * angle))
-            
-            val r = r1 + (r2 - r1) * smoothFraction
-            
-            val x = center.x + r * cos(angle)
-            val y = center.y + r * sin(angle)
-            
-            if (i == 0) {
-                path.moveTo(x, y)
-            } else {
-                path.lineTo(x, y)
+        modifier = Modifier
+            .size(42.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                rotationZ = if (isSpinning) rotation else pullProgress * 140f
+                alpha = (pullProgress * 1.4f).coerceIn(0f, 1f)
             }
-        }
-        path.close()
-        
-        drawPath(path = path, color = color)
+    ) {
+        androidPath.rewind()
+        morphs[morphIndex].toPath(progress = morphFraction, path = androidPath)
+        matrix.reset()
+        val radius = size.minDimension / 2f
+        matrix.postScale(radius, radius)
+        matrix.postTranslate(size.width / 2f, size.height / 2f)
+        androidPath.transform(matrix)
+
+        drawPath(
+            path = androidPath.asComposePath(),
+            color = color
+        )
     }
 }

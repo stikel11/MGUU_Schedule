@@ -12,8 +12,8 @@ android {
         applicationId = "com.mguuschedule"
         minSdk = 26
         targetSdk = 37
-        versionCode = 47
-        versionName = "0.47"
+        versionCode = 49
+        versionName = "0.49"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -69,6 +69,7 @@ dependencies {
     implementation(libs.guava)
     implementation("dev.chrisbanes.haze:haze:1.7.3")
     implementation("dev.chrisbanes.haze:haze-materials:1.7.3")
+    implementation("androidx.graphics:graphics-shapes:1.0.1")
     implementation("androidx.glance:glance-appwidget:1.1.1")
     implementation("androidx.glance:glance-material3:1.1.1")
     testImplementation(libs.junit)

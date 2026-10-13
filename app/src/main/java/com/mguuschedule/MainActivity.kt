@@ -12,6 +12,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.*
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -187,45 +188,46 @@ fun MainAppScaffold(
             modifier = Modifier.fillMaxSize(),
             enterTransition = {
                 if (initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes) {
-                    fadeIn(animationSpec = AppMotionScheme.fastEffectsSpec()) + scaleIn(initialScale = 0.96f, animationSpec = AppMotionScheme.fastSpatialSpec())
+                    fadeIn(animationSpec = tween(220, easing = FastOutSlowInEasing))
                 } else {
                     slideIntoContainer(
                         towards = AnimatedContentTransitionScope.SlideDirection.Start,
                         animationSpec = AppMotionScheme.defaultSpatialSpec()
-                    ) + fadeIn(animationSpec = AppMotionScheme.fastEffectsSpec())
+                    )
                 }
             },
             exitTransition = {
                 if (initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes) {
-                    fadeOut(animationSpec = AppMotionScheme.fastEffectsSpec()) + scaleOut(targetScale = 0.96f, animationSpec = AppMotionScheme.fastSpatialSpec())
+                    fadeOut(animationSpec = tween(180, easing = FastOutSlowInEasing))
                 } else {
                     scaleOut(
-                        targetScale = 0.9f,
-                        animationSpec = AppMotionScheme.fastSpatialSpec()
-                    ) + fadeOut(animationSpec = AppMotionScheme.fastEffectsSpec())
+                        targetScale = 0.94f,
+                        animationSpec = AppMotionScheme.defaultSpatialSpec()
+                    ) + fadeOut(targetAlpha = 0.6f, animationSpec = AppMotionScheme.defaultEffectsSpec())
                 }
             },
             popEnterTransition = {
                 if (initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes) {
-                    fadeIn(animationSpec = AppMotionScheme.fastEffectsSpec()) + scaleIn(initialScale = 0.96f, animationSpec = AppMotionScheme.fastSpatialSpec())
+                    fadeIn(animationSpec = tween(220, easing = FastOutSlowInEasing))
                 } else {
                     scaleIn(
-                        initialScale = 0.9f,
-                        animationSpec = AppMotionScheme.fastSpatialSpec()
-                    ) + fadeIn(animationSpec = AppMotionScheme.fastEffectsSpec())
+                        initialScale = 0.94f,
+                        animationSpec = AppMotionScheme.defaultSpatialSpec()
+                    ) + fadeIn(initialAlpha = 0.6f, animationSpec = AppMotionScheme.defaultEffectsSpec())
                 }
             },
             popExitTransition = {
                 if (initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes) {
-                    fadeOut(animationSpec = AppMotionScheme.fastEffectsSpec()) + scaleOut(targetScale = 0.96f, animationSpec = AppMotionScheme.fastSpatialSpec())
+                    fadeOut(animationSpec = tween(180, easing = FastOutSlowInEasing))
                 } else {
+                    // Плотный уход карточки вправо с легким уменьшением БЕЗ прозрачности посередине свайпа:
                     slideOutOfContainer(
                         towards = AnimatedContentTransitionScope.SlideDirection.End,
                         animationSpec = AppMotionScheme.defaultSpatialSpec()
                     ) + scaleOut(
-                        targetScale = 0.88f,
-                        animationSpec = AppMotionScheme.fastSpatialSpec()
-                    ) + fadeOut(animationSpec = AppMotionScheme.fastEffectsSpec())
+                        targetScale = 0.92f,
+                        animationSpec = AppMotionScheme.defaultSpatialSpec()
+                    )
                 }
             }
         ) {

@@ -1,7 +1,5 @@
 package com.mguuschedule.ui.theme
 
-import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -13,37 +11,23 @@ import androidx.compose.animation.core.spring
  * - Effects Motion Specs: Color, alpha, opacity, subtle non-spatial state feedback
  */
 object AppMotionScheme {
-    // Spatial Specs (Position, bounds, size, displacement) - MD3 Expressive Springs
-    fun <T> defaultSpatialSpec(): FiniteAnimationSpec<T> = spring(
-        dampingRatio = 0.78f,
-        stiffness = 380f
-    )
+    // Плавные пространственные пружины (без резких рывков)
+    fun <T> fastSpatialSpec(): FiniteAnimationSpec<T> =
+        spring(dampingRatio = 0.84f, stiffness = 280f)
 
-    fun <T> fastSpatialSpec(): FiniteAnimationSpec<T> = spring(
-        dampingRatio = 0.75f,
-        stiffness = 600f
-    )
+    fun <T> defaultSpatialSpec(): FiniteAnimationSpec<T> =
+        spring(dampingRatio = 0.86f, stiffness = 200f)
 
-    fun <T> slowSpatialSpec(): FiniteAnimationSpec<T> = spring(
-        dampingRatio = 0.82f,
-        stiffness = 260f
-    )
+    fun <T> slowSpatialSpec(): FiniteAnimationSpec<T> =
+        spring(dampingRatio = 0.88f, stiffness = 140f)
 
-    // Effects Specs (Color, alpha, opacity) - MD3 Expressive Springs without overshoot
-    fun <T> defaultEffectsSpec(): FiniteAnimationSpec<T> = spring(
-        dampingRatio = Spring.DampingRatioNoBouncy,
-        stiffness = 800f
-    )
+    // Плавные пружины для цвета и прозрачности
+    fun <T> fastEffectsSpec(): FiniteAnimationSpec<T> =
+        spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 500f)
 
-    fun <T> fastEffectsSpec(): FiniteAnimationSpec<T> = spring(
-        dampingRatio = Spring.DampingRatioNoBouncy,
-        stiffness = 1200f
-    )
+    fun <T> defaultEffectsSpec(): FiniteAnimationSpec<T> =
+        spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 320f)
 
-    fun <T> slowEffectsSpec(): FiniteAnimationSpec<T> = spring(
-        dampingRatio = Spring.DampingRatioNoBouncy,
-        stiffness = 400f
-    )
+    fun <T> slowEffectsSpec(): FiniteAnimationSpec<T> =
+        spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 200f)
 }
-
-
