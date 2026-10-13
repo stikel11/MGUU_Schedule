@@ -18,6 +18,8 @@ data class RatingEntity(
     val studentJson: String,
     val subjectsJson: String,
     val studentsListJson: String,
+    val availableYearsJson: String = "[]",
+    val availableSemestersJson: String = "[]",
     val controlPointsJson: String = "{}",
     val updatedAt: Long
 )

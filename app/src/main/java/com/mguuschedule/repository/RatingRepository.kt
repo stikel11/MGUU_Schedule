@@ -45,6 +45,16 @@ class RatingRepository(
     }
 
     /**
+     * Загрузка кэша рейтинга из базы данных Room (Strict Cache-First).
+     */
+    suspend fun getCachedOrLatestRating(groupId: String, zachetka: String, yearId: String?, semId: String?): RatingEntity? {
+        if (yearId.isNullOrBlank() || semId.isNullOrBlank()) {
+            return ratingDao?.getLatestRatingCacheForStudent(groupId, zachetka)
+        }
+        return ratingDao?.getRatingCache(groupId, zachetka, yearId, semId)
+    }
+
+    /**
      * Сохранение кэша рейтинга в базу данных Room.
      */
     suspend fun saveCachedRating(entity: RatingEntity) {

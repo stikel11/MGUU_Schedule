@@ -14,6 +14,9 @@ interface RatingDao {
     @Query("SELECT * FROM rating_cache WHERE groupId = :groupId AND (zachetka = :zachetka OR :zachetka = '') AND (yearId = :yearId OR :yearId = '') AND (semId = :semId OR :semId = '') ORDER BY updatedAt DESC LIMIT 1")
     suspend fun getRatingCache(groupId: String, zachetka: String, yearId: String, semId: String): RatingEntity?
 
+    @Query("SELECT * FROM rating_cache WHERE groupId = :groupId AND (:zachetka = '' OR LOWER(zachetka) = LOWER(:zachetka)) ORDER BY updatedAt DESC LIMIT 1")
+    suspend fun getLatestRatingCacheForStudent(groupId: String, zachetka: String): RatingEntity?
+
     @Query("SELECT * FROM rating_cache ORDER BY updatedAt DESC LIMIT 1")
     suspend fun getLatestRatingCache(): RatingEntity?
 

@@ -82,18 +82,17 @@ class RatingViewModel(
         val groupName = prefs.getString("selected_group_name", "25М-УГКП21") ?: "25М-УГКП21"
         val savedZachetka = prefs.getString("selected_zachetka", "") ?: ""
 
-        val currentZachetka = (uiState as? RatingUiState.Success)?.student?.zachetka.orEmpty()
-        val isZachetkaChanged = savedZachetka.isNotBlank() && !savedZachetka.equals(currentZachetka, ignoreCase = true)
-
         viewModelScope.launch {
-            // 1. Попытка сначала сразу показать сохраненный кэш БРС
-            if (uiState is RatingUiState.Loading || isZachetkaChanged) {
-                val cachedEntity = ratingRepository.getCachedRating(groupId, savedZachetka, yearId ?: "", semId ?: "")
+            if (!forceRefresh) {
+                // Строгий Cache-First
+                val cachedEntity = ratingRepository.getCachedOrLatestRating(groupId, savedZachetka, yearId, semId)
                 if (cachedEntity != null) {
                     runCatching {
                         val studentType = object : TypeToken<StudentRating>() {}.type
                         val subjectsType = object : TypeToken<List<SubjectScore>>() {}.type
                         val studentsListType = object : TypeToken<List<StudentRating>>() {}.type
+                        val periodsType = object : TypeToken<List<AcademicPeriod>>() {}.type
+                        val pointsMapType = object : TypeToken<Map<String, List<ControlPoint>>>() {}.type
 
                         val cachedStudentsList: List<StudentRating> = gson.fromJson(cachedEntity.studentsListJson, studentsListType) ?: emptyList()
                         val cachedStudent = if (savedZachetka.isNotBlank() && cachedStudentsList.isNotEmpty()) {
@@ -101,31 +100,44 @@ class RatingViewModel(
                         } else {
                             gson.fromJson(cachedEntity.studentJson, studentType)
                         }
+                        
                         val cachedSubjects: List<SubjectScore> = gson.fromJson(cachedEntity.subjectsJson, subjectsType) ?: emptyList()
-
-                        val pointsMapType = object : TypeToken<Map<String, List<ControlPoint>>>() {}.type
                         val cachedPointsMap: Map<String, List<ControlPoint>> = runCatching {
                             gson.fromJson<Map<String, List<ControlPoint>>>(cachedEntity.controlPointsJson, pointsMapType)
                         }.getOrDefault(emptyMap())
 
+                        val cachedYears: List<AcademicPeriod> = runCatching { gson.fromJson<List<AcademicPeriod>>(cachedEntity.availableYearsJson, periodsType) }.getOrDefault(emptyList())
+                        val cachedSemesters: List<AcademicPeriod> = runCatching { gson.fromJson<List<AcademicPeriod>>(cachedEntity.availableSemestersJson, periodsType) }.getOrDefault(emptyList())
+
                         if (cachedStudent != null || cachedSubjects.isNotEmpty()) {
                             _subjectControlPoints.value = cachedPointsMap
-                            selectedYearId = cachedEntity.yearId.ifBlank { null }
-                            selectedSemId = cachedEntity.semId.ifBlank { null }
+                            
+                            val resolvedYearId = cachedEntity.yearId.ifBlank { null }
+                            val resolvedSemId = cachedEntity.semId.ifBlank { null }
+                            selectedYearId = resolvedYearId
+                            selectedSemId = resolvedSemId
+                            
+                            val updatedYears = cachedYears.map { it.copy(isSelected = it.id == resolvedYearId) }
+                            val updatedSemesters = cachedSemesters.map { it.copy(isSelected = it.id == resolvedSemId) }
+
+                            if (savedZachetka.isBlank() && cachedStudent != null) {
+                                prefs.edit().putString("selected_zachetka", cachedStudent.zachetka).apply()
+                            }
+
                             uiState = RatingUiState.Success(
                                 student = cachedStudent,
                                 subjects = cachedSubjects,
                                 studentsList = cachedStudentsList,
-                                availableYears = emptyList(), // Can be updated if needed
-                                availableSemesters = emptyList() // Can be updated if needed
+                                availableYears = updatedYears,
+                                availableSemesters = updatedSemesters
                             )
-                            AppLogger.d("RATING", "Отображен локальный кэш БРС для ${cachedStudent?.zachetka}")
+                            isRefreshing = false
+                            AppLogger.d("RATING", "Отображен строгий кэш БРС для ${cachedStudent?.zachetka}")
+                            return@launch
                         }
                     }
                 }
             }
-
-            if (!forceRefresh && !isZachetkaChanged && uiState is RatingUiState.Success && yearId == selectedYearId && semId == selectedSemId) return@launch
 
             isRefreshing = true
 
@@ -170,27 +182,27 @@ class RatingViewModel(
                             val activeFallbackSemId = fallbackPage.availableSemesters.find { it.isSelected }?.id
                             selectedYearId = activeFallbackYearId
                             selectedSemId = activeFallbackSemId
-                            
+
                             val fallbackSelectedStudent = if (savedZachetka.isNotBlank()) {
                                 fallbackPage.students.find { it.zachetka.equals(savedZachetka, ignoreCase = true) } ?: fallbackPage.students.first()
                             } else {
                                 fallbackPage.students.first()
                             }
-                            
+
                             prefs.edit().putString("selected_zachetka", fallbackSelectedStudent.zachetka).apply()
-                            
+
                             val fallbackSubjects = ratingRepository.parseStudentSubjects(fallbackSelectedStudent.detailUrl)
-                            val fallbackCache = ratingRepository.getCachedRating(groupId, fallbackSelectedStudent.zachetka, activeFallbackYearId ?: "", activeFallbackSemId ?: "")
-                            
+                            val fallbackCache = ratingRepository.getCachedOrLatestRating(groupId, fallbackSelectedStudent.zachetka, activeFallbackYearId ?: "", activeFallbackSemId ?: "")
+
                             val fallbackPointsMap = if (fallbackCache != null) {
                                 val pointsMapType = object : TypeToken<Map<String, List<ControlPoint>>>() {}.type
                                 runCatching {
                                     gson.fromJson<Map<String, List<ControlPoint>>>(fallbackCache.controlPointsJson, pointsMapType)
                                 }.getOrDefault(emptyMap())
                             } else emptyMap()
-                            
+
                             _subjectControlPoints.value = fallbackPointsMap
-                            
+
                             val cacheEntity = RatingEntity(
                                 groupId = groupId,
                                 zachetka = fallbackSelectedStudent.zachetka,
@@ -199,11 +211,13 @@ class RatingViewModel(
                                 studentJson = gson.toJson(fallbackSelectedStudent),
                                 subjectsJson = gson.toJson(fallbackSubjects),
                                 studentsListJson = gson.toJson(fallbackPage.students),
+                                availableYearsJson = gson.toJson(fallbackPage.availableYears),
+                                availableSemestersJson = gson.toJson(fallbackPage.availableSemesters),
                                 controlPointsJson = gson.toJson(fallbackPointsMap),
                                 updatedAt = System.currentTimeMillis()
                             )
                             ratingRepository.saveCachedRating(cacheEntity)
-                            
+
                             uiState = RatingUiState.Success(
                                 student = fallbackSelectedStudent,
                                 subjects = fallbackSubjects,
@@ -215,7 +229,7 @@ class RatingViewModel(
                             return@launch
                         }
                     }
-                    
+
                     uiState = RatingUiState.Success(
                         student = null,
                         subjects = emptyList(),
@@ -238,7 +252,7 @@ class RatingViewModel(
                 AppLogger.d("RATING", "Запрос рейтинга студента: ${selectedStudent.zachetka} -> ${selectedStudent.detailUrl}")
                 val subjects = ratingRepository.parseStudentSubjects(selectedStudent.detailUrl)
 
-                val previousCache = ratingRepository.getCachedRating(groupId, selectedStudent.zachetka, activeYearId ?: "", activeSemId ?: "")
+                val previousCache = ratingRepository.getCachedOrLatestRating(groupId, selectedStudent.zachetka, activeYearId ?: "", activeSemId ?: "")
                 val mergedPointsMap = if (previousCache != null) {
                     val pointsMapType = object : TypeToken<Map<String, List<ControlPoint>>>() {}.type
                     runCatching {
@@ -257,6 +271,8 @@ class RatingViewModel(
                     studentJson = gson.toJson(selectedStudent),
                     subjectsJson = gson.toJson(subjects),
                     studentsListJson = gson.toJson(students),
+                    availableYearsJson = gson.toJson(years),
+                    availableSemestersJson = gson.toJson(semesters),
                     controlPointsJson = gson.toJson(mergedPointsMap),
                     updatedAt = System.currentTimeMillis()
                 )
@@ -306,7 +322,7 @@ class RatingViewModel(
                 
                 val groupId = prefs.getString("selected_group_id", "000000283") ?: "000000283"
                 val zachetka = prefs.getString("selected_zachetka", "") ?: ""
-                val cachedEntity = ratingRepository.getCachedRating(groupId, zachetka, selectedYearId ?: "", selectedSemId ?: "")
+                val cachedEntity = ratingRepository.getCachedOrLatestRating(groupId, zachetka, selectedYearId, selectedSemId)
                 if (cachedEntity != null) {
                     val updatedEntity = cachedEntity.copy(
                         controlPointsJson = gson.toJson(newMap),
