@@ -8,6 +8,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -141,77 +142,80 @@ fun PhotosStyleRefreshContainer(
 
     val currentOffset = offsetAnim.value
     val pullProgress = (currentOffset / (triggerPx + statusBarTopPx)).coerceIn(0f, 1f)
+    val contentTopCornerRadius = (28.dp * pullProgress).coerceIn(0.dp, 28.dp)
 
     Box(
         modifier = modifier
             .fillMaxSize()
+            .background(
+                if (currentOffset > 1f) MaterialTheme.colorScheme.surfaceContainerHigh
+                else MaterialTheme.colorScheme.background
+            )
             .nestedScroll(nestedScrollConnection)
     ) {
-        // Выезжающий сверху выделенный цветом блок (как шторка/карточка статуса в Google Photos)
+        // 1. Утопленная область индикатора сверху (под оттягиваемым листом контента)
         if (currentOffset > 2f) {
             val blockHeightDp = with(density) { currentOffset.toDp() }
-            Surface(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(blockHeightDp),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                shape = RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp),
-                tonalElevation = 2.dp
+                    .height(blockHeightDp)
+                    .padding(top = with(density) { (statusBarTopPx * pullProgress).toDp() }),
+                contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(top = with(density) { (statusBarTopPx * pullProgress).toDp() }),
-                    contentAlignment = Alignment.Center
-                ) {
-                    AnimatedContent(
-                        targetState = phase == RefreshStatePhase.Done,
-                        transitionSpec = {
-                            (scaleIn(spring(0.8f, 300f)) + fadeIn(tween(180)))
-                                .togetherWith(scaleOut(spring(0.85f, 300f)) + fadeOut(tween(120)))
-                        },
-                        label = "refresh_indicator_content"
-                    ) { isDone ->
-                        if (isDone) {
-                            Surface(
-                                shape = RoundedCornerShape(20.dp),
-                                color = MaterialTheme.colorScheme.secondaryContainer
+                AnimatedContent(
+                    targetState = phase == RefreshStatePhase.Done,
+                    transitionSpec = {
+                        (scaleIn(spring(0.82f, 300f)) + fadeIn(tween(180)))
+                            .togetherWith(scaleOut(spring(0.85f, 300f)) + fadeOut(tween(120)))
+                    },
+                    label = "refresh_indicator_content"
+                ) { isDone ->
+                    if (isDone) {
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.CheckCircle,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Text(
-                                        text = "Данные обновлены",
-                                        style = MaterialTheme.typography.labelLarge,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                                    )
-                                }
+                                Icon(
+                                    imageVector = Icons.Rounded.CheckCircle,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    text = "Данные обновлены",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
                             }
-                        } else {
-                            GoogleExpressivePolygonIndicator(
-                                pullProgress = pullProgress,
-                                isSpinning = phase == RefreshStatePhase.Refreshing
-                            )
                         }
+                    } else {
+                        GoogleExpressivePolygonIndicator(
+                            pullProgress = pullProgress,
+                            isSpinning = phase == RefreshStatePhase.Refreshing
+                        )
                     }
                 }
             }
         }
 
-        // Основной контент экрана, сдвигающийся вниз
-        Box(
+        // 2. Основной экран (лист контента), который при оттягивании вниз получает скругленные ВЕРХНИЕ углы (/‾\)
+        Surface(
             modifier = Modifier
                 .fillMaxSize()
-                .offset { IntOffset(0, currentOffset.roundToInt()) }
+                .offset { IntOffset(0, currentOffset.roundToInt()) },
+            shape = RoundedCornerShape(
+                topStart = contentTopCornerRadius,
+                topEnd = contentTopCornerRadius
+            ),
+            color = MaterialTheme.colorScheme.background,
+            shadowElevation = if (currentOffset > 4f) 6.dp else 0.dp
         ) {
             content()
         }

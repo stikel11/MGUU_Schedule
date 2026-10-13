@@ -12,7 +12,11 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.*
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -181,54 +185,69 @@ fun MainAppScaffold(
 
     val bottomTabRoutes = remember { listOf(Screen.Schedule.route, Screen.Rating.route, Screen.Settings.route) }
 
+    val PredictiveBackEasing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
+
     Box(modifier = Modifier.fillMaxSize()) {
         NavHost(
             navController = navController,
             startDestination = Screen.Schedule.route,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.surfaceContainerLowest),
+            // 1. Прямой переход вперед (или переключение табов по клику на нижнее меню)
             enterTransition = {
                 if (initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes) {
-                    fadeIn(animationSpec = tween(220, easing = FastOutSlowInEasing))
+                    // При клике на таб: новый экран появляется после того, как старый почти исчез (без наложения текстов!)
+                    fadeIn(animationSpec = tween(durationMillis = 160, delayMillis = 60, easing = LinearOutSlowInEasing)) +
+                        scaleIn(initialScale = 0.98f, animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing))
                 } else {
                     slideIntoContainer(
                         towards = AnimatedContentTransitionScope.SlideDirection.Start,
-                        animationSpec = AppMotionScheme.defaultSpatialSpec()
-                    )
+                        initialOffset = { fullWidth -> (fullWidth * 0.25f).toInt() },
+                        animationSpec = tween(durationMillis = 320, easing = PredictiveBackEasing)
+                    ) + fadeIn(animationSpec = tween(durationMillis = 120, easing = LinearEasing)) +
+                        scaleIn(initialScale = 0.95f, animationSpec = tween(durationMillis = 320, easing = PredictiveBackEasing))
                 }
             },
             exitTransition = {
                 if (initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes) {
-                    fadeOut(animationSpec = tween(180, easing = FastOutSlowInEasing))
+                    // При клике на таб: старый экран быстро гаснет первым
+                    fadeOut(animationSpec = tween(durationMillis = 90, easing = FastOutLinearInEasing))
                 } else {
                     scaleOut(
-                        targetScale = 0.94f,
-                        animationSpec = AppMotionScheme.defaultSpatialSpec()
-                    ) + fadeOut(targetAlpha = 0.6f, animationSpec = AppMotionScheme.defaultEffectsSpec())
-                }
-            },
-            popEnterTransition = {
-                if (initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes) {
-                    fadeIn(animationSpec = tween(220, easing = FastOutSlowInEasing))
-                } else {
-                    scaleIn(
-                        initialScale = 0.94f,
-                        animationSpec = AppMotionScheme.defaultSpatialSpec()
-                    ) + fadeIn(initialAlpha = 0.6f, animationSpec = AppMotionScheme.defaultEffectsSpec())
-                }
-            },
-            popExitTransition = {
-                if (initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes) {
-                    fadeOut(animationSpec = tween(180, easing = FastOutSlowInEasing))
-                } else {
-                    // Плотный уход карточки вправо с легким уменьшением БЕЗ прозрачности посередине свайпа:
-                    slideOutOfContainer(
-                        towards = AnimatedContentTransitionScope.SlideDirection.End,
-                        animationSpec = AppMotionScheme.defaultSpatialSpec()
-                    ) + scaleOut(
                         targetScale = 0.92f,
-                        animationSpec = AppMotionScheme.defaultSpatialSpec()
+                        animationSpec = tween(durationMillis = 320, easing = PredictiveBackEasing)
+                    ) + slideOutOfContainer(
+                        towards = AnimatedContentTransitionScope.SlideDirection.Start,
+                        targetOffset = { fullWidth -> (fullWidth * 0.12f).toInt() },
+                        animationSpec = tween(durationMillis = 320, easing = PredictiveBackEasing)
                     )
                 }
+            },
+            // 2. ЕДИНЫЙ ЭТАЛОННЫЙ PREDICTIVE BACK ДЛЯ ВСЕХ ЭКРАНОВ (включая возврат с Рейтинга/Настроек и из Деталей пары)
+            popEnterTransition = {
+                scaleIn(
+                    initialScale = 0.92f,
+                    animationSpec = tween(durationMillis = 340, easing = PredictiveBackEasing)
+                ) + slideIntoContainer(
+                    towards = AnimatedContentTransitionScope.SlideDirection.End,
+                    initialOffset = { fullWidth -> (fullWidth * 0.15f).toInt() },
+                    animationSpec = tween(durationMillis = 340, easing = PredictiveBackEasing)
+                )
+            },
+            popExitTransition = {
+                // Во время свайпа пальцем (0..230ms) экран 100% непрозрачен, уменьшается до 0.86f и сдвигается за пальцем.
+                // И только после отпускания пальца (последние 110ms) плавно гаснет!
+                scaleOut(
+                    targetScale = 0.86f,
+                    animationSpec = tween(durationMillis = 340, easing = PredictiveBackEasing)
+                ) + slideOutOfContainer(
+                    towards = AnimatedContentTransitionScope.SlideDirection.End,
+                    targetOffset = { fullWidth -> (fullWidth * 0.28f).toInt() },
+                    animationSpec = tween(durationMillis = 340, easing = PredictiveBackEasing)
+                ) + fadeOut(
+                    animationSpec = tween(durationMillis = 110, delayMillis = 230, easing = LinearEasing)
+                )
             }
         ) {
                 composable(Screen.Schedule.route) {
