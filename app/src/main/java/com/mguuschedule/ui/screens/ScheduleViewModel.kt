@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import com.mguuschedule.util.SearchEngine
 import kotlinx.coroutines.launch
@@ -134,6 +135,7 @@ class ScheduleViewModel(
 
     private val networkMonitor = NetworkMonitor(application)
     val isOnline: StateFlow<Boolean> = networkMonitor.isOnline
+        .onStart { emit(networkMonitor.getCurrentConnectivity()) }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
@@ -189,7 +191,8 @@ class ScheduleViewModel(
     }
 
     fun refreshSchedule() {
-        val groupId = currentGroupId ?: return
+        val groupId = currentGroupId ?: appPrefs.getString("selected_group_id", null) ?: return
+        currentGroupId = groupId
         val groupName = appPrefs.getString("selected_group_name", "") ?: ""
         val cacheDaysCount = appPrefs.getInt("cache_days_count", 30)
 
@@ -211,8 +214,12 @@ class ScheduleViewModel(
                         
                         hasChangesInLastRefresh = if (previousDayLessons.isEmpty()) false else previousDayLessons != newDayLessons
                         
-                        uiState = ScheduleUiState.Success(newLessons)
-                        scheduleUpcomingRemindersFromDb()
+                        if (newLessons.isEmpty() && lessonsForSelectedDay.value.isNotEmpty()) {
+                            AppLogger.d("SCHEDULE_TRACE", "Портал вернул пустой список, но локальный кэш жив. Оставляем кэш.")
+                        } else {
+                            uiState = ScheduleUiState.Success(newLessons)
+                            scheduleUpcomingRemindersFromDb()
+                        }
                         AppLogger.d("SCHEDULE_TRACE", ">>> 3. Успешно загружено пар: ${newLessons.size}")
                     } catch (e: Exception) {
                         AppLogger.e("SCHEDULE_TRACE", "ОШИБКА ОБРАБОТКИ ПАР: ${e.message}", e)
@@ -222,13 +229,13 @@ class ScheduleViewModel(
                     }
                 }.onFailure { e ->
                     AppLogger.e("SCHEDULE_TRACE", "ОШИБКА ЗАГРУЗКИ: ${e.message}", e)
-                    if (lessonsForSelectedDay.value.isEmpty()) {
+                    if (lessonsForSelectedDay.value.isEmpty() && uiState !is ScheduleUiState.Success) {
                         uiState = ScheduleUiState.Error(e.message ?: "Ошибка подключения")
                     }
                 }
             } catch (e: Exception) {
                 AppLogger.e("SCHEDULE_TRACE", "НЕОЖИДАННАЯ ОШИБКА: ${e.message}", e)
-                if (lessonsForSelectedDay.value.isEmpty()) {
+                if (lessonsForSelectedDay.value.isEmpty() && uiState !is ScheduleUiState.Success) {
                     uiState = ScheduleUiState.Error(e.message ?: "Ошибка загрузки расписания")
                 }
             } finally {

@@ -103,16 +103,9 @@ fun ScheduleScreen(
         ) { innerPadding ->
             PhotosStyleRefreshContainer(
                 isRefreshing = isRefreshing,
-                onRefresh = { 
-                    if (isOnline) {
-                        haptic.gestureThreshold()
-                        viewModel.refreshSchedule() 
-                    } else {
-                        haptic.error()
-                        scope.launch {
-                            snackbarHostState.showSnackbar("Нет подключения к интернету. Показана сохраненная копия")
-                        }
-                    }
+                onRefresh = {
+                    haptic.gestureThreshold()
+                    viewModel.refreshSchedule()
                 },
                 modifier = Modifier
                     .fillMaxSize()

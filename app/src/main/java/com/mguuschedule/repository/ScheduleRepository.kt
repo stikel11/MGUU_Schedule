@@ -25,34 +25,33 @@ class ScheduleRepository(private val context: Context, private val database: App
     private val prefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
     
     private fun fetchAndParsePortalUrl(url: String): List<LessonEntity> {
-        return try {
-            val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
-                override fun checkClientTrusted(chain: Array<X509Certificate>?, authType: String?) {}
-                override fun checkServerTrusted(chain: Array<X509Certificate>?, authType: String?) {}
-                override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
-            })
-            val sslContext = SSLContext.getInstance("SSL").apply {
-                init(null, trustAllCerts, SecureRandom())
-            }
-
-            val doc = Jsoup.connect(url)
-                .sslSocketFactory(sslContext.socketFactory)
-                .userAgent("Mozilla/5.0 (Linux; Android 14; Pixel 9 Pro) AppleWebKit/537.36")
-                .referrer("https://portal.mguu.ru/")
-                .header("Accept-Language", "ru-RU,ru;q=0.9")
-                .timeout(20_000)
-                .get()
-
-            AppLogger.d("PORTAL_PARSER", "Title страницы: ${doc.title()}")
-            val lessons = ScheduleParser.parse(doc.html())
-            Log.d("PORTAL_PARSER", "Успешно спарсено пар с $url: ${lessons.size}")
-            AppLogger.d("PORTAL_PARSER", "Успешно спарсено пар с $url: ${lessons.size}")
-            lessons
-        } catch (e: Exception) {
-            Log.e("PORTAL_PARSER", "Ошибка запроса к $url: ${e.message}", e)
-            AppLogger.e("PORTAL_PARSER", "Ошибка запроса к $url: ${e.message}", e)
-            emptyList()
+        val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
+            override fun checkClientTrusted(chain: Array<X509Certificate>?, authType: String?) {}
+            override fun checkServerTrusted(chain: Array<X509Certificate>?, authType: String?) {}
+            override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
+        })
+        val sslContext = SSLContext.getInstance("SSL").apply {
+            init(null, trustAllCerts, SecureRandom())
         }
+
+        val doc = Jsoup.connect(url)
+            .sslSocketFactory(sslContext.socketFactory)
+            .userAgent("Mozilla/5.0 (Linux; Android 14; Pixel 9 Pro) AppleWebKit/537.36")
+            .referrer("https://portal.mguu.ru/")
+            .header("Accept-Language", "ru-RU,ru;q=0.9")
+            .timeout(20_000)
+            .get()
+
+        AppLogger.d("PORTAL_PARSER", "Title страницы: ${doc.title()}")
+        val lessons = ScheduleParser.parse(doc.html())
+        Log.d("PORTAL_PARSER", "Успешно спарсено пар с $url: ${lessons.size}")
+        AppLogger.d("PORTAL_PARSER", "Успешно спарсено пар с $url: ${lessons.size}")
+        
+        if (lessons.isEmpty() && doc.html().contains("ОШИБКА", ignoreCase = true)) {
+            throw Exception("Портал вернул страницу с ошибкой")
+        }
+        
+        return lessons
     }
 
     suspend fun fetchScheduleFromPortal(
@@ -72,7 +71,7 @@ class ScheduleRepository(private val context: Context, private val database: App
         Log.d("PORTAL_PARSER", "Запрос к первичному URL ($primaryPage): $primaryUrl")
         AppLogger.d("PORTAL_PARSER", "Запрос к первичному URL ($primaryPage): $primaryUrl")
 
-        var lessons = fetchAndParsePortalUrl(primaryUrl)
+        var lessons = runCatching { fetchAndParsePortalUrl(primaryUrl) }.getOrDefault(emptyList())
 
         if (lessons.isEmpty()) {
             val fallbackPage = if (level == EducationLevel.BACHELOR) "scheduler2.php" else "scheduler1.php"
@@ -90,6 +89,12 @@ class ScheduleRepository(private val context: Context, private val database: App
             prefs.edit().putString("last_sync_time", nowStr).apply()
 
             AppLogger.d("PORTAL_PARSER", "Обновлено расписание в БД (очистка + вставка транзакцией)")
+        } else {
+            val cachedLessons = dao.getAllLessons()
+            if (cachedLessons.isNotEmpty()) {
+                AppLogger.d("PORTAL_PARSER", "Портал вернул пустой список, оставляем локальный кэш: ${cachedLessons.size} пар")
+                lessons = cachedLessons
+            }
         }
         lessons
     }

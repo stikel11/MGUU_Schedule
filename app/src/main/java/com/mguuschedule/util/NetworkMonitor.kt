@@ -22,7 +22,14 @@ class NetworkMonitor(context: Context) {
             }
 
             override fun onLost(network: Network) {
-                trySend(false)
+                // We shouldn't blindly trust onLost if another network took over
+                trySend(getCurrentConnectivity())
+            }
+
+            override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+                if (networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
+                    trySend(true)
+                }
             }
         }
 
@@ -39,7 +46,7 @@ class NetworkMonitor(context: Context) {
         }
     }.distinctUntilChanged()
 
-    private fun getCurrentConnectivity(): Boolean {
+    fun getCurrentConnectivity(): Boolean {
         val network = connectivityManager.activeNetwork
         val capabilities = connectivityManager.getNetworkCapabilities(network)
         return capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) ?: false
