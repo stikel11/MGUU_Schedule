@@ -99,6 +99,14 @@ class ScheduleViewModel(
             initialValue = emptySet()
         )
 
+    val lessonAddonSummaries: StateFlow<Map<String, com.mguuschedule.repository.LessonAddonSummary>> = scheduleRepository.getLessonAddonSummariesFlow()
+        .flowOn(Dispatchers.Default)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyMap()
+        )
+
     private val ratingDao = AppDatabase.getDatabase(application).ratingDao()
 
     val lessonControlPointsFlow: StateFlow<Map<String, List<ControlPoint>>> = combine(

@@ -46,3 +46,16 @@ data class LessonMaterialEntity(
     val sizeBytes: Long? = null,
     val createdAt: Long = System.currentTimeMillis()
 )
+
+@androidx.compose.runtime.Immutable
+data class LessonAddonSummary(
+    val lessonKey: String,
+    val noteText: String? = null,
+    val tasks: List<LessonTaskEntity> = emptyList(),
+    val materials: List<LessonMaterialEntity> = emptyList()
+) {
+    val hasNote: Boolean get() = !noteText.isNullOrBlank()
+    val hasTasks: Boolean get() = tasks.isNotEmpty()
+    val hasMaterials: Boolean get() = materials.isNotEmpty()
+    val hasAny: Boolean get() = hasNote || hasTasks || hasMaterials
+}

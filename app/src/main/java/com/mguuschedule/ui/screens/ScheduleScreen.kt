@@ -2,7 +2,8 @@ package com.mguuschedule.ui.screens
 
 import android.content.Context
 import androidx.compose.animation.*
-
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
@@ -12,7 +13,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.Notes
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -233,6 +236,7 @@ fun ScheduleScreen(
                                 } else if (lessonsForTargetDate.isEmpty()) {
                                     EmptySchedule()
                                 } else {
+                                    val addonsMap by viewModel.lessonAddonSummaries.collectAsState()
                                     lessonsForTargetDate.forEachIndexed { index, lesson ->
                                         val lessonKey = "${lesson.date}_${lesson.number}_${lesson.startTime}"
                                         val linkedCps = lessonControlPointsMap[lessonKey] ?: emptyList()
@@ -242,6 +246,7 @@ fun ScheduleScreen(
                                             currentTimeProvider = { currentTimeState.value },
                                             currentDate = currentDate,
                                             hasAddon = activeAddonLessonKeys.contains(lessonKey),
+                                            addonSummary = addonsMap[lessonKey],
                                             controlPoints = linkedCps,
                                             onClick = { onLessonClick(lesson) },
                                             modifier = Modifier.padding(horizontal = 16.dp)
@@ -336,6 +341,7 @@ fun LessonItemWithBreak(
     currentTimeProvider: () -> LocalTime,
     currentDate: LocalDate,
     hasAddon: Boolean = false,
+    addonSummary: com.mguuschedule.repository.LessonAddonSummary? = null,
     controlPoints: List<ControlPoint> = emptyList(),
     onClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -352,6 +358,7 @@ fun LessonItemWithBreak(
             currentTimeProvider = currentTimeProvider, 
             currentDate = currentDate,
             hasAddon = hasAddon,
+            addonSummary = addonSummary,
             controlPoints = controlPoints,
             onClick = onClick
         )
@@ -402,6 +409,7 @@ fun LessonRow(
     currentTimeProvider: () -> LocalTime,
     currentDate: LocalDate,
     hasAddon: Boolean = false,
+    addonSummary: com.mguuschedule.repository.LessonAddonSummary? = null,
     controlPoints: List<ControlPoint> = emptyList(),
     onClick: () -> Unit
 ) {
@@ -431,6 +439,24 @@ fun LessonRow(
         MaterialTheme.colorScheme.onSurface
     }
 
+    val hasFirstBlock = addonSummary?.hasTasks == true || addonSummary?.hasNote == true
+    val hasSecondBlock = addonSummary?.hasMaterials == true
+    var revealStep by remember(lesson.id, lesson.date) { mutableIntStateOf(0) }
+
+    LaunchedEffect(lesson.id, lesson.date, hasFirstBlock, hasSecondBlock) {
+        if (hasFirstBlock || hasSecondBlock) {
+            revealStep = 0
+            delay(110L)
+            revealStep = 1
+            if (hasSecondBlock) {
+                delay(150L)
+                revealStep = 2
+            }
+        } else {
+            revealStep = 0
+        }
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -438,7 +464,7 @@ fun LessonRow(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.Top
     ) {
-        // Compact 64dp Left Time Column (Secondary visual weight)
+        // Compact 64dp Left Time Column
         Column(
             modifier = Modifier
                 .width(64.dp)
@@ -460,14 +486,16 @@ fun LessonRow(
             )
         }
         
-        // Dominant Lesson Card (80-85% screen width, 16dp horizontal & 14-16dp vertical padding)
+        // Dominant Lesson Card
         Surface(
             modifier = Modifier
                 .weight(1f)
-                .fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
+                .fillMaxWidth()
+                .animateContentSize(animationSpec = spring(dampingRatio = 0.82f, stiffness = 260f)),
+            shape = RoundedCornerShape(24.dp),
             color = containerColor,
             contentColor = contentColor,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
             shadowElevation = if (status == LessonStatus.CURRENT) 3.dp else 1.dp,
             tonalElevation = if (status == LessonStatus.CURRENT) 3.dp else 1.dp,
             onClick = onClick
@@ -535,7 +563,6 @@ fun LessonRow(
                         val hasControlPoint = controlPoints.isNotEmpty()
                         val typeText = if (hasControlPoint) "$typeName • КТ" else typeName
 
-                        // Lesson Type Badge
                         Surface(
                             shape = CircleShape,
                             color = if (status == LessonStatus.CURRENT) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.tertiaryContainer,
@@ -572,7 +599,7 @@ fun LessonRow(
                 
                 Spacer(modifier = Modifier.height(10.dp))
                 
-                // Primary Focus: Subject Title (titleMedium/titleLarge, Bold, 22sp line height)
+                // Subject Title
                 Text(
                     text = lesson.title, 
                     style = MaterialTheme.typography.titleMedium, 
@@ -602,44 +629,171 @@ fun LessonRow(
                     
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        // Room Badge (Standard unclickable element)
-                        Surface(
-                            shape = CircleShape,
-                            color = if (status == LessonStatus.CURRENT) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.surfaceContainerHigh
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surfaceContainerHighest
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                            Icon(
+                                imageVector = Icons.Rounded.Place, 
+                                contentDescription = null, 
+                                modifier = Modifier.size(14.dp), 
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = roomFormatted, 
+                                style = MaterialTheme.typography.labelMedium, 
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+                
+                // --- BENTO ADDONS FOOTER: BLOCK 1 (Tasks & Notes) ---
+                AnimatedVisibility(
+                    visible = revealStep >= 1 && (hasFirstBlock || hasSecondBlock),
+                    enter = expandVertically(spring(0.82f, 260f)) + fadeIn(),
+                    exit = shrinkVertically(spring(0.85f, 260f)) + fadeOut()
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+                            thickness = 1.dp
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        if (addonSummary?.hasTasks == true) {
+                            val tasks = addonSummary.tasks
+                            val firstTask = tasks.firstOrNull { !it.isCompleted } ?: tasks.first()
+
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.LocationOn, 
-                                    contentDescription = null, 
-                                    modifier = Modifier.size(14.dp), 
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = roomFormatted, 
-                                    style = MaterialTheme.typography.labelMedium, 
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.TaskAlt,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Text(
+                                        text = "Задача: ${firstTask.title}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f, fill = false)
+                                    )
+                                    if (tasks.size > 1) {
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = MaterialTheme.colorScheme.primaryContainer
+                                        ) {
+                                            Text(
+                                                text = "+${tasks.size - 1}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
 
-                        if (hasAddon) {
-                            Spacer(modifier = Modifier.width(6.dp))
+                        if (addonSummary?.hasNote == true) {
+                            if (addonSummary.hasTasks) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                            }
                             Surface(
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.primaryContainer
+                                shape = RoundedCornerShape(16.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.EditNote,
-                                    contentDescription = "Есть заметка или задача",
-                                    modifier = Modifier.padding(4.dp).size(12.dp),
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Rounded.Notes,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Text(
+                                        text = addonSummary.noteText ?: "",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // --- BENTO ADDONS FOOTER: BLOCK 2 (Materials) ---
+                AnimatedVisibility(
+                    visible = revealStep >= 2 && hasSecondBlock,
+                    enter = expandVertically(spring(0.82f, 260f)) + fadeIn(),
+                    exit = shrinkVertically(spring(0.85f, 260f)) + fadeOut()
+                ) {
+                    val materials = addonSummary?.materials ?: emptyList()
+                    val displayed = materials.take(2)
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        displayed.forEachIndexed { idx, mat ->
+                            val isSecondWithMore = idx == 1 && materials.size > 2
+                            val icon = when (mat.type) {
+                                "URL", "LINK" -> Icons.Rounded.Link
+                                "IMAGE" -> Icons.Rounded.Image
+                                else -> Icons.Rounded.AttachFile
+                            }
+                            val displayName = mat.fileName ?: mat.title
+
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = icon,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                    Text(
+                                        text = if (isSecondWithMore) "$displayName (+${materials.size - 2})" else displayName,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
                             }
                         }
                     }

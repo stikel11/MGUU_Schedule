@@ -60,4 +60,10 @@ interface LessonAddonsDao {
         )
     """)
     fun getActiveAddonLessonKeysFlow(): Flow<List<String>>
+
+    @Query("SELECT * FROM lesson_notes WHERE text != ''")
+    fun getAllNotesFlow(): Flow<List<LessonNoteEntity>>
+
+    @Query("SELECT * FROM lesson_materials ORDER BY createdAt DESC")
+    fun getAllMaterialsFlow(): Flow<List<LessonMaterialEntity>>
 }

@@ -7,6 +7,8 @@ import com.mguuschedule.model.LessonEntity
 import com.mguuschedule.util.AppLogger
 import com.mguuschedule.util.ScheduleParser
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.withContext
 import org.jsoup.Jsoup
 import java.net.URLEncoder
@@ -214,4 +216,24 @@ class ScheduleRepository(private val context: Context, private val database: App
 
     // Active Addons Overview
     fun getActiveAddonLessonKeysFlow() = addonsDao.getActiveAddonLessonKeysFlow()
+
+    fun getLessonAddonSummariesFlow(): Flow<Map<String, LessonAddonSummary>> = combine(
+        addonsDao.getAllNotesFlow(),
+        addonsDao.getAllTasksFlow(),
+        addonsDao.getAllMaterialsFlow()
+    ) { notes, tasks, materials ->
+        val notesMap = notes.associateBy { it.lessonKey }
+        val tasksMap = tasks.groupBy { it.lessonKey }
+        val materialsMap = materials.groupBy { it.lessonKey }
+
+        val allKeys = notesMap.keys + tasksMap.keys + materialsMap.keys
+        allKeys.associateWith { key ->
+            LessonAddonSummary(
+                lessonKey = key,
+                noteText = notesMap[key]?.text,
+                tasks = tasksMap[key] ?: emptyList(),
+                materials = materialsMap[key] ?: emptyList()
+            )
+        }
+    }
 }
