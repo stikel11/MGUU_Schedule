@@ -1,12 +1,14 @@
 package com.mguuschedule.ui.screens
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,8 +24,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -31,15 +33,20 @@ import com.mguuschedule.model.EducationLevel
 import com.mguuschedule.model.Group
 import com.mguuschedule.ui.components.CollapsibleScreenTitle
 import com.mguuschedule.ui.components.StatusBarBlurOverlay
-import com.mguuschedule.ui.components.StatusBarScrim
-import com.mguuschedule.ui.components.TopScrimProtection
 import com.mguuschedule.util.rememberHapticFeedback
-import dev.chrisbanes.haze.HazeDefaults
-import dev.chrisbanes.haze.HazeTint
-import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.launch
+import org.json.JSONObject
+
+private fun getItemShape(index: Int, total: Int): Shape {
+    if (total <= 1) return RoundedCornerShape(24.dp)
+    return when (index) {
+        0 -> RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp, bottomStart = 6.dp, bottomEnd = 6.dp)
+        total - 1 -> RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp, bottomStart = 24.dp, bottomEnd = 24.dp)
+        else -> RoundedCornerShape(6.dp)
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,7 +65,6 @@ fun ProfileScreen(
     val remindersEnabled = viewModel.remindersEnabled
     val reminderTime = viewModel.reminderTimeMinutes
     val changesEnabled = viewModel.changesEnabled
-    val cacheDaysCount = viewModel.cacheDaysCount
 
     val themeMode = viewModel.themeMode
     val dynamicColorEnabled = viewModel.dynamicColorEnabled
@@ -67,8 +73,8 @@ fun ProfileScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
-    var showThemeDialog by remember { mutableStateOf(false) }
-    var showShareStyleDialog by remember { mutableStateOf(false) }
+    var showThemeSheet by remember { mutableStateOf(false) }
+    var showShareStyleSheet by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -96,7 +102,6 @@ fun ProfileScreen(
 
     var showGroupSheet by remember { mutableStateOf(false) }
     var showZachetkaSheet by remember { mutableStateOf(false) }
-    var showCachePeriodSheet by remember { mutableStateOf(false) }
     var showReminderTimeSheet by remember { mutableStateOf(false) }
     var showClearScheduleDialog by remember { mutableStateOf(false) }
 
@@ -143,13 +148,14 @@ fun ProfileScreen(
                     CollapsibleScreenTitle(title = "Настройки")
                 }
 
-                // Section 1: Учебная группа
+                // Секция 1: Профиль студента
                 item {
-                    SettingsContainer(title = "Учебная группа") {
+                    SettingsContainer(title = "Профиль студента") {
                         SettingsClickItem(
                             title = "Моя группа",
                             subtitle = selectedGroup?.name ?: "Не выбрана",
                             icon = Icons.Default.School,
+                            shape = getItemShape(0, 2),
                             onClick = {
                                 haptic.lightTick()
                                 showGroupSheet = true
@@ -160,6 +166,7 @@ fun ProfileScreen(
                             title = "Номер зачетной книжки",
                             subtitle = if (selectedZachetka.isNotBlank()) selectedZachetka else "Нажмите, чтобы выбрать зачетку",
                             icon = Icons.Default.Badge,
+                            shape = getItemShape(1, 2),
                             onClick = {
                                 haptic.lightTick()
                                 viewModel.loadZachetkasForSelectedGroup()
@@ -169,14 +176,16 @@ fun ProfileScreen(
                     }
                 }
 
-                // Section 2: Уведомления
+                // Секция 2: Уведомления
                 item {
+                    val notifTotalCount = if (remindersEnabled) 4 else 3
                     SettingsContainer(title = "Уведомления") {
                         SettingsSwitchItem(
                             title = "Напоминания о парах",
                             subtitle = "Уведомление перед началом занятия",
                             icon = Icons.Default.NotificationsActive,
                             checked = remindersEnabled,
+                            shape = getItemShape(0, notifTotalCount),
                             onCheckedChange = {
                                 haptic.toggle(it)
                                 if (it && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -186,24 +195,29 @@ fun ProfileScreen(
                             }
                         )
 
-                        val alpha = if (remindersEnabled) 1f else 0.38f
-                        SettingsClickItem(
-                            title = "Время до начала",
-                            subtitle = "$reminderTime минут",
-                            icon = Icons.Default.AccessTime,
-                            enabled = remindersEnabled,
-                            contentAlpha = alpha,
-                            onClick = {
-                                haptic.lightTick()
-                                showReminderTimeSheet = true
-                            }
-                        )
+                        AnimatedVisibility(
+                            visible = remindersEnabled,
+                            enter = expandVertically() + fadeIn(),
+                            exit = shrinkVertically() + fadeOut()
+                        ) {
+                            SettingsClickItem(
+                                title = "Время до начала",
+                                subtitle = "$reminderTime минут",
+                                icon = Icons.Default.AccessTime,
+                                shape = getItemShape(1, 4),
+                                onClick = {
+                                    haptic.lightTick()
+                                    showReminderTimeSheet = true
+                                }
+                            )
+                        }
 
                         SettingsSwitchItem(
                             title = "Оповещения об изменениях",
                             subtitle = "Проверка замен и переносов аудиторий",
                             icon = Icons.Default.Update,
                             checked = changesEnabled,
+                            shape = getItemShape(if (remindersEnabled) 2 else 1, notifTotalCount),
                             onCheckedChange = {
                                 haptic.toggle(it)
                                 if (it && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -218,6 +232,7 @@ fun ProfileScreen(
                             subtitle = "Интерактивное уведомление с таймером во время пары",
                             icon = Icons.Default.Timer,
                             checked = viewModel.liveUpdatesEnabled,
+                            shape = getItemShape(if (remindersEnabled) 3 else 2, notifTotalCount),
                             onCheckedChange = {
                                 haptic.toggle(it)
                                 viewModel.updateLiveUpdatesEnabled(it)
@@ -226,37 +241,30 @@ fun ProfileScreen(
                     }
                 }
 
-                // Section 3: Внешний вид
+                // Секция 3: Внешний вид
                 item {
+                    val appearanceTotal = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) 3 else 2
+                    val themeSubtitle = when (themeMode) {
+                        1 -> "Светлая"
+                        2 -> "Тёмная"
+                        else -> "Системная"
+                    }
+                    val shareStyleSubtitle = when (shareCardStyle) {
+                        1 -> "Тёмный (M3 Dark)"
+                        2 -> "Светлый (M3 Light)"
+                        3 -> "Чёрно-белый (Минимализм)"
+                        else -> "Тематический (Material You)"
+                    }
+
                     SettingsContainer(title = "Внешний вид") {
-                        val themeSubtitle = when (themeMode) {
-                            1 -> "Светлая"
-                            2 -> "Тёмная"
-                            else -> "Системная"
-                        }
                         SettingsClickItem(
                             title = "Тема оформления",
                             subtitle = themeSubtitle,
                             icon = Icons.Default.Palette,
+                            shape = getItemShape(0, appearanceTotal),
                             onClick = {
                                 haptic.lightTick()
-                                showThemeDialog = true
-                            }
-                        )
-
-                        val shareStyleSubtitle = when (shareCardStyle) {
-                            1 -> "Тёмный (M3 Dark)"
-                            2 -> "Светлый (M3 Light)"
-                            3 -> "Чёрно-белый (Минимализм)"
-                            else -> "Тематический (Material You)"
-                        }
-                        SettingsClickItem(
-                            title = "Стиль постера расписания",
-                            subtitle = shareStyleSubtitle,
-                            icon = Icons.Default.Share,
-                            onClick = {
-                                haptic.lightTick()
-                                showShareStyleDialog = true
+                                showThemeSheet = true
                             }
                         )
 
@@ -266,6 +274,7 @@ fun ProfileScreen(
                                 subtitle = "Использовать цвета из обоев рабочего стола",
                                 icon = Icons.Default.ColorLens,
                                 checked = dynamicColorEnabled,
+                                shape = getItemShape(1, appearanceTotal),
                                 onCheckedChange = {
                                     haptic.toggle(it)
                                     viewModel.updateDynamicColorEnabled(it)
@@ -274,25 +283,27 @@ fun ProfileScreen(
                         }
 
                         SettingsClickItem(
-                            title = "Возможности приложения",
-                            subtitle = "Показать интерактивное мини-обучение",
-                            icon = Icons.Default.AutoAwesome,
+                            title = "Стиль постера расписания",
+                            subtitle = shareStyleSubtitle,
+                            icon = Icons.Default.Share,
+                            shape = getItemShape(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) 2 else 1, appearanceTotal),
                             onClick = {
                                 haptic.lightTick()
-                                onOpenFeatureTour()
+                                showShareStyleSheet = true
                             }
                         )
                     }
                 }
 
-                // Section 4: Данные
+                // Секция 4: Данные и память
                 item {
-                    SettingsContainer(title = "Данные") {
+                    SettingsContainer(title = "Данные и память") {
                         SettingsClickItem(
                             title = "Расписание",
                             subtitle = if (isForcedLoading) "Обновление расписания..." else "${storageState.statusText} • Обновлено: ${storageState.lastUpdated}",
                             icon = Icons.Default.Sync,
                             enabled = !isForcedLoading,
+                            shape = getItemShape(0, 2),
                             onClick = {
                                 haptic.click()
                                 scheduleViewModel.refreshSchedule()
@@ -307,8 +318,8 @@ fun ProfileScreen(
                             subtitle = "Удалит только сохраненные пары расписания",
                             icon = Icons.Default.DeleteSweep,
                             enabled = !isForcedLoading && storageState.lessonsCount > 0,
-                            titleColor = MaterialTheme.colorScheme.error,
-                            iconTint = MaterialTheme.colorScheme.error,
+                            isDestructive = true,
+                            shape = getItemShape(1, 2),
                             onClick = {
                                 haptic.error()
                                 showClearScheduleDialog = true
@@ -317,10 +328,12 @@ fun ProfileScreen(
                     }
                 }
 
-                // Section 5: Обновления
+                // Секция 5: О приложении
                 item {
                     val updateState = viewModel.updateState
                     val context = LocalContext.current
+                    var versionTapCount by remember { mutableIntStateOf(0) }
+                    var lastVersionTapTime by remember { mutableLongStateOf(0L) }
 
                     val updateSubtitle = when (updateState) {
                         is UpdateUiState.Idle -> "Нажмите для проверки наличия обновлений"
@@ -339,12 +352,14 @@ fun ProfileScreen(
                         else -> Icons.Default.SystemUpdate
                     }
 
-                    SettingsContainer(title = "Обновления") {
+                    SettingsContainer(title = "О приложении") {
+                        // 0: Обновления
                         SettingsClickItem(
                             title = if (updateState is UpdateUiState.UpdateAvailable) "Скачать обновление" else "Проверить обновления",
                             subtitle = updateSubtitle,
                             icon = updateIcon,
                             enabled = updateState !is UpdateUiState.Checking && updateState !is UpdateUiState.Downloading,
+                            shape = getItemShape(0, 5),
                             onClick = {
                                 haptic.click()
                                 when (updateState) {
@@ -360,20 +375,25 @@ fun ProfileScreen(
                                 }
                             }
                         )
-                    }
-                }
 
-                // Section 6: О приложении
-                item {
-                    val context = LocalContext.current
-                    var versionTapCount by remember { mutableIntStateOf(0) }
-                    var lastVersionTapTime by remember { mutableLongStateOf(0L) }
+                        // 1: Интерактивное мини-обучение
+                        SettingsClickItem(
+                            title = "Возможности приложения",
+                            subtitle = "Показать интерактивное мини-обучение",
+                            icon = Icons.Default.AutoAwesome,
+                            shape = getItemShape(1, 5),
+                            onClick = {
+                                haptic.lightTick()
+                                onOpenFeatureTour()
+                            }
+                        )
 
-                    SettingsContainer(title = "О приложении") {
+                        // 2: Версия
                         SettingsClickItem(
                             title = "МГУУ Расписание",
                             subtitle = "Версия ${com.mguuschedule.BuildConfig.VERSION_NAME} beta",
                             icon = Icons.Default.Info,
+                            shape = getItemShape(2, 5),
                             onClick = {
                                 val now = System.currentTimeMillis()
                                 if (now - lastVersionTapTime > 2000L) {
@@ -402,10 +422,12 @@ fun ProfileScreen(
                             }
                         )
 
+                        // 3: GitHub
                         SettingsClickItem(
                             title = "GitHub",
                             subtitle = "Исходный код проекта",
                             icon = Icons.Default.Code,
+                            shape = getItemShape(3, 5),
                             onClick = {
                                 haptic.click()
                                 runCatching {
@@ -419,10 +441,12 @@ fun ProfileScreen(
                             }
                         )
 
+                        // 4: Обратная связь
                         SettingsClickItem(
                             title = "Обратная связь",
                             subtitle = "Сообщить о проблеме или связаться с разработчиком",
                             icon = Icons.Default.Feedback,
+                            shape = getItemShape(4, 5),
                             onClick = {
                                 haptic.click()
                                 runCatching {
@@ -438,7 +462,7 @@ fun ProfileScreen(
                     }
                 }
 
-                // Section 7: Для разработчиков (показывается только если включен режим разработчика)
+                // Секция 6: Для разработчиков
                 if (viewModel.isDeveloperMode) {
                     item {
                         SettingsContainer(title = "Для разработчиков") {
@@ -446,6 +470,7 @@ fun ProfileScreen(
                                 title = "Панель отладки",
                                 subtitle = "Инструменты тестирования и логи",
                                 icon = Icons.Default.BugReport,
+                                shape = getItemShape(0, 1),
                                 onClick = {
                                     haptic.lightTick()
                                     onNavigateToDebug()
@@ -457,30 +482,29 @@ fun ProfileScreen(
             }
         }
 
-        // Переиспользуемая полоса градиента в зоне статус-бара
         StatusBarBlurOverlay()
 
-        if (showThemeDialog) {
-            ThemeSelectionDialog(
+        if (showThemeSheet) {
+            ThemeSelectionSheet(
                 currentMode = themeMode,
                 onModeSelected = {
                     haptic.selection()
                     viewModel.updateThemeMode(it)
-                    showThemeDialog = false
+                    showThemeSheet = false
                 },
-                onDismiss = { showThemeDialog = false }
+                onDismiss = { showThemeSheet = false }
             )
         }
 
-        if (showShareStyleDialog) {
-            ShareStyleSelectionDialog(
+        if (showShareStyleSheet) {
+            ShareStyleSelectionSheet(
                 currentStyle = shareCardStyle,
                 onStyleSelected = {
                     haptic.selection()
                     viewModel.updateShareCardStyle(it)
-                    showShareStyleDialog = false
+                    showShareStyleSheet = false
                 },
-                onDismiss = { showShareStyleDialog = false }
+                onDismiss = { showShareStyleSheet = false }
             )
         }
 
@@ -546,18 +570,6 @@ fun ProfileScreen(
             )
         }
 
-        if (showCachePeriodSheet) {
-            CachePeriodBottomSheet(
-                currentValue = cacheDaysCount,
-                onValueSelected = {
-                    haptic.selection()
-                    viewModel.updateCacheDaysCount(it)
-                    showCachePeriodSheet = false
-                },
-                onDismiss = { showCachePeriodSheet = false }
-            )
-        }
-
         if (showReminderTimeSheet) {
             ReminderTimeBottomSheet(
                 currentValue = reminderTime,
@@ -587,6 +599,35 @@ fun ZachetkaSelectionSheet(
     var showManualInput by remember { mutableStateOf(false) }
     var manualText by remember { mutableStateOf(selectedZachetka) }
     val haptic = rememberHapticFeedback()
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("mguu_prefs", Context.MODE_PRIVATE) }
+
+    // Проверка мгновенного кэша зачеток из SharedPreferences
+    val cachedZachetkas = remember(groupName, uiState) {
+        if (uiState is ZachetkasUiState.Success) {
+            uiState.zachetkas
+        } else {
+            val groupId = prefs.getString("selected_group_id", null)
+            val json = if (!groupId.isNullOrEmpty()) prefs.getString("rating_latest_instant_cache_$groupId", null) else null
+            if (!json.isNullOrEmpty()) {
+                runCatching {
+                    val jsonObject = JSONObject(json)
+                    val studentsArray = jsonObject.optJSONArray("students")
+                    if (studentsArray != null) {
+                        val list = mutableListOf<String>()
+                        for (i in 0 until studentsArray.length()) {
+                            val st = studentsArray.optJSONObject(i)
+                            val z = st?.optString("zachetka")
+                            if (!z.isNullOrBlank()) {
+                                list.add(z)
+                            }
+                        }
+                        list
+                    } else emptyList()
+                }.getOrDefault(emptyList())
+            } else emptyList()
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -645,99 +686,103 @@ fun ZachetkaSelectionSheet(
                 )
 
                 Box(modifier = Modifier.heightIn(max = 380.dp, min = 160.dp)) {
-                    when (uiState) {
-                        is ZachetkasUiState.Loading -> {
+                    val currentList = if (uiState is ZachetkasUiState.Success) uiState.zachetkas else cachedZachetkas
+
+                    if (currentList.isNotEmpty()) {
+                        val filtered = remember(currentList, searchQuery) {
+                            currentList.filter { it.contains(searchQuery, ignoreCase = true) }
+                        }
+
+                        if (filtered.isEmpty()) {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    CircularProgressIndicator()
-                                    Spacer(modifier = Modifier.height(12.dp))
-                                    Text("Загрузка списка зачеток...", style = MaterialTheme.typography.bodyMedium)
-                                }
+                                Text("Зачетки не найдены", style = MaterialTheme.typography.bodyMedium)
                             }
-                        }
-
-                        is ZachetkasUiState.Error -> {
-                            Column(
+                        } else {
+                            LazyColumn(
                                 modifier = Modifier.fillMaxSize(),
-                                verticalArrangement = Arrangement.Center,
-                                horizontalAlignment = Alignment.CenterHorizontally
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                                contentPadding = PaddingValues(bottom = 16.dp)
                             ) {
-                                Text(
-                                    uiState.message,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Button(onClick = onRetry) { Text("Повторить") }
-                                    OutlinedButton(onClick = { showManualInput = true }) { Text("Ввести вручную") }
-                                }
-                            }
-                        }
+                                items(filtered, key = { it }) { zachetka ->
+                                    val isSelected = zachetka.equals(selectedZachetka, ignoreCase = true)
 
-                        is ZachetkasUiState.Success -> {
-                            val filtered = remember(uiState.zachetkas, searchQuery) {
-                                uiState.zachetkas.filter { it.contains(searchQuery, ignoreCase = true) }
-                            }
-
-                            if (filtered.isEmpty()) {
-                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    Text("Зачетки не найдены", style = MaterialTheme.typography.bodyMedium)
-                                }
-                            } else {
-                                LazyColumn(
-                                    modifier = Modifier.fillMaxSize(),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                                    contentPadding = PaddingValues(bottom = 16.dp)
-                                ) {
-                                    items(filtered, key = { it }) { zachetka ->
-                                        val isSelected = zachetka.equals(selectedZachetka, ignoreCase = true)
-
-                                        Surface(
-                                            onClick = {
-                                                haptic.click()
-                                                onZachetkaSelected(zachetka)
-                                            },
-                                            shape = RoundedCornerShape(16.dp),
-                                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
-                                            modifier = Modifier.fillMaxWidth()
+                                    Surface(
+                                        onClick = {
+                                            haptic.click()
+                                            onZachetkaSelected(zachetka)
+                                        },
+                                        shape = RoundedCornerShape(16.dp),
+                                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
                                         ) {
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.SpaceBetween
-                                            ) {
-                                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                                    Icon(
-                                                        Icons.Default.Badge,
-                                                        contentDescription = null,
-                                                        tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary,
-                                                        modifier = Modifier.size(20.dp)
-                                                    )
-                                                    Spacer(modifier = Modifier.width(12.dp))
-                                                    Text(
-                                                        text = zachetka,
-                                                        style = MaterialTheme.typography.bodyLarge,
-                                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
-                                                    )
-                                                }
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(
+                                                    Icons.Default.Badge,
+                                                    contentDescription = null,
+                                                    tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(12.dp))
+                                                Text(
+                                                    text = zachetka,
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
 
-                                                if (isSelected) {
-                                                    Icon(
-                                                        Icons.Default.Check,
-                                                        contentDescription = null,
-                                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                                        modifier = Modifier.size(20.dp)
-                                                    )
-                                                }
+                                            if (isSelected) {
+                                                Icon(
+                                                    Icons.Default.Check,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
                                             }
                                         }
                                     }
                                 }
                             }
+                        }
+                    } else {
+                        when (uiState) {
+                            is ZachetkasUiState.Loading -> {
+                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        CircularProgressIndicator()
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Text("Загрузка списка зачеток...", style = MaterialTheme.typography.bodyMedium)
+                                    }
+                                }
+                            }
+
+                            is ZachetkasUiState.Error -> {
+                                Column(
+                                    modifier = Modifier.fillMaxSize(),
+                                    verticalArrangement = Arrangement.Center,
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        uiState.message,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Button(onClick = onRetry) { Text("Повторить") }
+                                        OutlinedButton(onClick = { showManualInput = true }) { Text("Ввести вручную") }
+                                    }
+                                }
+                            }
+
+                            else -> {}
                         }
                     }
                 }
@@ -799,18 +844,12 @@ fun SettingsContainer(
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(start = 8.dp, bottom = 8.dp)
+            modifier = Modifier.padding(start = 12.dp, bottom = 8.dp)
         )
-        Surface(
-            shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerLow,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier.padding(vertical = 8.dp),
-                content = content
-            )
-        }
+        Column(
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+            content = content
+        )
     }
 }
 
@@ -819,31 +858,47 @@ fun SettingsClickItem(
     title: String,
     subtitle: String,
     icon: ImageVector,
+    shape: Shape = RoundedCornerShape(24.dp),
     enabled: Boolean = true,
     contentAlpha: Float = 1f,
-    titleColor: Color = MaterialTheme.colorScheme.onSurface,
-    iconTint: Color = MaterialTheme.colorScheme.primary,
+    isDestructive: Boolean = false,
     onClick: () -> Unit
 ) {
+    val iconBgColor = if (isDestructive) MaterialTheme.colorScheme.errorContainer
+    else MaterialTheme.colorScheme.surfaceContainerHighest
+    val iconTint = if (isDestructive) MaterialTheme.colorScheme.error
+    else MaterialTheme.colorScheme.primary
+    val titleColor = if (isDestructive) MaterialTheme.colorScheme.error
+    else MaterialTheme.colorScheme.onSurface
+
     Surface(
         onClick = onClick,
         enabled = enabled,
-        color = Color.Transparent,
+        shape = shape,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
-                .padding(horizontal = 20.dp, vertical = 14.dp)
+                .padding(horizontal = 16.dp, vertical = 12.dp)
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = iconTint.copy(alpha = contentAlpha),
-                modifier = Modifier.size(24.dp)
-            )
-            Spacer(modifier = Modifier.width(16.dp))
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(iconBgColor.copy(alpha = contentAlpha)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = iconTint.copy(alpha = contentAlpha),
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
@@ -873,99 +928,181 @@ fun SettingsSwitchItem(
     subtitle: String,
     icon: ImageVector,
     checked: Boolean,
+    shape: Shape = RoundedCornerShape(24.dp),
     onCheckedChange: (Boolean) -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onCheckedChange(!checked) }
-            .padding(horizontal = 20.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
+    Surface(
+        onClick = { onCheckedChange(!checked) },
+        shape = shape,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(24.dp)
-        )
-        Spacer(modifier = Modifier.width(16.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 16.dp, vertical = 10.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange
             )
         }
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange
-        )
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ThemeSelectionDialog(
+fun ThemeSelectionSheet(
     currentMode: Int,
     onModeSelected: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Тема оформления", fontWeight = FontWeight.Bold) },
-        text = {
-            Column {
-                ThemeOptionRow("Системная", currentMode == 0) { onModeSelected(0) }
-                ThemeOptionRow("Светлая", currentMode == 1) { onModeSelected(1) }
-                ThemeOptionRow("Тёмная", currentMode == 2) { onModeSelected(2) }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Отмена") }
-        }
+    val options = listOf(
+        0 to "Системная",
+        1 to "Светлая",
+        2 to "Тёмная"
     )
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        dragHandle = { BottomSheetDefaults.DragHandle() }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 10.dp)
+        ) {
+            Text(
+                text = "Тема оформления",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+
+            options.forEach { (mode, label) ->
+                val isSelected = mode == currentMode
+                Surface(
+                    onClick = { onModeSelected(mode) },
+                    shape = RoundedCornerShape(16.dp),
+                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = isSelected,
+                            onClick = null
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ShareStyleSelectionDialog(
+fun ShareStyleSelectionSheet(
     currentStyle: Int,
     onStyleSelected: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Стиль постера расписания", fontWeight = FontWeight.Bold) },
-        text = {
-            Column {
-                ThemeOptionRow("Тематический (Material You)", currentStyle == 0) { onStyleSelected(0) }
-                ThemeOptionRow("Тёмный (M3 Dark)", currentStyle == 1) { onStyleSelected(1) }
-                ThemeOptionRow("Светлый (M3 Light)", currentStyle == 2) { onStyleSelected(2) }
-                ThemeOptionRow("Чёрно-белый (Минимализм)", currentStyle == 3) { onStyleSelected(3) }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Отмена") }
-        }
+    val options = listOf(
+        0 to "Тематический (Material You)",
+        1 to "Тёмный (M3 Dark)",
+        2 to "Светлый (M3 Light)",
+        3 to "Чёрно-белый (Минимализм)"
     )
-}
 
-@Composable
-fun ThemeOptionRow(text: String, selected: Boolean, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        dragHandle = { BottomSheetDefaults.DragHandle() }
     ) {
-        RadioButton(selected = selected, onClick = onClick)
-        Spacer(modifier = Modifier.width(12.dp))
-        Text(text = text, style = MaterialTheme.typography.bodyLarge)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 10.dp)
+        ) {
+            Text(
+                text = "Стиль постера расписания",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+
+            options.forEach { (style, label) ->
+                val isSelected = style == currentStyle
+                Surface(
+                    onClick = { onStyleSelected(style) },
+                    shape = RoundedCornerShape(16.dp),
+                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = isSelected,
+                            onClick = null
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(24.dp))
+        }
     }
 }
 
@@ -1166,64 +1303,6 @@ fun GroupSelectionSheet(
                     }
                 }
             }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun CachePeriodBottomSheet(
-    currentValue: Int,
-    onValueSelected: (Int) -> Unit,
-    onDismiss: () -> Unit
-) {
-    val options = listOf(7, 14, 30, 60, 90)
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-        dragHandle = { BottomSheetDefaults.DragHandle() }
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 10.dp)
-        ) {
-            Text(
-                text = "Период кэширования",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
-
-            options.forEach { days ->
-                val isSelected = days == currentValue
-                Surface(
-                    onClick = { onValueSelected(days) },
-                    shape = RoundedCornerShape(16.dp),
-                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = isSelected,
-                            onClick = null
-                        )
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Text(
-                            text = "$days дней",
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                        )
-                    }
-                }
-            }
-            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }
