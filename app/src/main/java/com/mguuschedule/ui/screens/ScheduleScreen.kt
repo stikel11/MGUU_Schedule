@@ -435,7 +435,7 @@ fun LessonRow(
     val containerColor = if (status == LessonStatus.CURRENT) {
         MaterialTheme.colorScheme.primaryContainer
     } else {
-        MaterialTheme.colorScheme.surfaceContainer
+        MaterialTheme.colorScheme.surfaceContainerLow
     }
     
     val contentColor = if (status == LessonStatus.CURRENT) {

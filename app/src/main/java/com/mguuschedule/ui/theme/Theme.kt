@@ -130,61 +130,25 @@ fun MGUUScheduleTheme(
     }
 
     val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) {
-                dynamicDarkColorScheme(context)
+        !darkTheme -> {
+            val baseLight = if (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                dynamicLightColorScheme(LocalContext.current)
             } else {
-                val rawLight = dynamicLightColorScheme(context)
-                val primaryTone = rawLight.primary
-
-                rawLight.copy(
-                    background = androidx.compose.ui.graphics.lerp(Color.White, primaryTone, 0.055f),
-                    surface = androidx.compose.ui.graphics.lerp(Color.White, primaryTone, 0.055f),
-                    onBackground = rawLight.onSurface,
-                    onSurface = rawLight.onSurface,
-                    onSurfaceVariant = rawLight.onSurfaceVariant,
-
-                    surfaceContainerLowest = Color.White,
-                    surfaceContainerLow = Color.White,
-                    surfaceContainer = androidx.compose.ui.graphics.lerp(Color.White, primaryTone, 0.05f),
-                    surfaceVariant = Color.White,
-                    surfaceContainerHigh = androidx.compose.ui.graphics.lerp(Color.White, primaryTone, 0.085f),
-                    surfaceContainerHighest = androidx.compose.ui.graphics.lerp(Color.White, primaryTone, 0.13f),
-
-                    primary = rawLight.primary,
-                    onPrimary = rawLight.onPrimary,
-                    primaryContainer = rawLight.primaryContainer,
-                    onPrimaryContainer = rawLight.onPrimaryContainer,
-                    secondary = rawLight.secondary,
-                    onSecondary = rawLight.onSecondary,
-                    secondaryContainer = rawLight.secondaryContainer,
-                    onSecondaryContainer = rawLight.onSecondaryContainer,
-                    tertiary = rawLight.primary,
-                    onTertiary = rawLight.onPrimary,
-                    tertiaryContainer = rawLight.primaryContainer,
-                    onTertiaryContainer = rawLight.onPrimaryContainer,
-
-                    outline = rawLight.outline,
-                    outlineVariant = androidx.compose.ui.graphics.lerp(rawLight.onSurface, Color.White, 0.78f)
-                )
+                LightColorScheme
             }
-        }
-        darkTheme -> DarkColorScheme
-        else -> {
-            val primaryTone = LightColorScheme.primary
-            LightColorScheme.copy(
-                background = androidx.compose.ui.graphics.lerp(Color.White, primaryTone, 0.055f),
-                surface = androidx.compose.ui.graphics.lerp(Color.White, primaryTone, 0.055f),
+            val primaryTone = baseLight.primary
+            baseLight.copy(
+                background = androidx.compose.ui.graphics.lerp(Color.White, primaryTone, 0.06f),
+                surface = androidx.compose.ui.graphics.lerp(Color.White, primaryTone, 0.06f),
                 surfaceContainerLowest = Color.White,
                 surfaceContainerLow = Color.White,
-                surfaceContainer = androidx.compose.ui.graphics.lerp(Color.White, primaryTone, 0.05f),
-                surfaceVariant = Color.White,
-                surfaceContainerHigh = androidx.compose.ui.graphics.lerp(Color.White, primaryTone, 0.085f),
-                surfaceContainerHighest = androidx.compose.ui.graphics.lerp(Color.White, primaryTone, 0.13f),
-                outlineVariant = androidx.compose.ui.graphics.lerp(LightColorScheme.onSurface, Color.White, 0.78f)
+                surfaceContainer = Color.White,
+                surfaceContainerHigh = Color.White,
+                surfaceContainerHighest = androidx.compose.ui.graphics.lerp(Color.White, primaryTone, 0.11f),
+                outlineVariant = androidx.compose.ui.graphics.lerp(baseLight.onSurface, Color.White, 0.80f)
             )
         }
+        else -> DarkColorScheme
     }
 
     MaterialTheme(
