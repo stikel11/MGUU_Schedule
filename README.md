@@ -96,7 +96,7 @@ App also available on [RuStore](https://www.rustore.ru/catalog/app/com.mguusched
 
 ## Development Status
 
-Current version: 0.58 Beta
+Current version: 0.65 Beta
 
 The project is currently in beta.
 
