@@ -11,9 +11,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.Notes
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.rounded.*
+import androidx.compose.ui.text.style.TextDecoration
+import java.time.format.TextStyle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,6 +31,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -120,6 +127,12 @@ class LessonDetailViewModel(
                 }
             }.getOrNull()
             repository.addTask(lessonKey, title, epoch)
+        }
+    }
+
+    fun addTask(title: String, deadlineEpoch: Long? = null) {
+        viewModelScope.launch {
+            repository.addTask(lessonKey, title, deadlineEpoch)
         }
     }
 
@@ -507,6 +520,7 @@ fun MaterialItemRow(
 ) {
     val isImage = remember(item) { isImageMaterial(item) }
     val thumbnailBitmap = if (isImage) rememberImageThumbnail(item.uriOrUrl, targetSizePx = 160) else null
+    val tintedBg = androidx.compose.ui.graphics.lerp(MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.primary, 0.07f)
 
     val metaText = remember(item) {
         if (item.type == "URL") {
@@ -520,8 +534,8 @@ fun MaterialItemRow(
 
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer,
+        shape = RoundedCornerShape(18.dp),
+        color = tintedBg,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -533,7 +547,7 @@ fun MaterialItemRow(
             if (isImage && thumbnailBitmap != null) {
                 Surface(
                     shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.size(44.dp)
+                    modifier = Modifier.size(40.dp)
                 ) {
                     Image(
                         bitmap = thumbnailBitmap,
@@ -544,16 +558,21 @@ fun MaterialItemRow(
                 }
             } else {
                 Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    modifier = Modifier.size(36.dp)
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    modifier = Modifier.size(40.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = if (isImage) "IMG" else item.type,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        val icon = when (item.type) {
+                            "URL" -> Icons.Rounded.Link
+                            "IMAGE" -> Icons.Rounded.Image
+                            else -> Icons.Rounded.AttachFile
+                        }
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
@@ -565,7 +584,8 @@ fun MaterialItemRow(
                 Text(
                     text = item.title,
                     style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -580,7 +600,7 @@ fun MaterialItemRow(
 
             IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
                 Icon(
-                    Icons.Default.Delete,
+                    Icons.Rounded.DeleteOutline,
                     contentDescription = "Удалить материал",
                     tint = MaterialTheme.colorScheme.error,
                     modifier = Modifier.size(18.dp)
@@ -599,7 +619,8 @@ fun TaskItemRow(
     val deadlineFormatted = remember(task.deadlineEpoch) {
         task.deadlineEpoch?.let {
             val date = Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
-            DateTimeFormatter.ofPattern("dd.MM.yyyy").format(date)
+            val monthName = date.month.getDisplayName(TextStyle.SHORT, Locale("ru"))
+            "до ${date.dayOfMonth} $monthName"
         }
     }
 
@@ -608,34 +629,55 @@ fun TaskItemRow(
         else task.deadlineEpoch < System.currentTimeMillis()
     }
 
+    val tintedBg = if (isOverdue) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
+    else androidx.compose.ui.graphics.lerp(MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.primary, 0.07f)
+
+    val formattedTitle = remember(task.title) {
+        task.title.replaceFirstChar { it.uppercase() }
+    }
+
     Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = if (isOverdue) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f) else MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = RoundedCornerShape(18.dp),
+        color = tintedBg,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 12.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                Checkbox(
-                    checked = task.isCompleted,
-                    onCheckedChange = onToggle
-                )
-                Spacer(modifier = Modifier.width(8.dp))
+                Surface(
+                    onClick = { onToggle(!task.isCompleted) },
+                    shape = CircleShape,
+                    color = Color.Transparent,
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = if (task.isCompleted) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked,
+                            contentDescription = null,
+                            tint = if (task.isCompleted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(10.dp))
+
                 Column {
                     Text(
-                        text = task.title,
-                        style = MaterialTheme.typography.bodyLarge,
+                        text = formattedTitle,
+                        style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium,
+                        textDecoration = if (task.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
                         color = if (task.isCompleted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
                     )
                     if (deadlineFormatted != null) {
                         Text(
-                            text = "Дедлайн: $deadlineFormatted",
+                            text = deadlineFormatted,
                             style = MaterialTheme.typography.labelSmall,
                             color = if (isOverdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -643,11 +685,12 @@ fun TaskItemRow(
                 }
             }
 
-            IconButton(onClick = onDelete) {
+            IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
                 Icon(
-                    Icons.Default.DeleteOutline,
+                    Icons.Rounded.DeleteOutline,
                     contentDescription = "Удалить задачу",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }
@@ -742,6 +785,12 @@ fun LessonDetailScreen(
     val roomFormatted = remember(lesson.room) {
         formatClassroom(lesson.room)
     }
+    val cleanRoom = remember(lesson.room) {
+        lesson.room.replace(Regex("^(?i)ауд\\.?\\s*"), "").trim()
+    }
+    val roomDisplay = remember(cleanRoom) {
+        if (cleanRoom.isNotEmpty()) "Ауд. $cleanRoom" else "Аудитория не указана"
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
@@ -779,123 +828,125 @@ fun LessonDetailScreen(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(28.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.1f)
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        // Top Row: Type Badge & Time
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = typeFormatted,
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Text(
-                        text = lesson.title,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        lineHeight = 26.sp
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f))
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Time & Room Row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column {
-                            Text(
-                                text = "Время проведения",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                            )
-                            Text(
-                                text = "${lesson.startTime} — ${lesson.endTime}",
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        }
-
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                text = "Аудитория",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                            )
-                            Text(
-                                text = roomFormatted.replace("Ауд. ", "").replace("Ауд.", ""),
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Teacher Row
-                    Column {
-                        Text(
-                            text = "Преподаватель",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
-                            modifier = Modifier.padding(bottom = 2.dp)
-                        )
-                        if (lesson.teacher.isNotBlank() && lesson.teacher != "—") {
                             Surface(
-                                onClick = { 
-                                    haptic.lightTick()
-                                    onTeacherClick(lesson.teacher) 
-                                },
-                                shape = RoundedCornerShape(8.dp),
-                                color = Color.Transparent,
-                                modifier = Modifier.offset(x = (-8).dp)
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
                             ) {
                                 Text(
-                                    text = lesson.teacher,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    text = typeFormatted,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
                                 )
                             }
-                        } else {
+
                             Text(
-                                text = "Не указан",
-                                style = MaterialTheme.typography.bodyLarge,
+                                text = "${lesson.startTime} – ${lesson.endTime}",
+                                style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                color = MaterialTheme.colorScheme.onSurface
                             )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Middle Block: Subject Title
+                        Text(
+                            text = lesson.title,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            lineHeight = 26.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Bottom Row: Teacher & Room Badge
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (lesson.teacher.isNotBlank() && lesson.teacher != "—") {
+                                Surface(
+                                    onClick = { 
+                                        haptic.lightTick()
+                                        onTeacherClick(lesson.teacher) 
+                                    },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color.Transparent,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(end = 12.dp)
+                                        .offset(x = (-8).dp)
+                                ) {
+                                    Text(
+                                        text = lesson.teacher,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    text = "Не указан",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                    modifier = Modifier.weight(1f).padding(end = 12.dp)
+                                )
+                            }
+
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Place,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        text = roomDisplay,
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
                         }
                     }
                 }
-            }
+
+                Spacer(modifier = Modifier.height(14.dp))
 
             // Control Points Section (if linked to this lesson)
             if (linkedControlPoints.isNotEmpty()) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
                     Column(modifier = Modifier.padding(18.dp)) {
                         Row(
@@ -965,9 +1016,15 @@ fun LessonDetailScreen(
 
             // Notes Section
             Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        haptic.lightTick()
+                        showNoteDialog = true
+                    },
+                shape = RoundedCornerShape(26.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 Column(modifier = Modifier.padding(18.dp)) {
                     Row(
@@ -976,13 +1033,21 @@ fun LessonDetailScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Default.EditNote,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.AutoMirrored.Rounded.Notes,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
                             Text(
                                 text = "Заметка к паре",
                                 style = MaterialTheme.typography.titleMedium,
@@ -990,47 +1055,70 @@ fun LessonDetailScreen(
                             )
                         }
 
-                        IconButton(
+                        Surface(
                             onClick = {
                                 haptic.lightTick()
                                 showNoteDialog = true
                             },
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
                             modifier = Modifier.size(36.dp)
                         ) {
-                            Icon(
-                                imageVector = if (noteEntity?.text.isNullOrBlank()) Icons.Default.Add else Icons.Default.Edit,
-                                contentDescription = "Редактировать заметку",
-                                modifier = Modifier.size(20.dp),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = if (noteEntity?.text.isNullOrBlank()) Icons.Default.Add else Icons.Default.Edit,
+                                    contentDescription = "Редактировать заметку",
+                                    modifier = Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
                         }
                     }
 
-                    if (noteEntity?.text.isNullOrBlank()) {
-                        Text(
-                            text = "Добавить комментарий...",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                            modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
-                        )
-                    } else {
-                        Text(
-                            text = noteEntity!!.text,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
-                        )
+                    val tintedBg = androidx.compose.ui.graphics.lerp(
+                        MaterialTheme.colorScheme.surface,
+                        MaterialTheme.colorScheme.primary,
+                        0.07f
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Surface(
+                        onClick = {
+                            haptic.lightTick()
+                            showNoteDialog = true
+                        },
+                        shape = RoundedCornerShape(18.dp),
+                        color = tintedBg,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (noteEntity?.text.isNullOrBlank()) {
+                            Text(
+                                text = "Нажмите, чтобы добавить заметку к занятию...",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
+                            )
+                        } else {
+                            Text(
+                                text = noteEntity!!.text,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
+                            )
+                        }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             // Tasks Section
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+                shape = RoundedCornerShape(26.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 Column(modifier = Modifier.padding(18.dp)) {
                     Row(
@@ -1039,13 +1127,21 @@ fun LessonDetailScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Default.CheckCircleOutline,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Rounded.TaskAlt,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
                             Text(
                                 text = "Задачки к паре",
                                 style = MaterialTheme.typography.titleMedium,
@@ -1053,31 +1149,36 @@ fun LessonDetailScreen(
                             )
                         }
 
-                        IconButton(
+                        Surface(
                             onClick = {
                                 haptic.lightTick()
                                 showTaskDialog = true
                             },
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
                             modifier = Modifier.size(36.dp)
                         ) {
-                            Icon(
-                                Icons.Default.Add,
-                                contentDescription = "Добавить задачу",
-                                modifier = Modifier.size(20.dp),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Default.Add,
+                                    contentDescription = "Добавить задачу",
+                                    modifier = Modifier.size(20.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
                         }
                     }
 
                     if (taskList.isEmpty()) {
+                        Spacer(modifier = Modifier.height(10.dp))
                         Text(
                             text = "Нет задач к этой паре",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                            modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
+                            modifier = Modifier.padding(vertical = 4.dp)
                         )
                     } else {
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             taskList.forEach { task ->
                                 TaskItemRow(
@@ -1097,13 +1198,14 @@ fun LessonDetailScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             // Materials Section
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+                shape = RoundedCornerShape(26.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 Column(modifier = Modifier.padding(18.dp)) {
                     Row(
@@ -1112,13 +1214,21 @@ fun LessonDetailScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Default.Folder,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Rounded.Folder,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
                             Text(
                                 text = "Материалы к паре",
                                 style = MaterialTheme.typography.titleMedium,
@@ -1126,22 +1236,27 @@ fun LessonDetailScreen(
                             )
                         }
 
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            IconButton(
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Surface(
                                 onClick = {
                                     haptic.lightTick()
                                     showUrlDialog = true
                                 },
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surfaceContainerHighest,
                                 modifier = Modifier.size(36.dp)
                             ) {
-                                Icon(
-                                    Icons.Default.Link,
-                                    contentDescription = "Ссылка",
-                                    modifier = Modifier.size(20.dp),
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Rounded.Link,
+                                        contentDescription = "Ссылка",
+                                        modifier = Modifier.size(20.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
                             }
-                            IconButton(
+
+                            Surface(
                                 onClick = {
                                     haptic.lightTick()
                                     filePickerLauncher.launch(
@@ -1152,14 +1267,18 @@ fun LessonDetailScreen(
                                         )
                                     )
                                 },
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surfaceContainerHighest,
                                 modifier = Modifier.size(36.dp)
                             ) {
-                                Icon(
-                                    Icons.Default.AttachFile,
-                                    contentDescription = "Файл",
-                                    modifier = Modifier.size(20.dp),
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Rounded.AttachFile,
+                                        contentDescription = "Файл",
+                                        modifier = Modifier.size(20.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
                             }
                         }
                     }
@@ -1295,122 +1414,341 @@ fun LessonDetailScreen(
 
     StatusBarBlurOverlay()
 
-    // Note Dialog
+    val bentoTextFieldColors = TextFieldDefaults.colors(
+        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        focusedIndicatorColor = MaterialTheme.colorScheme.primary,
+        unfocusedIndicatorColor = Color.Transparent,
+        disabledIndicatorColor = Color.Transparent
+    )
+    val bentoFieldShape = RoundedCornerShape(18.dp)
+
+    // Note Sheet
     if (showNoteDialog) {
         var textValue by remember { mutableStateOf(noteEntity?.text.orEmpty()) }
-        AlertDialog(
+        ModalBottomSheet(
             onDismissRequest = { showNoteDialog = false },
-            title = { Text("Заметка к паре", fontWeight = FontWeight.Bold) },
-            text = {
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            dragHandle = { BottomSheetDefaults.DragHandle() }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .imePadding()
+                    .padding(start = 24.dp, end = 24.dp, bottom = 24.dp)
+            ) {
+                Text(
+                    text = "Заметка к паре",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+
                 OutlinedTextField(
                     value = textValue,
                     onValueChange = { textValue = it },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 140.dp),
                     placeholder = { Text("Введите текст заметки...") },
-                    shape = RoundedCornerShape(16.dp)
+                    shape = bentoFieldShape,
+                    minLines = 4,
+                    maxLines = 8,
+                    trailingIcon = {
+                        if (textValue.isNotEmpty()) {
+                            IconButton(onClick = { textValue = "" }) {
+                                Icon(Icons.Default.Close, contentDescription = "Очистить")
+                            }
+                        }
+                    },
+                    colors = bentoTextFieldColors
                 )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    haptic.click()
-                    viewModel.saveNote(textValue)
-                    showNoteDialog = false
-                }) { Text("Сохранить") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showNoteDialog = false }) { Text("Отмена") }
-            }
-        )
-    }
 
-    // Task Dialog
-    if (showTaskDialog) {
-        var titleValue by remember { mutableStateOf("") }
-        var deadlineValue by remember { mutableStateOf("") }
+                Spacer(modifier = Modifier.height(20.dp))
 
-        AlertDialog(
-            onDismissRequest = { showTaskDialog = false },
-            title = { Text("Новая задача", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(
-                        value = titleValue,
-                        onValueChange = { titleValue = it },
-                        label = { Text("Заголовок задачи") },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    OutlinedTextField(
-                        value = deadlineValue,
-                        onValueChange = { deadlineValue = it },
-                        label = { Text("Дедлайн (например: 2025-09-30)") },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                Button(
+                    onClick = {
+                        haptic.click()
+                        viewModel.saveNote(textValue)
+                        showNoteDialog = false
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
+                    shape = RoundedCornerShape(26.dp)
+                ) {
+                    Text(
+                        text = "Сохранить",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
                     )
                 }
-            },
-            confirmButton = {
-                TextButton(
+            }
+        }
+    }
+
+    // Task Sheet
+    if (showTaskDialog) {
+        var titleValue by remember { mutableStateOf("") }
+        var selectedDeadlineOption by remember { mutableIntStateOf(0) }
+        var customDeadlineDate by remember { mutableStateOf<LocalDate?>(null) }
+        var showDatePicker by remember { mutableStateOf(false) }
+
+        val lessonDate = lesson.date
+        val tomorrowDate = remember { LocalDate.now().plusDays(1) }
+
+        val selectedDeadlineEpoch = remember(selectedDeadlineOption, customDeadlineDate, lessonDate, tomorrowDate) {
+            when (selectedDeadlineOption) {
+                1 -> lessonDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                2 -> tomorrowDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                3 -> customDeadlineDate?.atStartOfDay(ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
+                else -> null
+            }
+        }
+
+        ModalBottomSheet(
+            onDismissRequest = { showTaskDialog = false },
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            dragHandle = { BottomSheetDefaults.DragHandle() }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .imePadding()
+                    .padding(start = 24.dp, end = 24.dp, bottom = 24.dp)
+            ) {
+                Text(
+                    text = "Новая задача",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+
+                OutlinedTextField(
+                    value = titleValue,
+                    onValueChange = { titleValue = it },
+                    placeholder = { Text("Заголовок задачи...") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = bentoFieldShape,
+                    singleLine = true,
+                    colors = bentoTextFieldColors
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    text = "Срок выполнения",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = selectedDeadlineOption == 0,
+                        onClick = { selectedDeadlineOption = 0 },
+                        label = { Text("Без срока") },
+                        shape = CircleShape
+                    )
+
+                    FilterChip(
+                        selected = selectedDeadlineOption == 1,
+                        onClick = { selectedDeadlineOption = 1 },
+                        label = { Text("Ко дню пары (${lessonDate.dayOfMonth} ${lessonDate.month.getDisplayName(TextStyle.SHORT, Locale("ru"))})") },
+                        shape = CircleShape
+                    )
+
+                    FilterChip(
+                        selected = selectedDeadlineOption == 2,
+                        onClick = { selectedDeadlineOption = 2 },
+                        label = { Text("Завтра") },
+                        shape = CircleShape
+                    )
+
+                    val customLabel = if (customDeadlineDate != null && selectedDeadlineOption == 3) {
+                        "${customDeadlineDate!!.dayOfMonth} ${customDeadlineDate!!.month.getDisplayName(TextStyle.SHORT, Locale("ru"))}"
+                    } else {
+                        "Выбрать дату..."
+                    }
+
+                    FilterChip(
+                        selected = selectedDeadlineOption == 3,
+                        onClick = {
+                            selectedDeadlineOption = 3
+                            showDatePicker = true
+                        },
+                        label = { Text(customLabel) },
+                        leadingIcon = { Icon(Icons.Default.CalendarToday, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                        shape = CircleShape
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Button(
                     onClick = {
                         if (titleValue.isNotBlank()) {
                             haptic.click()
-                            viewModel.addTask(titleValue, deadlineValue.ifBlank { null })
+                            viewModel.addTask(titleValue, selectedDeadlineEpoch)
                             showTaskDialog = false
                         }
-                    }
-                ) { Text("Добавить") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showTaskDialog = false }) { Text("Отмена") }
-            }
-        )
-    }
-
-    // URL Dialog
-    if (showUrlDialog) {
-        var titleValue by remember { mutableStateOf("") }
-        var urlValue by remember { mutableStateOf("https://") }
-
-        AlertDialog(
-            onDismissRequest = { showUrlDialog = false },
-            title = { Text("Прикрепить ссылку", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(
-                        value = titleValue,
-                        onValueChange = { titleValue = it },
-                        label = { Text("Название") },
-                        placeholder = { Text("Например: Презентация к лекции") },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    OutlinedTextField(
-                        value = urlValue,
-                        onValueChange = { urlValue = it },
-                        label = { Text("Ссылка (URL)") },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                    },
+                    enabled = titleValue.isNotBlank(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
+                    shape = RoundedCornerShape(26.dp)
+                ) {
+                    Text(
+                        text = "Добавить задачу",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
                     )
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    if (urlValue.isNotBlank()) {
-                        haptic.click()
-                        val title = if (titleValue.isNotBlank()) titleValue else "Ссылка"
-                        viewModel.addMaterial(
-                            title = title,
-                            type = "URL",
-                            uriOrUrl = urlValue
-                        )
-                        showUrlDialog = false
-                    }
-                }) { Text("Добавить") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showUrlDialog = false }) { Text("Отмена") }
             }
-        )
+        }
+
+        if (showDatePicker) {
+            val datePickerState = rememberDatePickerState(
+                initialSelectedDateMillis = selectedDeadlineEpoch ?: System.currentTimeMillis()
+            )
+            DatePickerDialog(
+                onDismissRequest = { showDatePicker = false },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            datePickerState.selectedDateMillis?.let { millis ->
+                                customDeadlineDate = Instant.ofEpochMilli(millis)
+                                    .atZone(ZoneId.systemDefault())
+                                    .toLocalDate()
+                            }
+                            showDatePicker = false
+                        }
+                    ) { Text("OK", fontWeight = FontWeight.Bold) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDatePicker = false }) { Text("Отмена") }
+                }
+            ) {
+                DatePicker(state = datePickerState)
+            }
+        }
+    }
+
+    // URL Sheet
+    if (showUrlDialog) {
+        var titleValue by remember { mutableStateOf("") }
+        var urlValue by remember { mutableStateOf("") }
+        val clipboardManager = LocalClipboardManager.current
+
+        ModalBottomSheet(
+            onDismissRequest = { showUrlDialog = false },
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            dragHandle = { BottomSheetDefaults.DragHandle() }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .imePadding()
+                    .padding(start = 24.dp, end = 24.dp, bottom = 24.dp)
+            ) {
+                Text(
+                    text = "Прикрепить ссылку",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+
+                OutlinedTextField(
+                    value = titleValue,
+                    onValueChange = { titleValue = it },
+                    placeholder = { Text("Название (например: Презентация)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = bentoFieldShape,
+                    singleLine = true,
+                    colors = bentoTextFieldColors
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                OutlinedTextField(
+                    value = urlValue,
+                    onValueChange = { urlValue = it },
+                    placeholder = { Text("Ссылка (https://...)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = bentoFieldShape,
+                    singleLine = true,
+                    trailingIcon = {
+                        if (urlValue.isNotEmpty()) {
+                            IconButton(onClick = { urlValue = "" }) {
+                                Icon(Icons.Default.Close, contentDescription = "Очистить")
+                            }
+                        }
+                    },
+                    colors = bentoTextFieldColors
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                AssistChip(
+                    onClick = {
+                        val clip = clipboardManager.getText()
+                        if (!clip.isNullOrBlank()) {
+                            urlValue = clip.text
+                        }
+                    },
+                    label = { Text("Вставить из буфера") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.ContentPaste,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    shape = CircleShape
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Button(
+                    onClick = {
+                        if (urlValue.isNotBlank()) {
+                            haptic.click()
+                            val finalTitle = titleValue.ifBlank { "Ссылка" }
+                            val finalUrl = if (!urlValue.startsWith("http://") && !urlValue.startsWith("https://")) {
+                                "https://$urlValue"
+                            } else urlValue
+
+                            viewModel.addMaterial(
+                                title = finalTitle,
+                                type = "URL",
+                                uriOrUrl = finalUrl
+                            )
+                            showUrlDialog = false
+                        }
+                    },
+                    enabled = urlValue.isNotBlank(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
+                    shape = RoundedCornerShape(26.dp)
+                ) {
+                    Text(
+                        text = "Прикрепить",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
     }
 
     previewImageItem?.let { previewItem ->

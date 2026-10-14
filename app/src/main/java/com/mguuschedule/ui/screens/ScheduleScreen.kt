@@ -372,7 +372,9 @@ fun LessonItemWithBreak(
             ) {
                 Surface(
                     shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    shadowElevation = 0.dp,
+                    tonalElevation = 0.dp
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -495,9 +497,8 @@ fun LessonRow(
             shape = RoundedCornerShape(24.dp),
             color = containerColor,
             contentColor = contentColor,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-            shadowElevation = if (status == LessonStatus.CURRENT) 3.dp else 1.dp,
-            tonalElevation = if (status == LessonStatus.CURRENT) 3.dp else 1.dp,
+            shadowElevation = 0.dp,
+            tonalElevation = 0.dp,
             onClick = onClick
         ) {
             Column(
