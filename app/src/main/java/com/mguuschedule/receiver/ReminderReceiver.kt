@@ -17,6 +17,14 @@ class ReminderReceiver : BroadcastReceiver() {
         val room = intent.getStringExtra("room") ?: ""
         val id = intent.getIntExtra("id", 0)
         val date = intent.getStringExtra("date")
+        val groupId = intent.getStringExtra("groupId") ?: ""
+
+        val prefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+        val currentGroupId = prefs.getString("selected_group_id", "") ?: ""
+        if (groupId.isNotEmpty() && groupId != currentGroupId) {
+            AppLogger.d("REMINDER_TRIGGER", "Группа изменилась (в интенте: $groupId, текущая: $currentGroupId). Игнорируем напоминание.")
+            return
+        }
 
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {

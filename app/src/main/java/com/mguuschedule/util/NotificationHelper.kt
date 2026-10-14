@@ -287,7 +287,40 @@ object NotificationHelper {
         )
     }
 
-    fun scheduleClassReminder(context: Context, lesson: Lesson, minutesBefore: Int) {
+    private fun saveAlarmId(context: Context, requestCode: Int) {
+        val prefs = context.getSharedPreferences("alarms_prefs", Context.MODE_PRIVATE)
+        val ids = prefs.getStringSet("scheduled_alarm_ids", mutableSetOf()) ?: mutableSetOf()
+        val updatedIds = ids.toMutableSet().apply { add(requestCode.toString()) }
+        prefs.edit().putStringSet("scheduled_alarm_ids", updatedIds).apply()
+    }
+
+    fun cancelAllAlarms(context: Context) {
+        val prefs = context.getSharedPreferences("alarms_prefs", Context.MODE_PRIVATE)
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+
+        // 1. Отменяем ReminderReceiver
+        val reminderIds = prefs.getStringSet("scheduled_alarm_ids", emptySet()) ?: emptySet()
+        reminderIds.forEach { idStr ->
+            val requestCode = idStr.toIntOrNull() ?: return@forEach
+            val reminderIntent = Intent(context, ReminderReceiver::class.java)
+            val reminderPendingIntent = PendingIntent.getBroadcast(
+                context, requestCode, reminderIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            alarmManager.cancel(reminderPendingIntent)
+            reminderPendingIntent.cancel()
+        }
+        prefs.edit().remove("scheduled_alarm_ids").apply()
+
+        // 2. LiveUpdateReceiver отменяется через LiveUpdateManager.cancelAllAlarms(context)
+        
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.cancelAll()
+        
+        LiveUpdateManager.cancelLiveUpdate(context)
+        LiveUpdateManager.cancelAllAlarms(context)
+    }
+
+    fun scheduleClassReminder(context: Context, lesson: Lesson, minutesBefore: Int, groupId: String) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
         val roomFormatted = formatClassroom(lesson.room)
         val stableId = "${lesson.date}_${lesson.number}_${lesson.startTime}".hashCode()
@@ -299,6 +332,7 @@ object NotificationHelper {
             putExtra("id", stableId)
             putExtra("date", lesson.date.toString())
             putExtra("number", lesson.number)
+            putExtra("groupId", groupId)
         }
 
         val pendingIntent = PendingIntent.getBroadcast(
@@ -307,6 +341,8 @@ object NotificationHelper {
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+
+        saveAlarmId(context, stableId)
 
         val lessonDateTime = LocalDateTime.of(lesson.date, lesson.startTime)
         val triggerTime = lessonDateTime.minusMinutes(minutesBefore.toLong())

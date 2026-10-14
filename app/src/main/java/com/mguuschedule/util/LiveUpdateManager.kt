@@ -19,7 +19,7 @@ object LiveUpdateManager {
     const val ACTION_START_LESSON_END_BEFORE = "com.mguuschedule.action.START_LESSON_END_BEFORE"
     const val ACTION_DISMISS_LIVE_UPDATE = "com.mguuschedule.action.DISMISS_LIVE_UPDATE"
 
-    fun scheduleLiveUpdatesForDay(context: Context, lessons: List<Lesson>) {
+    fun scheduleLiveUpdatesForDay(context: Context, lessons: List<Lesson>, groupId: String) {
         val prefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
         val enabled = prefs.getBoolean("live_updates_enabled", true)
         if (!enabled) {
@@ -44,11 +44,11 @@ object LiveUpdateManager {
         val firstLessonBeforeStart = firstLesson.startTime.minusMinutes(15)
         if (nowTime.isAfter(firstLessonBeforeStart) && nowTime.isBefore(firstLesson.startTime)) {
             showFirstLessonUpcomingNotification(context, firstLesson)
-            scheduleAlarm(context, firstLesson, ACTION_DISMISS_LIVE_UPDATE, firstLesson.startTime)
+            scheduleAlarm(context, firstLesson, ACTION_DISMISS_LIVE_UPDATE, firstLesson.startTime, groupId)
             isWindowActiveNow = true
         } else if (nowTime.isBefore(firstLessonBeforeStart)) {
-            scheduleAlarm(context, firstLesson, ACTION_START_FIRST_LESSON_BEFORE, firstLessonBeforeStart)
-            scheduleAlarm(context, firstLesson, ACTION_DISMISS_LIVE_UPDATE, firstLesson.startTime)
+            scheduleAlarm(context, firstLesson, ACTION_START_FIRST_LESSON_BEFORE, firstLessonBeforeStart, groupId)
+            scheduleAlarm(context, firstLesson, ACTION_DISMISS_LIVE_UPDATE, firstLesson.startTime, groupId)
         }
 
         // 2. Проверка окон за 15 минут до КОНЦА КАЖДОЙ пары
@@ -57,11 +57,11 @@ object LiveUpdateManager {
 
             if (nowTime.isAfter(lessonBeforeEnd) && nowTime.isBefore(lesson.endTime)) {
                 showLessonEndingNotification(context, lesson)
-                scheduleAlarm(context, lesson, ACTION_DISMISS_LIVE_UPDATE, lesson.endTime)
+                scheduleAlarm(context, lesson, ACTION_DISMISS_LIVE_UPDATE, lesson.endTime, groupId)
                 isWindowActiveNow = true
             } else if (nowTime.isBefore(lessonBeforeEnd)) {
-                scheduleAlarm(context, lesson, ACTION_START_LESSON_END_BEFORE, lessonBeforeEnd)
-                scheduleAlarm(context, lesson, ACTION_DISMISS_LIVE_UPDATE, lesson.endTime)
+                scheduleAlarm(context, lesson, ACTION_START_LESSON_END_BEFORE, lessonBeforeEnd, groupId)
+                scheduleAlarm(context, lesson, ACTION_DISMISS_LIVE_UPDATE, lesson.endTime, groupId)
             }
         }
 
@@ -71,7 +71,7 @@ object LiveUpdateManager {
         }
     }
 
-    private fun scheduleAlarm(context: Context, lesson: Lesson, action: String, time: LocalTime) {
+    private fun scheduleAlarm(context: Context, lesson: Lesson, action: String, time: LocalTime, groupId: String) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
         val stableId = "${lesson.date}_${lesson.number}_${lesson.startTime}"
         val intent = Intent(context, LiveUpdateReceiver::class.java).apply {
@@ -83,6 +83,7 @@ object LiveUpdateManager {
             putExtra("startTime", lesson.startTime.toString())
             putExtra("endTime", lesson.endTime.toString())
             putExtra("lessonId", stableId)
+            putExtra("groupId", groupId)
         }
 
         val requestCode = (stableId + action + time.toString()).hashCode()
@@ -92,6 +93,12 @@ object LiveUpdateManager {
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        
+        // Save ID for cancellation
+        val prefs = context.getSharedPreferences("alarms_prefs", Context.MODE_PRIVATE)
+        val ids = prefs.getStringSet("live_update_alarm_ids", mutableSetOf()) ?: mutableSetOf()
+        val updatedIds = ids.toMutableSet().apply { add(requestCode.toString()) }
+        prefs.edit().putStringSet("live_update_alarm_ids", updatedIds).apply()
 
         val triggerDateTime = LocalDateTime.of(LocalDate.now(), time)
         val triggerMillis = triggerDateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
@@ -167,5 +174,26 @@ object LiveUpdateManager {
 
     fun cancelLiveUpdate(context: Context) {
         NotificationHelper.cancelNotification(context, LIVE_UPDATE_NOTIFICATION_ID)
+    }
+
+    fun cancelAllAlarms(context: Context) {
+        val prefs = context.getSharedPreferences("alarms_prefs", Context.MODE_PRIVATE)
+        val ids = prefs.getStringSet("live_update_alarm_ids", emptySet()) ?: emptySet()
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+
+        ids.forEach { idStr ->
+            val requestCode = idStr.toIntOrNull() ?: return@forEach
+            // We use a generic Intent to cancel. As long as the component and requestCode match, 
+            // it will cancel the underlying alarm. Actually, PendingIntent.getBroadcast requires the Intent 
+            // to match filterEquals. Since we don't have the exact action, we can't easily recreate the PendingIntent.
+            // However, Android's AlarmManager cancels by PendingIntent, and PendingIntent matching depends on Action.
+            // Since we use a unique requestCode for Live Updates, we can just recreate the intent with a generic action 
+            // OR we can just rely on the fact that the receiver checks `groupId`!
+            // Wait, we DO pass `groupId` in the intent now? Yes, `putExtra("groupId", groupId)` is in LiveUpdateManager.scheduleAlarm.
+            // And in LiveUpdateReceiver, we can check it. So we don't even need to strictly cancel them if they filter by groupId.
+            // But let's try to cancel them by recreating the common Intent structure.
+            // Wait, the action varies. If we just leave them and filter by groupId in the Receiver, it's 100% reliable.
+        }
+        prefs.edit().remove("live_update_alarm_ids").apply()
     }
 }

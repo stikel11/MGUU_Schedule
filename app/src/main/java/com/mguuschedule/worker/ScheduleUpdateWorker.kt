@@ -123,7 +123,7 @@ class ScheduleUpdateWorker(
                 val today = LocalDate.now()
                 val tomorrow = today.plusDays(1)
                 newLessonsMapped.filter { it.date == today || it.date == tomorrow }.forEach { lesson ->
-                    NotificationHelper.scheduleClassReminder(applicationContext, lesson, reminderMinutes)
+                    NotificationHelper.scheduleClassReminder(applicationContext, lesson, reminderMinutes, groupId)
                 }
             }
 

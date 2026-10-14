@@ -29,12 +29,14 @@ class BootReceiver : BroadcastReceiver() {
                         val db = AppDatabase.getDatabase(context)
                         val todayStr = LocalDate.now().toString()
                         val lessons = db.scheduleDao().getUpcomingLessons(todayStr)
+                        val groupId = prefs.getString("selected_group_id", "") ?: ""
                         lessons.forEach { entity ->
                             entity.toLesson()?.let { lesson ->
                                 NotificationHelper.scheduleClassReminder(
                                     context,
                                     lesson,
-                                    reminderMinutes
+                                    reminderMinutes,
+                                    groupId
                                 )
                             }
                         }

@@ -165,7 +165,8 @@ class ScheduleViewModel(
         viewModelScope.launch {
             lessonsForSelectedDay.collect { lessons ->
                 if (_selectedDate.value.isEqual(LocalDate.now())) {
-                    LiveUpdateManager.scheduleLiveUpdatesForDay(getApplication(), lessons)
+                    val currentGroupId = appPrefs.getString("selected_group_id", "") ?: ""
+                    LiveUpdateManager.scheduleLiveUpdatesForDay(getApplication(), lessons, currentGroupId)
                 }
             }
         }
@@ -282,6 +283,7 @@ class ScheduleViewModel(
 
     fun scheduleUpcomingRemindersFromDb() {
         val enabled = appPrefs.getBoolean("reminders_enabled", true)
+        val currentGroupId = appPrefs.getString("selected_group_id", "") ?: ""
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -292,12 +294,12 @@ class ScheduleViewModel(
                 
                 if (enabled) {
                     upcomingLessons.forEach { lesson ->
-                        NotificationHelper.scheduleClassReminder(getApplication(), lesson, minutesBefore)
+                        NotificationHelper.scheduleClassReminder(getApplication(), lesson, minutesBefore, currentGroupId)
                     }
                 }
                 
                 val todayLessons = upcomingLessons.filter { it.date.isEqual(LocalDate.now()) }
-                LiveUpdateManager.scheduleLiveUpdatesForDay(getApplication(), todayLessons)
+                LiveUpdateManager.scheduleLiveUpdatesForDay(getApplication(), todayLessons, currentGroupId)
                 
                 AppLogger.d("SCHEDULE_TRACE", "Запланированы напоминания и Live Updates для ${upcomingLessons.size} будущих пар из БД")
             } catch (e: Exception) {

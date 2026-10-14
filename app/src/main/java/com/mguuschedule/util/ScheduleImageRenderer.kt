@@ -13,6 +13,7 @@ import android.os.Build
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
+import androidx.compose.ui.graphics.toArgb
 import androidx.core.content.FileProvider
 import com.mguuschedule.model.Lesson
 import kotlinx.coroutines.CoroutineScope
@@ -74,58 +75,86 @@ object ScheduleImageRenderer {
     }
 
     private fun resolvePalette(context: Context, shareStyle: Int, isDarkTheme: Boolean): PosterPalette {
+        val lightScheme = androidx.compose.material3.lightColorScheme(
+            background = com.mguuschedule.ui.theme.BackgroundLight,
+            surface = com.mguuschedule.ui.theme.SurfaceLight,
+            primary = com.mguuschedule.ui.theme.PrimaryLight,
+            primaryContainer = com.mguuschedule.ui.theme.PrimaryContainerLight,
+            onPrimaryContainer = com.mguuschedule.ui.theme.OnPrimaryContainerLight,
+            onSurface = com.mguuschedule.ui.theme.OnSurfaceLight,
+            onSurfaceVariant = com.mguuschedule.ui.theme.OnSurfaceVariantLight,
+            surfaceContainerLow = androidx.compose.ui.graphics.Color(android.graphics.Color.WHITE),
+            surfaceContainerHighest = com.mguuschedule.ui.theme.SurfaceContainerHighestLight,
+        )
+        
+        val darkScheme = androidx.compose.material3.darkColorScheme(
+            background = com.mguuschedule.ui.theme.BackgroundDark,
+            surface = com.mguuschedule.ui.theme.SurfaceDark,
+            primary = com.mguuschedule.ui.theme.PrimaryDark,
+            primaryContainer = com.mguuschedule.ui.theme.PrimaryContainerDark,
+            onPrimaryContainer = com.mguuschedule.ui.theme.OnPrimaryContainerDark,
+            onSurface = com.mguuschedule.ui.theme.OnSurfaceDark,
+            onSurfaceVariant = com.mguuschedule.ui.theme.OnSurfaceVariantDark,
+            surfaceContainerLow = com.mguuschedule.ui.theme.SurfaceContainerLowDark,
+            surfaceContainerHighest = com.mguuschedule.ui.theme.SurfaceContainerHighestDark,
+        )
+
         return when (shareStyle) {
-            1 -> PosterPalette( // Dark
-                bgColor = Color.parseColor("#111318"),
-                surfaceColor = Color.parseColor("#1D2024"),
-                primaryColor = Color.parseColor("#AEC6FF"),
-                primaryContainerColor = Color.parseColor("#004397"),
-                onPrimaryContainerColor = Color.parseColor("#D8E2FF"),
-                textColor = Color.parseColor("#E1E2E8"),
-                textVariantColor = Color.parseColor("#C4C6D0")
+            1 -> PosterPalette( // Dark (M3 Dark)
+                bgColor = darkScheme.background.toArgb(),
+                surfaceColor = darkScheme.surfaceContainerLow.toArgb(),
+                primaryColor = darkScheme.primary.toArgb(),
+                primaryContainerColor = darkScheme.primaryContainer.toArgb(),
+                onPrimaryContainerColor = darkScheme.onPrimaryContainer.toArgb(),
+                textColor = darkScheme.onSurface.toArgb(),
+                textVariantColor = darkScheme.onSurfaceVariant.toArgb()
             )
-            2 -> PosterPalette( // Light
-                bgColor = Color.parseColor("#F8F9FE"),
-                surfaceColor = Color.parseColor("#FFFFFF"),
-                primaryColor = Color.parseColor("#1A56B0"),
-                primaryContainerColor = Color.parseColor("#D8E2FF"),
-                onPrimaryContainerColor = Color.parseColor("#001A43"),
-                textColor = Color.parseColor("#191C20"),
-                textVariantColor = Color.parseColor("#43474E")
+            2 -> PosterPalette( // Light (M3 Light)
+                bgColor = lightScheme.background.toArgb(),
+                surfaceColor = Color.WHITE,
+                primaryColor = lightScheme.primary.toArgb(),
+                primaryContainerColor = lightScheme.primaryContainer.toArgb(),
+                onPrimaryContainerColor = lightScheme.onPrimaryContainer.toArgb(),
+                textColor = lightScheme.onSurface.toArgb(),
+                textVariantColor = lightScheme.onSurfaceVariant.toArgb()
             )
             3 -> PosterPalette( // Monochrome B&W
-                bgColor = Color.parseColor("#FFFFFF"),
+                bgColor = Color.WHITE,
                 surfaceColor = Color.parseColor("#F2F3F7"),
-                primaryColor = Color.parseColor("#000000"),
+                primaryColor = Color.BLACK,
                 primaryContainerColor = Color.parseColor("#E0E2E8"),
-                onPrimaryContainerColor = Color.parseColor("#000000"),
-                textColor = Color.parseColor("#000000"),
+                onPrimaryContainerColor = Color.BLACK,
+                textColor = Color.BLACK,
                 textVariantColor = Color.parseColor("#555555")
             )
             else -> { // 0: Dynamic Material You
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val scheme = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     try {
-                        val sysAccent = context.getColor(R.color.system_accent1_500)
-                        val sysAccentLight = context.getColor(R.color.system_accent1_100)
-                        val sysAccentDark = context.getColor(R.color.system_accent1_900)
-                        val sysNeutralBg = if (isDarkTheme) Color.parseColor("#111318") else Color.parseColor("#F8F9FE")
-                        val sysSurface = if (isDarkTheme) Color.parseColor("#1D2024") else Color.parseColor("#FFFFFF")
-
-                        PosterPalette(
-                            bgColor = sysNeutralBg,
-                            surfaceColor = sysSurface,
-                            primaryColor = if (isDarkTheme) sysAccentLight else sysAccent,
-                            primaryContainerColor = if (isDarkTheme) sysAccentDark else sysAccentLight,
-                            onPrimaryContainerColor = if (isDarkTheme) sysAccentLight else sysAccentDark,
-                            textColor = if (isDarkTheme) Color.parseColor("#E1E2E8") else Color.parseColor("#191C20"),
-                            textVariantColor = if (isDarkTheme) Color.parseColor("#C4C6D0") else Color.parseColor("#43474E")
-                        )
+                        val dynamic = if (isDarkTheme) androidx.compose.material3.dynamicDarkColorScheme(context) 
+                                      else androidx.compose.material3.dynamicLightColorScheme(context)
+                        if (!isDarkTheme) {
+                            dynamic.copy(
+                                background = dynamic.surfaceContainerLow,
+                                surfaceContainerLow = androidx.compose.ui.graphics.Color.White,
+                                surfaceContainerHighest = dynamic.surfaceContainer
+                            )
+                        } else dynamic
                     } catch (e: Exception) {
-                        resolvePalette(context, if (isDarkTheme) 1 else 2, isDarkTheme)
+                        if (isDarkTheme) darkScheme else lightScheme
                     }
                 } else {
-                    resolvePalette(context, if (isDarkTheme) 1 else 2, isDarkTheme)
+                    if (isDarkTheme) darkScheme else lightScheme
                 }
+                
+                PosterPalette(
+                    bgColor = scheme.background.toArgb(),
+                    surfaceColor = if (!isDarkTheme) Color.WHITE else scheme.surfaceContainerLow.toArgb(),
+                    primaryColor = scheme.primary.toArgb(),
+                    primaryContainerColor = scheme.primaryContainer.toArgb(),
+                    onPrimaryContainerColor = scheme.onPrimaryContainer.toArgb(),
+                    textColor = scheme.onSurface.toArgb(),
+                    textVariantColor = scheme.onSurfaceVariant.toArgb()
+                )
             }
         }
     }

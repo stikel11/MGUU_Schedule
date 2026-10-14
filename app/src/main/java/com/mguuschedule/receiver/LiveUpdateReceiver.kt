@@ -19,6 +19,14 @@ class LiveUpdateReceiver : BroadcastReceiver() {
             return
         }
 
+        val groupId = intent.getStringExtra("groupId") ?: ""
+        val prefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+        val currentGroupId = prefs.getString("selected_group_id", "") ?: ""
+        if (groupId.isNotEmpty() && groupId != currentGroupId) {
+            AppLogger.d("LIVE_UPDATE_RECEIVER", "Группа изменилась (в интенте: $groupId, текущая: $currentGroupId). Игнорируем Live Update.")
+            return
+        }
+
         val title = intent.getStringExtra("title") ?: return
         val room = intent.getStringExtra("room") ?: ""
         val teacher = intent.getStringExtra("teacher") ?: ""

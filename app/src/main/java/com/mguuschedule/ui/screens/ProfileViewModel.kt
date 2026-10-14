@@ -248,6 +248,8 @@ class ProfileViewModel(
             putString("selected_zachetka", "")
             commit()
         }
+        com.mguuschedule.util.NotificationHelper.cancelAllAlarms(getApplication())
+        startScheduleWorker()
     }
 
     fun updateSelectedZachetka(zachetka: String) {
@@ -350,26 +352,26 @@ class ProfileViewModel(
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
 
-        val request = PeriodicWorkRequestBuilder<ScheduleUpdateWorker>(3, TimeUnit.HOURS)
+        val request = PeriodicWorkRequestBuilder<com.mguuschedule.worker.ScheduleUpdateWorker>(3, TimeUnit.HOURS)
             .setConstraints(constraints)
             .build()
 
         WorkManager.getInstance(getApplication())
             .enqueueUniquePeriodicWork(
                 "ScheduleUpdate",
-                ExistingPeriodicWorkPolicy.KEEP,
+                ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE,
                 request
             )
 
         // Автоподгрузка рейтинга БРС 3 раза в день (каждые 8 часов)
-        val ratingRequest = PeriodicWorkRequestBuilder<RatingUpdateWorker>(8, TimeUnit.HOURS)
+        val ratingRequest = PeriodicWorkRequestBuilder<com.mguuschedule.worker.RatingUpdateWorker>(8, TimeUnit.HOURS)
             .setConstraints(constraints)
             .build()
 
         WorkManager.getInstance(getApplication())
             .enqueueUniquePeriodicWork(
                 "RatingUpdate",
-                ExistingPeriodicWorkPolicy.KEEP,
+                ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE,
                 ratingRequest
             )
     }

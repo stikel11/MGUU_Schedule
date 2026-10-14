@@ -11,6 +11,7 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -97,18 +98,34 @@ fun MGUUScheduleTheme(
 
     val view = LocalView.current
     if (!view.isInEditMode) {
-        SideEffect {
+        val applySystemBarsAppearance = {
             val context = view.context
-            val activity = context as? android.app.Activity ?: (context as? android.content.ContextWrapper)?.baseContext as? android.app.Activity
-            val window = activity?.window ?: return@SideEffect
-            window.statusBarColor = android.graphics.Color.TRANSPARENT
-            window.navigationBarColor = android.graphics.Color.TRANSPARENT
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                window.isNavigationBarContrastEnforced = false
+            val activity = context as? android.app.Activity
+                ?: (context as? android.content.ContextWrapper)?.baseContext as? android.app.Activity
+            activity?.window?.let { window ->
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    window.isNavigationBarContrastEnforced = false
+                }
+                val controller = WindowCompat.getInsetsController(window, view)
+                controller.isAppearanceLightStatusBars = !darkTheme
+                controller.isAppearanceLightNavigationBars = !darkTheme
             }
-            val controller = WindowCompat.getInsetsController(window, view)
-            controller.isAppearanceLightStatusBars = !darkTheme
-            controller.isAppearanceLightNavigationBars = !darkTheme
+        }
+
+        SideEffect {
+            applySystemBarsAppearance()
+        }
+
+        DisposableEffect(view, darkTheme) {
+            val listener = android.view.ViewTreeObserver.OnWindowFocusChangeListener { hasFocus ->
+                if (hasFocus) {
+                    applySystemBarsAppearance()
+                }
+            }
+            view.viewTreeObserver.addOnWindowFocusChangeListener(listener)
+            onDispose {
+                view.viewTreeObserver.removeOnWindowFocusChangeListener(listener)
+            }
         }
     }
 

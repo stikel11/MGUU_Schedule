@@ -26,6 +26,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -79,9 +80,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         
         CrashHandler.init(applicationContext)
-        
-        enableEdgeToEdge()
-        
+
         splashScreen.setOnExitAnimationListener { splashScreenProvider ->
             val splashView = splashScreenProvider.view
             val alpha = ObjectAnimator.ofFloat(
@@ -116,6 +115,34 @@ class MainActivity : ComponentActivity() {
                 factory = ScheduleViewModelFactory(app)
             )
             val selectedGroup = profileViewModel.selectedGroup
+
+            val darkTheme = when (profileViewModel.themeMode) {
+                1 -> false
+                2 -> true
+                else -> isSystemInDarkTheme()
+            }
+
+            DisposableEffect(darkTheme) {
+                enableEdgeToEdge(
+                    statusBarStyle = if (darkTheme) {
+                        SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+                    } else {
+                        SystemBarStyle.light(
+                            android.graphics.Color.TRANSPARENT,
+                            android.graphics.Color.TRANSPARENT
+                        )
+                    },
+                    navigationBarStyle = if (darkTheme) {
+                        SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+                    } else {
+                        SystemBarStyle.light(
+                            android.graphics.Color.TRANSPARENT,
+                            android.graphics.Color.TRANSPARENT
+                        )
+                    }
+                )
+                onDispose {}
+            }
 
             LaunchedEffect(startAction) {
                 when(startAction) {
