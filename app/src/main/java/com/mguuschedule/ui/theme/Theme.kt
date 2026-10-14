@@ -136,26 +136,22 @@ fun MGUUScheduleTheme(
                 dynamicDarkColorScheme(context)
             } else {
                 val rawLight = dynamicLightColorScheme(context)
+                val primaryTone = rawLight.primary
 
                 rawLight.copy(
-                    // Фон экрана — родной воздушный Tone 95/96 из HCT (без грязных серых примесей):
-                    background = rawLight.surfaceContainerLow,
-                    surface = rawLight.surfaceContainerLow,
+                    background = androidx.compose.ui.graphics.lerp(Color.White, primaryTone, 0.055f),
+                    surface = androidx.compose.ui.graphics.lerp(Color.White, primaryTone, 0.055f),
                     onBackground = rawLight.onSurface,
                     onSurface = rawLight.onSurface,
                     onSurfaceVariant = rawLight.onSurfaceVariant,
 
-                    // Все основные карточки, кнопки шапки и плавающий бар — ЧИСТО БЕЛЫЕ (Tone 100):
                     surfaceContainerLowest = Color.White,
                     surfaceContainerLow = Color.White,
-                    surfaceContainer = Color.White,
+                    surfaceContainer = androidx.compose.ui.graphics.lerp(Color.White, primaryTone, 0.05f),
                     surfaceVariant = Color.White,
-                    surfaceContainerHigh = Color.White,
+                    surfaceContainerHigh = androidx.compose.ui.graphics.lerp(Color.White, primaryTone, 0.085f),
+                    surfaceContainerHighest = androidx.compose.ui.graphics.lerp(Color.White, primaryTone, 0.13f),
 
-                    // Вложенные чипы внутри белых карточек (Ауд. 419к, Модуль 1/2) — легкий, чистый Tone 94 из HCT:
-                    surfaceContainerHighest = rawLight.surfaceContainer,
-
-                    // Акцентные контейнеры — БЕРЕМ НАПРЯМУЮ ИЗ HCT (Tone 90, высокая Chroma, никакой грязи от lerp!):
                     primary = rawLight.primary,
                     onPrimary = rawLight.onPrimary,
                     primaryContainer = rawLight.primaryContainer,
@@ -164,21 +160,31 @@ fun MGUUScheduleTheme(
                     onSecondary = rawLight.onSecondary,
                     secondaryContainer = rawLight.secondaryContainer,
                     onSecondaryContainer = rawLight.onSecondaryContainer,
-
-                    // Убираем кислотный разброс третьего цвета, приводя его к единой гамме с primaryContainer:
                     tertiary = rawLight.primary,
                     onTertiary = rawLight.onPrimary,
                     tertiaryContainer = rawLight.primaryContainer,
                     onTertiaryContainer = rawLight.onPrimaryContainer,
 
-                    // Мягкие, почти невидимые границы, чтобы убрать темную серую рамку вокруг белых карточек:
                     outline = rawLight.outline,
-                    outlineVariant = rawLight.surfaceContainerHighest.copy(alpha = 0.5f)
+                    outlineVariant = androidx.compose.ui.graphics.lerp(rawLight.onSurface, Color.White, 0.78f)
                 )
             }
         }
         darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+        else -> {
+            val primaryTone = LightColorScheme.primary
+            LightColorScheme.copy(
+                background = androidx.compose.ui.graphics.lerp(Color.White, primaryTone, 0.055f),
+                surface = androidx.compose.ui.graphics.lerp(Color.White, primaryTone, 0.055f),
+                surfaceContainerLowest = Color.White,
+                surfaceContainerLow = Color.White,
+                surfaceContainer = androidx.compose.ui.graphics.lerp(Color.White, primaryTone, 0.05f),
+                surfaceVariant = Color.White,
+                surfaceContainerHigh = androidx.compose.ui.graphics.lerp(Color.White, primaryTone, 0.085f),
+                surfaceContainerHighest = androidx.compose.ui.graphics.lerp(Color.White, primaryTone, 0.13f),
+                outlineVariant = androidx.compose.ui.graphics.lerp(LightColorScheme.onSurface, Color.White, 0.78f)
+            )
+        }
     }
 
     MaterialTheme(

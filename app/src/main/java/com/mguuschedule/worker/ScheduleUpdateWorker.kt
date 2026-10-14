@@ -190,7 +190,9 @@ class ScheduleUpdateWorker(
                     val oldRoom = oldLesson.room.normalize()
                     val newRoom = newLesson.room.normalize()
                     if (oldRoom != newRoom && oldRoom.isNotEmpty() && newRoom.isNotEmpty()) {
-                        changes.getOrPut(oldLesson.date) { mutableListOf() }.add("${oldLesson.title.normalize()} перенесен в Ауд. $newRoom (была $oldRoom)")
+                        val newRoomFormatted = com.mguuschedule.util.formatRoomBadge(newRoom, compact = false)
+                        val oldRoomFormatted = com.mguuschedule.util.formatRoomBadge(oldRoom, compact = false)
+                        changes.getOrPut(oldLesson.date) { mutableListOf() }.add("${oldLesson.title.normalize()} перенесен в $newRoomFormatted (было $oldRoomFormatted)")
                     }
 
                     val oldTeacher = oldLesson.teacher.normalize()

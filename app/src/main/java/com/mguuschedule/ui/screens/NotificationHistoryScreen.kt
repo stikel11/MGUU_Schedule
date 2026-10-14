@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,6 +22,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -177,19 +179,43 @@ fun NotificationHistoryScreen(
 
                 if (notifications.isNotEmpty()) {
                     item(key = "filter_row") {
-                        SingleChoiceSegmentedButtonRow(
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 8.dp),
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceContainerLow
                         ) {
-                            filters.forEachIndexed { index, title ->
-                                SegmentedButton(
-                                    selected = selectedFilterIndex == index,
-                                    onClick = { 
-                                        haptic.click()
-                                        selectedFilterIndex = index 
-                                    },
-                                    shape = SegmentedButtonDefaults.itemShape(index = index, count = filters.size)
-                                ) {
-                                    Text(title)
+                            Row(modifier = Modifier.padding(4.dp)) {
+                                filters.forEachIndexed { index, title ->
+                                    val isSelected = selectedFilterIndex == index
+                                    val bgColor by androidx.compose.animation.animateColorAsState(
+                                        targetValue = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                                        label = "filter_bg"
+                                    )
+                                    val textColor by androidx.compose.animation.animateColorAsState(
+                                        targetValue = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        label = "filter_text"
+                                    )
+                                    
+                                    Surface(
+                                        onClick = {
+                                            haptic.click()
+                                            selectedFilterIndex = index
+                                        },
+                                        shape = CircleShape,
+                                        color = bgColor,
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(vertical = 10.dp)) {
+                                            Text(
+                                                text = title,
+                                                style = MaterialTheme.typography.labelLarge,
+                                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                                                color = textColor
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -299,30 +325,47 @@ fun NotificationItemCard(item: NotificationEntity) {
         dt.format(timeFormatter)
     }
 
-    val (typeLabel, icon) = remember(item.type) {
-        when (item.type) {
-            "CHANGE" -> "Изменение" to Icons.Default.EditCalendar
-            "REMINDER" -> "Напоминание" to Icons.Default.NotificationsActive
-            "LIVE_UPDATE" -> "Live Update" to Icons.Default.Timer
+    val titleClean = remember(item.title) {
+        item.title.replace("📊", "").trim()
+    }
+    
+    val bodyClean = remember(item.message) {
+        item.message.replace(Regex("(?i)(ауд\\.?\\s*){2,}"), "Ауд. ")
+    }
+
+    val isRating = titleClean.contains("БРС", ignoreCase = true) || 
+                   titleClean.contains("баллы", ignoreCase = true) || 
+                   titleClean.contains("КТ", ignoreCase = true)
+
+    val (typeLabel, icon) = remember(item.type, isRating) {
+        when {
+            isRating -> "Рейтинг БРС" to Icons.Default.Insights
+            item.type == "CHANGE" -> "Изменение" to Icons.Default.SwapHoriz
+            item.type == "REMINDER" -> "Напоминание" to Icons.Default.NotificationsActive
+            item.type == "LIVE_UPDATE" -> "Live Update" to Icons.Default.Timer
             else -> "Системное" to Icons.Default.Info
         }
     }
 
-    val typeBgColor = when (item.type) {
-        "CHANGE" -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
-        "REMINDER" -> MaterialTheme.colorScheme.primaryContainer
+    val typeBgColor = when {
+        isRating -> MaterialTheme.colorScheme.tertiaryContainer
+        item.type == "CHANGE" -> MaterialTheme.colorScheme.secondaryContainer
+        item.type == "REMINDER" -> MaterialTheme.colorScheme.primaryContainer
         else -> MaterialTheme.colorScheme.surfaceContainerHighest
     }
 
-    val typeTextColor = when (item.type) {
-        "CHANGE" -> MaterialTheme.colorScheme.onErrorContainer
-        "REMINDER" -> MaterialTheme.colorScheme.onPrimaryContainer
+    val typeTextColor = when {
+        isRating -> MaterialTheme.colorScheme.onTertiaryContainer
+        item.type == "CHANGE" -> MaterialTheme.colorScheme.onSecondaryContainer
+        item.type == "REMINDER" -> MaterialTheme.colorScheme.onPrimaryContainer
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
 
     Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = if (!item.isRead) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -330,21 +373,21 @@ fun NotificationItemCard(item: NotificationEntity) {
             verticalAlignment = Alignment.Top
         ) {
             Surface(
-                shape = CircleShape,
+                shape = RoundedCornerShape(14.dp),
                 color = typeBgColor,
-                modifier = Modifier.size(40.dp)
+                modifier = Modifier.size(42.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
                         tint = typeTextColor,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(22.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(14.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Row(
@@ -355,7 +398,7 @@ fun NotificationItemCard(item: NotificationEntity) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = typeLabel,
-                            style = MaterialTheme.typography.labelSmall,
+                            style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
                             color = typeTextColor
                         )
@@ -377,20 +420,22 @@ fun NotificationItemCard(item: NotificationEntity) {
                     )
                 }
 
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
                 Text(
-                    text = item.title,
+                    text = titleClean,
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
 
-                if (item.message.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(2.dp))
+                if (bodyClean.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = item.message,
+                        text = bodyClean,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = 20.sp
                     )
                 }
             }

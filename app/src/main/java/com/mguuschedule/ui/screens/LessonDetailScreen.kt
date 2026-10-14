@@ -782,14 +782,8 @@ fun LessonDetailScreen(
     val typeFormatted = remember(lesson.type) {
         lesson.type.lowercase().replaceFirstChar { it.uppercase() }
     }
-    val roomFormatted = remember(lesson.room) {
-        formatClassroom(lesson.room)
-    }
-    val cleanRoom = remember(lesson.room) {
-        lesson.room.replace(Regex("^(?i)ауд\\.?\\s*"), "").trim()
-    }
-    val roomDisplay = remember(cleanRoom) {
-        if (cleanRoom.isNotEmpty()) "Ауд. $cleanRoom" else "Аудитория не указана"
+    val roomDisplay = remember(lesson.room) {
+        com.mguuschedule.util.formatRoomBadge(lesson.room, compact = false)
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -1284,14 +1278,15 @@ fun LessonDetailScreen(
                     }
 
                     if (materialList.isEmpty()) {
+                        Spacer(modifier = Modifier.height(10.dp))
                         Text(
                             text = "Нет прикрепленных материалов",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                            modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
+                            modifier = Modifier.padding(vertical = 4.dp)
                         )
                     } else {
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             materialList.forEach { item ->
                                 MaterialItemRow(
@@ -1402,7 +1397,7 @@ fun LessonDetailScreen(
                 if (showFloorMapDialog) {
                     FullscreenFloorMapDialog(
                         imageResId = floorImageResId,
-                        title = if (roomFormatted.isNotBlank()) "$titleText ($roomFormatted)" else titleText,
+                        title = if (roomDisplay.isNotBlank()) "$titleText ($roomDisplay)" else titleText,
                         onDismiss = { showFloorMapDialog = false }
                     )
                 }
@@ -1414,12 +1409,11 @@ fun LessonDetailScreen(
 
     StatusBarBlurOverlay()
 
-    val bentoTextFieldColors = TextFieldDefaults.colors(
-        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        focusedIndicatorColor = MaterialTheme.colorScheme.primary,
-        unfocusedIndicatorColor = Color.Transparent,
-        disabledIndicatorColor = Color.Transparent
+    val bentoTextFieldColors = OutlinedTextFieldDefaults.colors(
+        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+        focusedBorderColor = MaterialTheme.colorScheme.primary,
+        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
     )
     val bentoFieldShape = RoundedCornerShape(18.dp)
 

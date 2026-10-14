@@ -21,6 +21,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -427,7 +428,7 @@ fun LessonRow(
     val startTimeStr = remember(lesson.startTime) { lesson.startTime.toString() }
     val endTimeStr = remember(lesson.endTime) { lesson.endTime.toString() }
     val typeName = remember(lesson.type) { lesson.type.lowercase().replaceFirstChar { it.uppercase() } }
-    val roomFormatted = remember(lesson.room) { formatClassroom(lesson.room) }
+    val roomFormatted = remember(lesson.room) { com.mguuschedule.util.formatRoomBadge(lesson.room, compact = true) }
     
     val containerColor = if (status == LessonStatus.CURRENT) {
         MaterialTheme.colorScheme.primaryContainer
@@ -561,16 +562,13 @@ fun LessonRow(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        val hasControlPoint = controlPoints.isNotEmpty()
-                        val typeText = if (hasControlPoint) "$typeName • КТ" else typeName
-
                         Surface(
                             shape = CircleShape,
                             color = if (status == LessonStatus.CURRENT) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.tertiaryContainer,
                             modifier = Modifier.weight(1f, fill = false)
                         ) {
                             Text(
-                                text = typeText,
+                                text = typeName,
                                 style = MaterialTheme.typography.labelMedium,
                                 color = if (status == LessonStatus.CURRENT) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onTertiaryContainer,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
@@ -578,6 +576,24 @@ fun LessonRow(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
+                        }
+
+                        val hasControlPoint = controlPoints.isNotEmpty()
+                        val isPractical = lesson.type.contains("практ", ignoreCase = true) || lesson.type.contains("семинар", ignoreCase = true)
+                        
+                        if (hasControlPoint && isPractical) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.tertiaryContainer
+                            ) {
+                                Text(
+                                    text = "КТ",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                )
+                            }
                         }
                     }
 
@@ -668,6 +684,7 @@ fun LessonRow(
                             val tasks = addonSummary.tasks
                             val firstTask = tasks.firstOrNull { !it.isCompleted } ?: tasks.first()
                             val formattedTaskTitle = firstTask.title.replaceFirstChar { it.uppercase() }
+                            val isCompleted = firstTask.isCompleted
 
                             Surface(
                                 shape = RoundedCornerShape(16.dp),
@@ -680,7 +697,7 @@ fun LessonRow(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Rounded.TaskAlt,
+                                        imageVector = if (isCompleted) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked,
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.size(18.dp)
@@ -689,7 +706,8 @@ fun LessonRow(
                                         text = formattedTaskTitle,
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.Medium,
-                                        color = MaterialTheme.colorScheme.onSurface,
+                                        textDecoration = if (isCompleted) TextDecoration.LineThrough else TextDecoration.None,
+                                        color = if (isCompleted) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f) else MaterialTheme.colorScheme.onSurface,
                                         maxLines = 2,
                                         lineHeight = 18.sp,
                                         overflow = TextOverflow.Ellipsis,
@@ -755,16 +773,15 @@ fun LessonRow(
                     exit = shrinkVertically(spring(0.85f, 260f)) + fadeOut()
                 ) {
                     val materials = addonSummary?.materials ?: emptyList()
-                    val displayed = materials.take(2)
 
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        displayed.forEachIndexed { idx, mat ->
-                            val isSecondWithMore = idx == 1 && materials.size > 2
+                        materials.take(2).forEach { mat ->
                             val icon = when (mat.type) {
                                 "URL", "LINK" -> Icons.Rounded.Link
                                 "IMAGE" -> Icons.Rounded.Image
@@ -789,7 +806,7 @@ fun LessonRow(
                                         tint = MaterialTheme.colorScheme.onSecondaryContainer
                                     )
                                     Text(
-                                        text = if (isSecondWithMore) "$displayName (+${materials.size - 2})" else displayName,
+                                        text = displayName,
                                         style = MaterialTheme.typography.labelMedium,
                                         fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -797,6 +814,21 @@ fun LessonRow(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                 }
+                            }
+                        }
+
+                        if (materials.size > 2) {
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer
+                            ) {
+                                Text(
+                                    text = "+${materials.size - 2}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)
+                                )
                             }
                         }
                     }

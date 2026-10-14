@@ -37,6 +37,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.animation.core.animate
+import androidx.compose.ui.graphics.graphicsLayer
+import kotlinx.coroutines.launch
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -236,183 +239,143 @@ fun MainAppScaffold(
 
     val bottomTabRoutes = remember { listOf(Screen.Schedule.route, Screen.Rating.route, Screen.Settings.route) }
 
-    val PredictiveBackEasing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
-
     Box(modifier = Modifier.fillMaxSize()) {
         NavHost(
             navController = navController,
             startDestination = Screen.Schedule.route,
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background), // Убираем Color.Black, чтобы экран никогда не гас!
+                .background(MaterialTheme.colorScheme.background),
             enterTransition = {
                 val isTabSwitch = initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes
-                if (isTabSwitch) {
-                    // Плавное появление вкладки БЕЗ задержки и БЕЗ изменения масштаба
-                    fadeIn(animationSpec = tween(durationMillis = 180, easing = LinearOutSlowInEasing))
-                } else {
-                    slideIntoContainer(
-                        towards = AnimatedContentTransitionScope.SlideDirection.Start,
-                        initialOffset = { fullWidth -> (fullWidth * 0.14f).toInt() },
-                        animationSpec = tween(durationMillis = 300, easing = PredictiveBackEasing)
-                    ) + fadeIn(animationSpec = tween(durationMillis = 120, easing = LinearEasing))
-                }
+                if (isTabSwitch) com.mguuschedule.ui.theme.AppMotionScheme.tabEnterTransition()
+                else com.mguuschedule.ui.theme.AppMotionScheme.detailEnterTransition()
             },
             exitTransition = {
                 val isTabSwitch = initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes
-                if (isTabSwitch) {
-                    // Мягкое затухание старой вкладки БЕЗ изменения масштаба
-                    fadeOut(animationSpec = tween(durationMillis = 140, easing = FastOutLinearInEasing))
-                } else {
-                    // Нижний экран слегка отдаляется без ухода в темноту
-                    scaleOut(
-                        targetScale = 0.96f,
-                        animationSpec = tween(durationMillis = 300, easing = PredictiveBackEasing)
-                    )
-                }
+                if (isTabSwitch) com.mguuschedule.ui.theme.AppMotionScheme.tabExitTransition()
+                else com.mguuschedule.ui.theme.AppMotionScheme.detailBackgroundExitTransition()
             },
             popEnterTransition = {
                 val isTabSwitch = initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes
-                if (isTabSwitch) {
-                    // Возврат на вкладку «Расписание» БЕЗ scaleIn и БЕЗ delayMillis (не отдаляется и не гаснет!)
-                    fadeIn(animationSpec = tween(durationMillis = 180, easing = LinearOutSlowInEasing))
-                } else {
-                    // Возврат из детального экрана: нижний экран просто восстанавливает масштаб 0.96f -> 1.0f
-                    scaleIn(
-                        initialScale = 0.96f,
-                        animationSpec = tween(durationMillis = 320, easing = PredictiveBackEasing)
-                    )
-                }
+                if (isTabSwitch) com.mguuschedule.ui.theme.AppMotionScheme.tabEnterTransition()
+                else com.mguuschedule.ui.theme.AppMotionScheme.detailBackgroundPopEnterTransition()
             },
             popExitTransition = {
                 val isTabSwitch = initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes
-                if (isTabSwitch) {
-                    // Уход с вкладки «Рейтинг»/«Настройки» на «Расписание» БЕЗ scaleOut и БЕЗ задержки
-                    fadeOut(animationSpec = tween(durationMillis = 140, easing = FastOutLinearInEasing))
-                } else {
-                    // Predictive Back только для детальных экранов (Информация о паре, Поиск и т.д.)
-                    scaleOut(
-                        targetScale = 0.88f,
-                        animationSpec = tween(durationMillis = 320, easing = PredictiveBackEasing)
-                    ) + slideOutOfContainer(
-                        towards = AnimatedContentTransitionScope.SlideDirection.End,
-                        targetOffset = { fullWidth -> (fullWidth * 0.05f).toInt() },
-                        animationSpec = tween(durationMillis = 320, easing = PredictiveBackEasing)
-                    ) + fadeOut(
-                        animationSpec = tween(durationMillis = 90, delayMillis = 230, easing = LinearEasing)
+                if (isTabSwitch) com.mguuschedule.ui.theme.AppMotionScheme.tabExitTransition()
+                else com.mguuschedule.ui.theme.AppMotionScheme.detailPopExitTransition()
+            }
+        ) {
+            composable(Screen.Schedule.route) {
+                Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                    ScheduleScreen(
+                        viewModel = scheduleViewModel,
+                        unreadNotificationCount = unreadCount,
+                        onNotificationHistoryClick = { navController.navigate("notification_history") },
+                        onLessonClick = { lesson ->
+                            haptic.click()
+                            navController.navigate("lesson/${lesson.id}")
+                        }
                     )
                 }
             }
-        ) {
-                composable(Screen.Schedule.route) {
-                    ExpressiveScreenContainer(isDetailScreen = false) {
-                        ScheduleScreen(
-                            viewModel = scheduleViewModel,
-                            unreadNotificationCount = unreadCount,
-                            onNotificationHistoryClick = { navController.navigate("notification_history") },
-                            onLessonClick = { lesson -> 
-                                haptic.click()
-                                navController.navigate("lesson/${lesson.id}") 
-                            }
-                        )
-                    }
-                }
-                composable(Screen.Rating.route) {
-                    ExpressiveScreenContainer(isDetailScreen = false) {
-                        RatingScreen(viewModel = ratingViewModel)
-                    }
-                }
-                composable("notification_history") {
-                    ExpressiveScreenContainer(isDetailScreen = true) {
-                        NotificationHistoryScreen(
-                            onBack = { navController.popBackStack() }
-                        )
-                    }
-                }
-                composable(Screen.Settings.route) {
-                    ExpressiveScreenContainer(isDetailScreen = false) {
-                        ProfileScreen(
-                            viewModel = profileViewModel,
-                            scheduleViewModel = scheduleViewModel,
-                            onNavigateToDebug = { navController.navigate(Screen.Debug.route) },
-                            onOpenFeatureTour = { navController.navigate("feature_tour") }
-                        )
-                    }
-                }
-                composable("feature_tour") {
-                    ExpressiveScreenContainer(isDetailScreen = true) {
-                        FeatureTourScreen(
-                            onFinish = { navController.popBackStack() }
-                        )
-                    }
-                }
-                composable(Screen.Debug.route) {
-                    ExpressiveScreenContainer(isDetailScreen = true) {
-                        DebugScreen(
-                            viewModel = profileViewModel,
-                            onBack = { navController.popBackStack() }
-                        )
-                    }
-                }
-                composable(
-                    route = Screen.LessonDetail.route,
-                    arguments = listOf(navArgument("lessonId") { type = NavType.StringType })
-                ) { backStackEntry ->
-                    ExpressiveScreenContainer(isDetailScreen = true) {
-                        val lessonId = backStackEntry.arguments?.getString("lessonId")
-                        val lesson = lessonId?.let { scheduleViewModel.getLessonById(it) }
-                        LessonDetailScreen(
-                            lesson = lesson, 
-                            onBack = { navController.popBackStack() },
-                            onTeacherClick = { teacherName ->
-                                val encodedName = URLEncoder.encode(teacherName, "UTF-8")
-                                navController.navigate("teacher/$encodedName")
-                            }
-                        )
-                    }
-                }
-
-                composable(
-                    route = Screen.TeacherProfile.route,
-                    arguments = listOf(navArgument("teacherName") { type = NavType.StringType })
-                ) { backStackEntry ->
-                    ExpressiveScreenContainer(isDetailScreen = true) {
-                        val teacherName = backStackEntry.arguments?.getString("teacherName")?.let {
-                            URLDecoder.decode(it, "UTF-8")
-                        } ?: "Неизвестный преподаватель"
-                        
-                        TeacherProfileScreen(
-                            teacherName = teacherName,
-                            onBack = { navController.popBackStack() }
-                        )
-                    }
-                }
-
-                composable(Screen.Todo.route) {
-                    ExpressiveScreenContainer(isDetailScreen = true) {
-                        TodoScreen(
-                            scheduleViewModel = scheduleViewModel,
-                            onBack = { navController.popBackStack() }
-                        )
-                    }
-                }
-
-                composable(Screen.Search.route) {
-                    ExpressiveScreenContainer(isDetailScreen = true) {
-                        SearchOverlay(
-                            onDismiss = { navController.popBackStack() },
-                            allLessons = scheduleViewModel.lessons,
-                            onLessonClick = { lesson ->
-                                navController.navigate("lesson/${lesson.id}")
-                            },
-                            onTeacherClick = { teacherName ->
-                                val encodedName = URLEncoder.encode(teacherName, "UTF-8")
-                                navController.navigate("teacher/$encodedName")
-                            }
-                        )
-                    }
+            composable(Screen.Rating.route) {
+                Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                    RatingScreen(viewModel = ratingViewModel)
                 }
             }
+            composable("notification_history") {
+                ExpressiveDetailScreenContainer(onBack = { navController.popBackStack() }) {
+                    NotificationHistoryScreen(
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+            }
+            composable(Screen.Settings.route) {
+                Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                    ProfileScreen(
+                        viewModel = profileViewModel,
+                        scheduleViewModel = scheduleViewModel,
+                        onNavigateToDebug = { navController.navigate(Screen.Debug.route) },
+                        onOpenFeatureTour = { navController.navigate("feature_tour") }
+                    )
+                }
+            }
+            composable("feature_tour") {
+                ExpressiveDetailScreenContainer(onBack = { navController.popBackStack() }) {
+                    FeatureTourScreen(
+                        onFinish = { navController.popBackStack() }
+                    )
+                }
+            }
+            composable(Screen.Debug.route) {
+                ExpressiveDetailScreenContainer(onBack = { navController.popBackStack() }) {
+                    DebugScreen(
+                        viewModel = profileViewModel,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+            }
+            composable(
+                route = Screen.LessonDetail.route,
+                arguments = listOf(navArgument("lessonId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                ExpressiveDetailScreenContainer(onBack = { navController.popBackStack() }) {
+                    val lessonId = backStackEntry.arguments?.getString("lessonId")
+                    val lesson = lessonId?.let { scheduleViewModel.getLessonById(it) }
+                    LessonDetailScreen(
+                        lesson = lesson,
+                        onBack = { navController.popBackStack() },
+                        onTeacherClick = { teacherName ->
+                            val encodedName = URLEncoder.encode(teacherName, "UTF-8")
+                            navController.navigate("teacher/$encodedName")
+                        }
+                    )
+                }
+            }
+
+            composable(
+                route = Screen.TeacherProfile.route,
+                arguments = listOf(navArgument("teacherName") { type = NavType.StringType })
+            ) { backStackEntry ->
+                ExpressiveDetailScreenContainer(onBack = { navController.popBackStack() }) {
+                    val teacherName = backStackEntry.arguments?.getString("teacherName")?.let {
+                        URLDecoder.decode(it, "UTF-8")
+                    } ?: "Неизвестный преподаватель"
+
+                    TeacherProfileScreen(
+                        teacherName = teacherName,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+            }
+
+            composable(Screen.Todo.route) {
+                ExpressiveDetailScreenContainer(onBack = { navController.popBackStack() }) {
+                    TodoScreen(
+                        scheduleViewModel = scheduleViewModel,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+            }
+
+            composable(Screen.Search.route) {
+                ExpressiveDetailScreenContainer(onBack = { navController.popBackStack() }) {
+                    SearchOverlay(
+                        onDismiss = { navController.popBackStack() },
+                        allLessons = scheduleViewModel.lessons,
+                        onLessonClick = { lesson ->
+                            navController.navigate("lesson/${lesson.id}")
+                        },
+                        onTeacherClick = { teacherName ->
+                            val encodedName = URLEncoder.encode(teacherName, "UTF-8")
+                            navController.navigate("teacher/$encodedName")
+                        }
+                    )
+                }
+            }
+        }
 
             val navBackStackEntry by navController.currentBackStackEntryAsState()
             val currentDestination = navBackStackEntry?.destination
@@ -509,14 +472,75 @@ fun MainAppScaffold(
     }
 
 @Composable
-private fun ExpressiveScreenContainer(
-    isDetailScreen: Boolean = true,
+fun ExpressiveDetailScreenContainer(
+    onBack: () -> Unit,
     content: @Composable () -> Unit
 ) {
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        shape = if (isDetailScreen) RoundedCornerShape(28.dp) else RoundedCornerShape(0.dp),
-        color = MaterialTheme.colorScheme.background
+    val scope = rememberCoroutineScope()
+    var backProgress by remember { mutableFloatStateOf(0f) }
+    var swipeEdge by remember { mutableIntStateOf(androidx.activity.BackEventCompat.EDGE_LEFT) }
+    var touchOffsetY by remember { mutableFloatStateOf(0f) }
+    var startTouchY by remember { mutableFloatStateOf(0f) }
+
+    androidx.activity.compose.PredictiveBackHandler(enabled = true) { progressFlow ->
+        try {
+            var isFirstEvent = true
+            progressFlow.collect { backEvent ->
+                if (isFirstEvent) {
+                    startTouchY = backEvent.touchY
+                    isFirstEvent = false
+                }
+                backProgress = backEvent.progress
+                swipeEdge = backEvent.swipeEdge
+                touchOffsetY = (backEvent.touchY - startTouchY) * 0.08f
+            }
+            // Пользователь завершил жест "Назад" — плавно доводим прогресс и вызываем onBack()
+            animate(
+                initialValue = backProgress,
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 190, easing = FastOutSlowInEasing)
+            ) { value, _ ->
+                backProgress = value
+            }
+            onBack()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Пользователь отменил жест — возвращаем экран обратно на пружине MD3 Expressive
+            scope.launch {
+                animate(
+                    initialValue = backProgress,
+                    targetValue = 0f,
+                    animationSpec = spring(dampingRatio = 0.8f, stiffness = 260f)
+                ) { value, _ ->
+                    backProgress = value
+                }
+                touchOffsetY = 0f
+            }
+        }
+    }
+
+    // Нелинейное сглаживание прогресса по гайдлайнам Android 15/16 Predictive Back
+    val easedProgress = FastOutSlowInEasing.transform(backProgress.coerceIn(0f, 1f))
+    val scale = 1f - (easedProgress * 0.11f) // Сжатие до 89%
+    val horizontalShiftDp = if (swipeEdge == androidx.activity.BackEventCompat.EDGE_LEFT) {
+        22f * easedProgress
+    } else {
+        -22f * easedProgress
+    }
+    val cornerRadius = (28f * easedProgress).dp
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                translationX = horizontalShiftDp.dp.toPx()
+                translationY = touchOffsetY * easedProgress
+                alpha = 1f - (easedProgress * 0.15f).coerceAtMost(0.15f)
+                shape = RoundedCornerShape(cornerRadius)
+                clip = easedProgress > 0.005f
+            }
+            .background(MaterialTheme.colorScheme.background)
     ) {
         content()
     }
