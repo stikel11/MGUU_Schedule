@@ -41,6 +41,7 @@ fun WeekCalendar(
     unreadNotificationCount: Int = 0,
     onNotificationHistoryClick: () -> Unit = {},
     onShareDayClick: () -> Unit = {},
+    onSettingsClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showMonthPicker by remember { mutableStateOf(false) }
@@ -178,6 +179,26 @@ fun WeekCalendar(
                             contentDescription = "Поделиться расписанием дня",
                             tint = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
+                // Settings Button (правее кнопки Поделиться)
+                Surface(
+                    onClick = {
+                        haptic.lightTick()
+                        onSettingsClick()
+                    },
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Настройки",
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }

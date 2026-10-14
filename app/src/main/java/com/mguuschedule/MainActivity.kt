@@ -213,7 +213,7 @@ fun MainAppScaffold(
     ratingViewModel: RatingViewModel
 ) {
     val navController = rememberNavController()
-    val items = listOf(Screen.Schedule, Screen.Rating, Screen.Settings)
+    val items = listOf(Screen.Schedule, Screen.Rating, Screen.Sections)
     val selectedGroup = profileViewModel.selectedGroup
     val haptic = rememberHapticFeedback()
 
@@ -237,7 +237,7 @@ fun MainAppScaffold(
         }
     }
 
-    val bottomTabRoutes = remember { listOf(Screen.Schedule.route, Screen.Rating.route, Screen.Settings.route) }
+    val bottomTabRoutes = remember { listOf(Screen.Schedule.route, Screen.Rating.route, Screen.Sections.route) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         NavHost(
@@ -273,6 +273,7 @@ fun MainAppScaffold(
                         viewModel = scheduleViewModel,
                         unreadNotificationCount = unreadCount,
                         onNotificationHistoryClick = { navController.navigate("notification_history") },
+                        onSettingsClick = { navController.navigate(Screen.Settings.route) },
                         onLessonClick = { lesson ->
                             haptic.click()
                             navController.navigate("lesson/${lesson.id}")
@@ -285,6 +286,53 @@ fun MainAppScaffold(
                     RatingScreen(viewModel = ratingViewModel)
                 }
             }
+            composable(Screen.Sections.route) {
+                val allLessons by scheduleViewModel.allLessonsFlow.collectAsState()
+                val addonSummaries by scheduleViewModel.lessonAddonSummaries.collectAsState()
+                Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                    com.mguuschedule.ui.screens.SectionsScreen(
+                        groupName = profileViewModel.selectedGroup?.name ?: "",
+                        allLessons = allLessons,
+                        addonSummaries = addonSummaries,
+                        onOpenCurriculum = { navController.navigate("curriculum") },
+                        onOpenMaterials = { navController.navigate("materials_hub") },
+                        onOpenAttendance = { navController.navigate("attendance") },
+                        onOpenSettings = { navController.navigate(Screen.Settings.route) }
+                    )
+                }
+            }
+            composable("curriculum") {
+                val allLessons by scheduleViewModel.allLessonsFlow.collectAsState()
+                ExpressiveDetailScreenContainer(onBack = { navController.popBackStack() }) {
+                    com.mguuschedule.ui.screens.CurriculumScreen(
+                        allLessons = allLessons,
+                        subjectsFromRating = emptyList(),
+                        controlPointsMap = emptyMap(),
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+            }
+            composable("materials_hub") {
+                val allLessons by scheduleViewModel.allLessonsFlow.collectAsState()
+                val addonSummaries by scheduleViewModel.lessonAddonSummaries.collectAsState()
+                ExpressiveDetailScreenContainer(onBack = { navController.popBackStack() }) {
+                    com.mguuschedule.ui.screens.MaterialsHubScreen(
+                        allLessons = allLessons,
+                        addonSummaries = addonSummaries,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+            }
+            composable("attendance") {
+                val allLessons by scheduleViewModel.allLessonsFlow.collectAsState()
+                ExpressiveDetailScreenContainer(onBack = { navController.popBackStack() }) {
+                    com.mguuschedule.ui.screens.AttendanceScreen(
+                        groupName = profileViewModel.selectedGroup?.name ?: "",
+                        allLessons = allLessons,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+            }
             composable("notification_history") {
                 ExpressiveDetailScreenContainer(onBack = { navController.popBackStack() }) {
                     NotificationHistoryScreen(
@@ -293,7 +341,7 @@ fun MainAppScaffold(
                 }
             }
             composable(Screen.Settings.route) {
-                Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                ExpressiveDetailScreenContainer(onBack = { navController.popBackStack() }) {
                     ProfileScreen(
                         viewModel = profileViewModel,
                         scheduleViewModel = scheduleViewModel,

@@ -62,6 +62,7 @@ fun ScheduleScreen(
     viewModel: ScheduleViewModel,
     unreadNotificationCount: Int = 0,
     onNotificationHistoryClick: () -> Unit = {},
+    onSettingsClick: () -> Unit = {},
     onLessonClick: (Lesson) -> Unit = {}
 ) {
     val selectedDate by viewModel.selectedDate.collectAsState()
@@ -140,6 +141,7 @@ fun ScheduleScreen(
                             onDateSelected = { viewModel.onDateSelected(it) },
                             unreadNotificationCount = unreadNotificationCount,
                             onNotificationHistoryClick = onNotificationHistoryClick,
+                            onSettingsClick = onSettingsClick,
                             onShareDayClick = {
                                 val appPrefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
                                 val shareStyle = appPrefs.getInt("share_card_style", 0)
