@@ -85,6 +85,8 @@ fun RatingScreen(
                     haptic.gestureThreshold()
                     viewModel.loadRating(forceRefresh = true)
                 },
+                statusText = viewModel.refreshStatusText,
+                isError = viewModel.refreshIsError,
                 modifier = Modifier
                     .fillMaxSize()
                     .consumeWindowInsets(innerPadding)

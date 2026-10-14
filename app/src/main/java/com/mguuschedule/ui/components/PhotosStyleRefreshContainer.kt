@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -49,6 +50,8 @@ fun PhotosStyleRefreshContainer(
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
+    statusText: String = "Данные обновлены",
+    isError: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val density = LocalDensity.current
@@ -81,7 +84,7 @@ fun PhotosStyleRefreshContainer(
                 targetValue = activeHoldPx,
                 animationSpec = spring(dampingRatio = 0.85f, stiffness = 260f)
             )
-            delay(850L)
+            delay(if (isError) 1400L else 850L)
             offsetAnim.animateTo(
                 targetValue = 0f,
                 animationSpec = spring(dampingRatio = 0.88f, stiffness = 220f)
@@ -179,7 +182,7 @@ fun PhotosStyleRefreshContainer(
                     if (isDone) {
                         Surface(
                             shape = RoundedCornerShape(20.dp),
-                            color = MaterialTheme.colorScheme.secondaryContainer
+                            color = if (isError) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -187,16 +190,16 @@ fun PhotosStyleRefreshContainer(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Rounded.CheckCircle,
+                                    imageVector = if (isError) Icons.Rounded.Warning else Icons.Rounded.CheckCircle,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
+                                    tint = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Text(
-                                    text = "Данные обновлены",
+                                    text = statusText,
                                     style = MaterialTheme.typography.labelLarge,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                    color = if (isError) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSecondaryContainer
                                 )
                             }
                         }

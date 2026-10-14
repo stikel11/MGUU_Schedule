@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.stateIn
 import com.mguuschedule.util.SearchEngine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -127,6 +128,12 @@ class ScheduleViewModel(
     var isRefreshing by mutableStateOf(false)
         private set
 
+    var refreshStatusText by mutableStateOf("Данные обновлены")
+        private set
+
+    var refreshIsError by mutableStateOf(false)
+        private set
+
     var hasChangesInLastRefresh by mutableStateOf(false)
         private set
 
@@ -199,43 +206,70 @@ class ScheduleViewModel(
         viewModelScope.launch {
             isRefreshing = true
             isForcedLoading = lessonsForSelectedDay.value.isEmpty()
+            refreshStatusText = "Данные обновлены"
+            refreshIsError = false
             
             AppLogger.d("SCHEDULE_TRACE", ">>> 1. Старт корутины загрузки...")
             
             try {
-                val result = scheduleRepository.fetchSchedule(groupId, groupName, cacheDaysCount)
-                
-                result.onSuccess { entities ->
-                    try {
-                        val newLessons = entities.mapNotNull { it.toLesson() }
-                        val currentDayStr = _selectedDate.value.toString()
-                        val previousDayLessons = lessonsForSelectedDay.value
-                        val newDayLessons = newLessons.filter { it.date.toString() == currentDayStr }
-                        
-                        hasChangesInLastRefresh = if (previousDayLessons.isEmpty()) false else previousDayLessons != newDayLessons
-                        
-                        if (newLessons.isEmpty() && lessonsForSelectedDay.value.isNotEmpty()) {
-                            AppLogger.d("SCHEDULE_TRACE", "Портал вернул пустой список, но локальный кэш жив. Оставляем кэш.")
-                        } else {
-                            uiState = ScheduleUiState.Success(newLessons)
-                            scheduleUpcomingRemindersFromDb()
-                        }
-                        AppLogger.d("SCHEDULE_TRACE", ">>> 3. Успешно загружено пар: ${newLessons.size}")
-                    } catch (e: Exception) {
-                        AppLogger.e("SCHEDULE_TRACE", "ОШИБКА ОБРАБОТКИ ПАР: ${e.message}", e)
-                        if (lessonsForSelectedDay.value.isEmpty()) {
-                            uiState = ScheduleUiState.Error(e.message ?: "Ошибка обработки расписания")
-                        }
+                val result = withTimeoutOrNull(10000L) {
+                    scheduleRepository.fetchSchedule(groupId, groupName, cacheDaysCount)
+                }
+
+                if (result == null) {
+                    AppLogger.e("SCHEDULE_TRACE", "ТАЙМАУТ СЕТЕВОГО ЗАПРОСА (10с)")
+                    if (allLessonsFlow.value.isNotEmpty() || lessonsForSelectedDay.value.isNotEmpty()) {
+                        refreshStatusText = "Ошибка обновления, показаны кэшированные данные"
+                        refreshIsError = true
+                    } else {
+                        uiState = ScheduleUiState.Error("Превышено время ожидания сети (10с)")
                     }
-                }.onFailure { e ->
-                    AppLogger.e("SCHEDULE_TRACE", "ОШИБКА ЗАГРУЗКИ: ${e.message}", e)
-                    if (lessonsForSelectedDay.value.isEmpty() && uiState !is ScheduleUiState.Success) {
-                        uiState = ScheduleUiState.Error(e.message ?: "Ошибка подключения")
+                } else {
+                    result.onSuccess { entities ->
+                        try {
+                            val newLessons = entities.mapNotNull { it.toLesson() }
+                            val currentDayStr = _selectedDate.value.toString()
+                            val previousDayLessons = lessonsForSelectedDay.value
+                            val newDayLessons = newLessons.filter { it.date.toString() == currentDayStr }
+                            
+                            hasChangesInLastRefresh = if (previousDayLessons.isEmpty()) false else previousDayLessons != newDayLessons
+                            
+                            if (newLessons.isEmpty() && lessonsForSelectedDay.value.isNotEmpty()) {
+                                AppLogger.d("SCHEDULE_TRACE", "Портал вернул пустой список, но локальный кэш жив. Оставляем кэш.")
+                                refreshStatusText = "Ошибка обновления, показаны кэшированные данные"
+                                refreshIsError = true
+                            } else {
+                                refreshStatusText = "Данные обновлены"
+                                refreshIsError = false
+                                uiState = ScheduleUiState.Success(newLessons)
+                                scheduleUpcomingRemindersFromDb()
+                            }
+                            AppLogger.d("SCHEDULE_TRACE", ">>> 3. Успешно загружено пар: ${newLessons.size}")
+                        } catch (e: Exception) {
+                            AppLogger.e("SCHEDULE_TRACE", "ОШИБКА ОБРАБОТКИ ПАР: ${e.message}", e)
+                            if (allLessonsFlow.value.isNotEmpty() || lessonsForSelectedDay.value.isNotEmpty()) {
+                                refreshStatusText = "Ошибка обновления, показаны кэшированные данные"
+                                refreshIsError = true
+                            } else if (lessonsForSelectedDay.value.isEmpty()) {
+                                uiState = ScheduleUiState.Error(e.message ?: "Ошибка обработки расписания")
+                            }
+                        }
+                    }.onFailure { e ->
+                        AppLogger.e("SCHEDULE_TRACE", "ОШИБКА ЗАГРУЗКИ: ${e.message}", e)
+                        if (allLessonsFlow.value.isNotEmpty() || lessonsForSelectedDay.value.isNotEmpty()) {
+                            refreshStatusText = "Ошибка обновления, показаны кэшированные данные"
+                            refreshIsError = true
+                        } else if (lessonsForSelectedDay.value.isEmpty() && uiState !is ScheduleUiState.Success) {
+                            uiState = ScheduleUiState.Error(e.message ?: "Ошибка подключения")
+                        }
                     }
                 }
             } catch (e: Exception) {
                 AppLogger.e("SCHEDULE_TRACE", "НЕОЖИДАННАЯ ОШИБКА: ${e.message}", e)
-                if (lessonsForSelectedDay.value.isEmpty() && uiState !is ScheduleUiState.Success) {
+                if (allLessonsFlow.value.isNotEmpty() || lessonsForSelectedDay.value.isNotEmpty()) {
+                    refreshStatusText = "Ошибка обновления, показаны кэшированные данные"
+                    refreshIsError = true
+                } else if (lessonsForSelectedDay.value.isEmpty() && uiState !is ScheduleUiState.Success) {
                     uiState = ScheduleUiState.Error(e.message ?: "Ошибка загрузки расписания")
                 }
             } finally {

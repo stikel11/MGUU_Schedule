@@ -26,6 +26,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withTimeoutOrNull
 
 sealed class RatingUiState {
     object Loading : RatingUiState()
@@ -58,6 +59,12 @@ class RatingViewModel(
         private set
 
     var isRefreshing by mutableStateOf(false)
+        private set
+
+    var refreshStatusText by mutableStateOf("Данные обновлены")
+        private set
+
+    var refreshIsError by mutableStateOf(false)
         private set
 
     var selectedYearId by mutableStateOf<String?>(null)
@@ -204,12 +211,28 @@ class RatingViewModel(
             }
 
             isRefreshing = true
+            refreshStatusText = "Данные обновлены"
+            refreshIsError = false
 
             try {
                 val groupUrl = ratingRepository.buildGroupUrl(groupId, groupName, yearId, semId)
                 AppLogger.d("RATING", "Запрос рейтинга группы: $groupUrl")
 
-                val ratingPage = ratingRepository.parseGroupList(groupUrl)
+                val ratingPage = withTimeoutOrNull(10000L) {
+                    ratingRepository.parseGroupList(groupUrl)
+                }
+
+                if (ratingPage == null) {
+                    AppLogger.e("RATING", "ТАЙМАУТ СЕТЕВОГО ЗАПРОСА РЕЙТИНГА (10с)")
+                    refreshStatusText = "Ошибка обновления, показаны кэшированные данные"
+                    refreshIsError = true
+                    isRefreshing = false
+                    if (uiState !is RatingUiState.Success) {
+                        uiState = RatingUiState.Error("Превышено время ожидания сети (10с)")
+                    }
+                    return@launch
+                }
+
                 val students = ratingPage.students
 
                 val activeYearId = yearId ?: ratingPage.availableYears.find { it.isSelected }?.id ?: selectedYearId

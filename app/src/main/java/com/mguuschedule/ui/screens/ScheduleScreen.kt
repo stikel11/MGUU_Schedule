@@ -107,6 +107,8 @@ fun ScheduleScreen(
                     haptic.gestureThreshold()
                     viewModel.refreshSchedule()
                 },
+                statusText = viewModel.refreshStatusText,
+                isError = viewModel.refreshIsError,
                 modifier = Modifier
                     .fillMaxSize()
                     .consumeWindowInsets(innerPadding)
