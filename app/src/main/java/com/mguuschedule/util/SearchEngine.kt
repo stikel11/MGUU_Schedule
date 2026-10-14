@@ -56,21 +56,25 @@ sealed class SearchResultItem {
 object SearchEngine {
 
     private val localeRu = Locale("ru")
+    private val NORMALIZE_CHAR_REGEX = Regex("[^a-zа-я0-9\\s./\\-]")
+    private val WHITESPACE_REGEX = Regex("\\s+")
+    private val SUBJECT_TYPE_SUFFIX_REGEX = Regex(",\\s*(лекция|семинар|практика|лаб|лабораторная|экзамен|зачет).*$", RegexOption.IGNORE_CASE)
+    private val SUBJECT_CHAR_REGEX = Regex("[^a-zа-я0-9\\s]")
 
     fun normalize(text: String): String {
         return text.lowercase(Locale.ROOT)
             .replace("ё", "е")
-            .replace(Regex("[^a-zа-я0-9\\s./\\-]"), "")
-            .replace(Regex("\\s+"), " ")
+            .replace(NORMALIZE_CHAR_REGEX, "")
+            .replace(WHITESPACE_REGEX, " ")
             .trim()
     }
 
     fun normalizeSubjectName(title: String): String {
         return title.lowercase(Locale.ROOT)
             .replace("ё", "е")
-            .replace(Regex(",\\s*(лекция|семинар|практика|лаб|лабораторная|экзамен|зачет).*$", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("[^a-zа-я0-9\\s]"), "")
-            .replace(Regex("\\s+"), " ")
+            .replace(SUBJECT_TYPE_SUFFIX_REGEX, "")
+            .replace(SUBJECT_CHAR_REGEX, "")
+            .replace(WHITESPACE_REGEX, " ")
             .trim()
     }
 

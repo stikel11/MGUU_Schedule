@@ -152,11 +152,17 @@ fun PhotosStyleRefreshContainer(
     val pullProgress = (currentOffset / triggerPx).coerceIn(0f, 1f)
     val contentTopCornerRadius = (28.dp * pullProgress).coerceIn(0.dp, 28.dp)
 
+    val recessedWellColor = androidx.compose.ui.graphics.lerp(
+        MaterialTheme.colorScheme.background,
+        MaterialTheme.colorScheme.primary,
+        0.09f
+    )
+
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(
-                if (currentOffset > 2f) MaterialTheme.colorScheme.surfaceContainerHigh
+                if (currentOffset > 2f) recessedWellColor
                 else MaterialTheme.colorScheme.background
             )
             .nestedScroll(nestedScrollConnection)

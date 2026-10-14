@@ -175,7 +175,9 @@ class SearchViewModel(
                 else if (isCpIntent) {
                     results.add(SearchResultItem.ControlPointHeader())
                     val database = AppDatabase.getDatabase(getApplication())
-                    val cacheEntity = database.ratingDao().getLatestRatingCache()
+                    val cacheEntity = kotlinx.coroutines.withContext(Dispatchers.IO) {
+                        database.ratingDao().getLatestRatingCache()
+                    }
                     
                     if (cacheEntity != null) {
                         val cpType = object : TypeToken<Map<String, List<ControlPoint>>>() {}.type

@@ -414,10 +414,10 @@ fun LessonRow(
         else -> LessonStatus.CURRENT
     }
 
-    val startTimeStr = lesson.startTime.toString()
-    val endTimeStr = lesson.endTime.toString()
-    val typeName = lesson.type.lowercase().replaceFirstChar { it.uppercase() }
-    val roomFormatted = formatClassroom(lesson.room)
+    val startTimeStr = remember(lesson.startTime) { lesson.startTime.toString() }
+    val endTimeStr = remember(lesson.endTime) { lesson.endTime.toString() }
+    val typeName = remember(lesson.type) { lesson.type.lowercase().replaceFirstChar { it.uppercase() } }
+    val roomFormatted = remember(lesson.room) { formatClassroom(lesson.room) }
     
     val containerColor = if (status == LessonStatus.CURRENT) {
         MaterialTheme.colorScheme.primaryContainer
