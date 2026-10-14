@@ -660,40 +660,39 @@ fun LessonRow(
                     enter = expandVertically(spring(0.82f, 260f)) + fadeIn(),
                     exit = shrinkVertically(spring(0.85f, 260f)) + fadeOut()
                 ) {
-                    Column(modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
-                        HorizontalDivider(
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
-                            thickness = 1.dp
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
+                    val bentoCardBg = MaterialTheme.colorScheme.surfaceContainerHighest
 
+                    Column(modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
                         if (addonSummary?.hasTasks == true) {
                             val tasks = addonSummary.tasks
                             val firstTask = tasks.firstOrNull { !it.isCompleted } ?: tasks.first()
+                            val formattedTaskTitle = firstTask.title.replaceFirstChar { it.uppercase() }
 
                             Surface(
                                 shape = RoundedCornerShape(16.dp),
-                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                color = bentoCardBg,
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(12.dp),
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Rounded.TaskAlt,
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(20.dp)
+                                        modifier = Modifier.size(18.dp)
                                     )
                                     Text(
-                                        text = "Задача: ${firstTask.title}",
+                                        text = formattedTaskTitle,
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.Medium,
-                                        maxLines = 1,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 2,
+                                        lineHeight = 18.sp,
                                         overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f, fill = false)
+                                        modifier = Modifier.weight(1f)
                                     )
                                     if (tasks.size > 1) {
                                         Surface(
@@ -719,25 +718,27 @@ fun LessonRow(
                             }
                             Surface(
                                 shape = RoundedCornerShape(16.dp),
-                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                color = bentoCardBg,
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(12.dp),
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Rounded.Notes,
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(20.dp)
+                                        modifier = Modifier.size(18.dp)
                                     )
                                     Text(
                                         text = addonSummary.noteText ?: "",
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.Medium,
-                                        maxLines = 1,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 2,
+                                        lineHeight = 18.sp,
                                         overflow = TextOverflow.Ellipsis
                                     )
                                 }
@@ -776,7 +777,7 @@ fun LessonRow(
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(10.dp),
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
@@ -789,6 +790,7 @@ fun LessonRow(
                                     Text(
                                         text = if (isSecondWithMore) "$displayName (+${materials.size - 2})" else displayName,
                                         style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
