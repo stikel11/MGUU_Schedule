@@ -129,26 +129,42 @@ fun MGUUScheduleTheme(
         }
     }
 
+    val context = LocalContext.current
     val colorScheme = when {
-        !darkTheme -> {
+        darkTheme -> {
+            val baseDark = if (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                dynamicDarkColorScheme(context)
+            } else {
+                DarkColorScheme
+            }
+            baseDark.copy(
+                background = androidx.compose.ui.graphics.lerp(baseDark.background, Color.Black, 0.25f),
+                surface = androidx.compose.ui.graphics.lerp(baseDark.surface, Color.Black, 0.25f),
+                surfaceContainerLowest = androidx.compose.ui.graphics.lerp(baseDark.surfaceContainerLowest, Color.Black, 0.25f),
+                surfaceContainerLow = androidx.compose.ui.graphics.lerp(baseDark.surfaceContainerLow, baseDark.primary, 0.05f),
+                surfaceContainer = androidx.compose.ui.graphics.lerp(baseDark.surfaceContainer, baseDark.primary, 0.08f),
+                surfaceContainerHigh = androidx.compose.ui.graphics.lerp(baseDark.surfaceContainerHigh, baseDark.primary, 0.11f),
+                surfaceContainerHighest = androidx.compose.ui.graphics.lerp(baseDark.surfaceContainerHighest, baseDark.primary, 0.16f)
+            )
+        }
+        else -> {
             val baseLight = if (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                dynamicLightColorScheme(LocalContext.current)
+                dynamicLightColorScheme(context)
             } else {
                 LightColorScheme
             }
             val primaryTone = baseLight.primary
             baseLight.copy(
-                background = androidx.compose.ui.graphics.lerp(Color.White, primaryTone, 0.06f),
-                surface = androidx.compose.ui.graphics.lerp(Color.White, primaryTone, 0.06f),
+                background = androidx.compose.ui.graphics.lerp(Color.White, primaryTone, 0.12f),
+                surface = androidx.compose.ui.graphics.lerp(Color.White, primaryTone, 0.12f),
                 surfaceContainerLowest = Color.White,
                 surfaceContainerLow = Color.White,
                 surfaceContainer = Color.White,
                 surfaceContainerHigh = Color.White,
-                surfaceContainerHighest = androidx.compose.ui.graphics.lerp(Color.White, primaryTone, 0.11f),
-                outlineVariant = androidx.compose.ui.graphics.lerp(baseLight.onSurface, Color.White, 0.80f)
+                surfaceContainerHighest = androidx.compose.ui.graphics.lerp(Color.White, primaryTone, 0.13f),
+                outlineVariant = androidx.compose.ui.graphics.lerp(baseLight.onSurface, Color.White, 0.78f)
             )
         }
-        else -> DarkColorScheme
     }
 
     MaterialTheme(

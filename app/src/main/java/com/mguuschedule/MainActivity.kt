@@ -291,7 +291,6 @@ fun MainAppScaffold(
                 val addonSummaries by scheduleViewModel.lessonAddonSummaries.collectAsState()
                 Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                     com.mguuschedule.ui.screens.SectionsScreen(
-                        groupName = profileViewModel.selectedGroup?.name ?: "",
                         allLessons = allLessons,
                         addonSummaries = addonSummaries,
                         onOpenCurriculum = { navController.navigate("curriculum") },
@@ -327,7 +326,6 @@ fun MainAppScaffold(
                 val allLessons by scheduleViewModel.allLessonsFlow.collectAsState()
                 ExpressiveDetailScreenContainer(onBack = { navController.popBackStack() }) {
                     com.mguuschedule.ui.screens.AttendanceScreen(
-                        groupName = profileViewModel.selectedGroup?.name ?: "",
                         allLessons = allLessons,
                         onBack = { navController.popBackStack() }
                     )
