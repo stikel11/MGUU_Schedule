@@ -2,6 +2,14 @@
 
 An unofficial Android application for viewing and managing the class schedule of Moscow Metropolitan Governance University (MGUU).
 
+## Status
+
+Development is currently on hold.
+
+Latest version: 0.71 beta
+
+This version may not work correctly and contains bugs.
+
 ## About
 
 MGUU Schedule provides a convenient way to access the university schedule from an Android device.
@@ -93,20 +101,6 @@ The latest APK releases are available on the repository's [Releases](../../relea
 App also available on [RuStore](https://www.rustore.ru/catalog/app/com.mguuschedule) as Preorder
 
 > MGUU Schedule is distributed as an APK and is not an official application of Moscow Metropolitan Governance University.
-
-## Development Status
-
-Current version: 0.71 Beta
-
-The project is currently in beta.
-
-The core functionality is implemented. Current development is focused on:
-
-- Bug fixes
-- UI and UX improvements
-- Animation and interaction polish
-- Performance and stability improvements
-- Further integration with university services
 
 ## Privacy
 
