@@ -119,6 +119,14 @@ class MainActivity : ComponentActivity() {
             )
             val selectedGroup = profileViewModel.selectedGroup
 
+            // FCM & Remote Config Initialization
+            LaunchedEffect(Unit) {
+                com.mguuschedule.fcm.FCMManager.initialize()
+                com.mguuschedule.config.RemoteConfigManager.initialize(app)
+            }
+
+            val emergencyAnnouncement by com.mguuschedule.config.RemoteConfigManager.announcement.collectAsState()
+
             val darkTheme = when (profileViewModel.themeMode) {
                 1 -> false
                 2 -> true
@@ -200,6 +208,59 @@ class MainActivity : ComponentActivity() {
                             MainAppScaffold(profileViewModel, scheduleViewModel, ratingViewModel)
                         }
                     }
+
+                    emergencyAnnouncement?.let { announcement ->
+                        if (announcement.enabled) {
+                            AlertDialog(
+                                onDismissRequest = {
+                                    if (announcement.dismissible) {
+                                        com.mguuschedule.config.RemoteConfigManager.acknowledgeAnnouncement(app, announcement.id)
+                                    }
+                                },
+                                title = {
+                                    Text(
+                                        text = announcement.title,
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                },
+                                text = {
+                                    Text(
+                                        text = announcement.message,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                },
+                                confirmButton = {
+                                    Button(
+                                        onClick = {
+                                            com.mguuschedule.config.RemoteConfigManager.acknowledgeAnnouncement(app, announcement.id)
+                                            if (announcement.url.isNotBlank()) {
+                                                runCatching {
+                                                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(announcement.url))
+                                                    app.startActivity(intent.apply { addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK) })
+                                                }
+                                            }
+                                        }
+                                    ) {
+                                        Text(announcement.buttonText, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                                    }
+                                },
+                                dismissButton = if (announcement.dismissible) {
+                                    {
+                                        TextButton(onClick = {
+                                            com.mguuschedule.config.RemoteConfigManager.acknowledgeAnnouncement(app, announcement.id)
+                                        }) {
+                                            Text("Закрыть")
+                                        }
+                                    }
+                                } else null,
+                                shape = RoundedCornerShape(28.dp),
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -226,6 +287,7 @@ fun MainAppScaffold(
 
     val activity = remember(currentContext) { currentContext as? ComponentActivity }
     val lessonIdExtra = remember { activity?.intent?.getStringExtra("navigate_to_lesson_id") }
+    val routeExtra = remember { activity?.intent?.getStringExtra("navigate_to_route") }
 
     LaunchedEffect(selectedGroup) {
         selectedGroup?.let { scheduleViewModel.loadSchedule(it.id) }
@@ -234,6 +296,12 @@ fun MainAppScaffold(
     LaunchedEffect(lessonIdExtra) {
         lessonIdExtra?.let { lessonId ->
             navController.navigate("lesson/$lessonId")
+        }
+    }
+
+    LaunchedEffect(routeExtra) {
+        routeExtra?.let { route ->
+            navController.navigate(route)
         }
     }
 

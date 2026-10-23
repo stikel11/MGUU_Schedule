@@ -2,6 +2,9 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
+    // Firebase plugin: requires google-services.json to work. 
+    // Uncomment the line below AFTER adding google-services.json to the app/ folder.
+    // alias(libs.plugins.google.services)
 }
 
 android {
@@ -12,8 +15,8 @@ android {
         applicationId = "com.mguuschedule"
         minSdk = 26
         targetSdk = 37
-        versionCode = 71
-        versionName = "0.71"
+        versionCode = 73
+        versionName = "0.73"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -48,9 +51,16 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.navigation.compose)
+    implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.jsoup)
     implementation(libs.gson)
+    
+    // Firebase
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
+    implementation(libs.firebase.config)
+
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp("androidx.room:room-compiler:2.6.1")

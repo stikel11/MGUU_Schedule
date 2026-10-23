@@ -32,6 +32,7 @@ object NotificationHelper {
     const val CHANNEL_CLASS_REMINDERS = "channel_class_reminders"
     const val CHANNEL_SCHEDULE_CHANGES = "channel_schedule_changes"
     const val CHANNEL_LIVE_UPDATES = "channel_live_updates"
+    const val CHANNEL_GENERAL_ANNOUNCEMENTS = "channel_general_announcements"
     const val CHANNEL_TEST = "schedule_channel"
 
     fun createNotificationChannels(context: Context) {
@@ -56,6 +57,13 @@ object NotificationHelper {
                 NotificationChannel(CHANNEL_LIVE_UPDATES, "Live updates", NotificationManager.IMPORTANCE_HIGH).apply {
                     description = "Активные занятия в строке состояния (System Status Chip)"
                     setShowBadge(true)
+                }
+            )
+
+            notificationManager.createNotificationChannel(
+                NotificationChannel(CHANNEL_GENERAL_ANNOUNCEMENTS, "Общие объявления", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                    description = "Уведомления и новости от разработчиков"
+                    enableVibration(true)
                 }
             )
 
