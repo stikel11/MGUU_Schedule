@@ -39,12 +39,9 @@ The project is developed using modern Android technologies and focuses on a clea
 
 ## Screenshots
 
-<img width="1215" height="2160" alt="exported_image_1790718404616" src="https://github.com/user-attachments/assets/50aa9cde-2edd-4bd1-8754-904a2f7565b7" />
-<img width="1215" height="2160" alt="exported_image_1790718416693" src="https://github.com/user-attachments/assets/f3f08a6d-5bef-4e54-a6bc-90db35c09869" />
-<img width="1215" height="2160" alt="exported_image_1790718445220" src="https://github.com/user-attachments/assets/2ef71b32-7892-4713-ac21-66c5d7fbded8" />
-<img width="1215" height="2160" alt="exported_image_1790718847184" src="https://github.com/user-attachments/assets/e4bec8e1-c550-4233-abd6-81b4f886ccb8" />
-
-
+<img width="1214" height="1080" alt="Group 7" src="https://github.com/user-attachments/assets/3909fb11-f1e5-4b92-a675-e01aacbecbf9" />
+<img width="1214" height="1080" alt="Group 8" src="https://github.com/user-attachments/assets/b19b7f4f-681c-4ac0-b5b7-479461053bb0" />
+<img width="1214" height="1080" alt="Group 9" src="https://github.com/user-attachments/assets/c83af237-ba78-4afc-a98d-e5ce33c03965" />
 
 ## Technology Stack
 
