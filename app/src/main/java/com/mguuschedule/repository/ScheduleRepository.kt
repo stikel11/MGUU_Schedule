@@ -26,7 +26,10 @@ class ScheduleRepository(private val context: Context, private val database: App
     private val addonsDao: LessonAddonsDao = database.lessonAddonsDao()
     private val prefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
     
-    private fun fetchAndParsePortalUrl(url: String): List<LessonEntity> {
+    private fun fetchAndParseApiUrl(url: String): List<LessonEntity> {
+        val start = System.currentTimeMillis()
+        AppLogger.d("API_REQ", "GET $url")
+        
         val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
             override fun checkClientTrusted(chain: Array<X509Certificate>?, authType: String?) {}
             override fun checkServerTrusted(chain: Array<X509Certificate>?, authType: String?) {}
@@ -36,65 +39,49 @@ class ScheduleRepository(private val context: Context, private val database: App
             init(null, trustAllCerts, SecureRandom())
         }
 
-        val doc = Jsoup.connect(url)
+        val jsonBody = Jsoup.connect(url)
             .sslSocketFactory(sslContext.socketFactory)
+            .ignoreContentType(true)
             .userAgent("Mozilla/5.0 (Linux; Android 14; Pixel 9 Pro) AppleWebKit/537.36")
-            .referrer("https://portal.mguu.ru/")
-            .header("Accept-Language", "ru-RU,ru;q=0.9")
-            .timeout(20_000)
-            .get()
+            .header("Accept", "application/json")
+            .header("Origin", "https://lk-upm.ru")
+            .timeout(12_000)
+            .execute()
+            .body()
 
-        AppLogger.d("PORTAL_PARSER", "Title страницы: ${doc.title()}")
-        val lessons = ScheduleParser.parse(doc.html())
-        Log.d("PORTAL_PARSER", "Успешно спарсено пар с $url: ${lessons.size}")
-        AppLogger.d("PORTAL_PARSER", "Успешно спарсено пар с $url: ${lessons.size}")
-        
-        if (lessons.isEmpty() && doc.html().contains("ОШИБКА", ignoreCase = true)) {
-            throw Exception("Портал вернул страницу с ошибкой")
-        }
-        
+        val duration = System.currentTimeMillis() - start
+        AppLogger.d("API_RES", "GET $url -> ${duration}мс (${jsonBody?.length ?: 0} символов)")
+
+        val lessons = ScheduleParser.parse(jsonBody)
         return lessons
     }
 
     suspend fun fetchScheduleFromPortal(
         groupId: String = "000000311",
-        groupName: String = "26М-УГКП21",
-        startDate: String = "01.09.2026",
-        endDate: String = "30.09.2026"
+        groupName: String = "",
+        startDate: String = "",
+        endDate: String = ""
     ): List<LessonEntity> = withContext(Dispatchers.IO) {
-        val encodedGroup = URLEncoder.encode(groupName, "UTF-8")
-        val levelStr = prefs.getString("selected_group_level", "BACHELOR")
-        val level = runCatching { EducationLevel.valueOf(levelStr ?: "BACHELOR") }.getOrDefault(
-            EducationLevel.BACHELOR)
+        val apiUrl = "https://api.lk-upm.ru/api/schedule-by-id/${groupId.trim()}"
 
-        val primaryPage = level.schedulerPage
-        val primaryUrl = "https://portal.mguu.ru/student/$primaryPage?groupid=$groupId&groupname=$encodedGroup&startDate=$startDate&endDate=$endDate#schedule"
+        Log.d("API_PARSER", "Запрос к API: $apiUrl")
+        AppLogger.d("API_PARSER", "Запрос к API: $apiUrl")
 
-        Log.d("PORTAL_PARSER", "Запрос к первичному URL ($primaryPage): $primaryUrl")
-        AppLogger.d("PORTAL_PARSER", "Запрос к первичному URL ($primaryPage): $primaryUrl")
+        var lessons = runCatching { fetchAndParseApiUrl(apiUrl) }.getOrDefault(emptyList())
 
-        var lessons = runCatching { fetchAndParsePortalUrl(primaryUrl) }.getOrDefault(emptyList())
-
-        if (lessons.isEmpty()) {
-            val fallbackPage = if (level == EducationLevel.BACHELOR) "scheduler2.php" else "scheduler1.php"
-            val fallbackUrl = "https://portal.mguu.ru/student/$fallbackPage?groupid=$groupId&groupname=$encodedGroup&startDate=$startDate&endDate=$endDate#schedule"
-            Log.d("PORTAL_PARSER", "Фолбэк запрос к URL ($fallbackPage): $fallbackUrl")
-            AppLogger.d("PORTAL_PARSER", "Фолбэк запрос к URL ($fallbackPage): $fallbackUrl")
-            lessons = fetchAndParsePortalUrl(fallbackUrl)
-        }
-
-        // Сохраняем в базу
+        // Сохраняем в базу только если есть успешный парсинг и не пустой список,
+        // иначе оставляем старый кэш.
         if (lessons.isNotEmpty()) {
             dao.replaceAll(lessons)
 
             val nowStr = LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))
             prefs.edit().putString("last_sync_time", nowStr).apply()
 
-            AppLogger.d("PORTAL_PARSER", "Обновлено расписание в БД (очистка + вставка транзакцией)")
+            AppLogger.d("API_PARSER", "Обновлено расписание в БД (очистка + вставка транзакцией)")
         } else {
             val cachedLessons = dao.getAllLessons()
             if (cachedLessons.isNotEmpty()) {
-                AppLogger.d("PORTAL_PARSER", "Портал вернул пустой список, оставляем локальный кэш: ${cachedLessons.size} пар")
+                AppLogger.d("API_PARSER", "API вернул пустой список или ошибку, оставляем локальный кэш: ${cachedLessons.size} пар")
                 lessons = cachedLessons
             }
         }
@@ -106,31 +93,14 @@ class ScheduleRepository(private val context: Context, private val database: App
         groupName: String,
         daysCount: Int
     ): Result<List<LessonEntity>> = try {
-        val today = LocalDate.now()
-        
-        // ВСЕГДА устанавливаем startDate на 1-е число месяца для корректного сравнения на сервере
-        val targetStartDate = today.minusDays(daysCount.toLong())
-        val effectiveStart = if (targetStartDate.monthValue == 8) {
-            LocalDate.of(2026, 9, 1) // Август переводим на 1 сентября 2026
-        } else {
-            targetStartDate.withDayOfMonth(1)  // Всегда 1-е число текущего месяца
-        }
-
-        // Конец выборки — с учетом daysCount и до конца месяца
-        val targetEndDate = today.plusDays(daysCount.toLong())
-        val effectiveEnd = targetEndDate.withDayOfMonth(targetEndDate.lengthOfMonth())
-
-        val formatter = DateTimeFormatter.ofPattern("dd.MM.yyyy")
-        val startDateStr = effectiveStart.format(formatter)
-        val endDateStr = effectiveEnd.format(formatter)
-        
-        val lessons = fetchScheduleFromPortal(groupId, groupName, startDateStr, endDateStr)
+        val lessons = fetchScheduleFromPortal(groupId = groupId)
         Result.success(lessons)
     } catch (e: Exception) {
         Result.failure(e)
     }
 
     suspend fun clearDatabase() {
+        AppLogger.w("CACHE", "Локальный кэш Room принудительно очищен пользователем")
         dao.clearSchedule()
     }
 

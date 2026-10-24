@@ -43,6 +43,11 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -531,8 +536,8 @@ fun MainAppScaffold(
                                         Screen.Rating -> {
                                             ratingViewModel.scrollToTop()
                                         }
-                                        Screen.Settings -> {
-                                            profileViewModel.scrollToTop()
+                                        Screen.Sections -> {
+                                            // Handle sections specific reset if needed
                                         }
                                         else -> {}
                                     }

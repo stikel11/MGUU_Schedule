@@ -192,21 +192,39 @@ class ProfileViewModel(
             try {
                 val allGroups = withContext(Dispatchers.IO) {
                     val userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                    
-                    val urlBak = "https://portal.mguu.ru/student/scheduler1.php#bak"
-                    val urlMag = "https://portal.mguu.ru/student/scheduler2.php#mag"
+                    val apiUrl = "https://api.lk-upm.ru/api/groups"
 
-                    val docBak = runCatching { Jsoup.connect(urlBak).userAgent(userAgent).timeout(10000).get() }.getOrNull()
-                    val docMag = runCatching { Jsoup.connect(urlMag).userAgent(userAgent).timeout(10000).get() }.getOrNull()
+                    val start = System.currentTimeMillis()
+                    com.mguuschedule.util.AppLogger.d("API_REQ", "GET $apiUrl")
 
-                    val bakList = docBak?.let { ScheduleParser.parseGroups(it.html(), EducationLevel.BACHELOR) } ?: emptyList()
-                    val magList = docMag?.let { ScheduleParser.parseGroups(it.html(), EducationLevel.MASTER) } ?: emptyList()
+                    val jsonBody = runCatching { 
+                        Jsoup.connect(apiUrl)
+                            .ignoreContentType(true)
+                            .userAgent(userAgent)
+                            .timeout(10000)
+                            .execute()
+                            .body()
+                    }.getOrNull()
 
-                    bakList + magList
+                    val duration = System.currentTimeMillis() - start
+                    com.mguuschedule.util.AppLogger.d("API_RES", "GET $apiUrl -> ${duration}мс (${jsonBody?.length ?: 0} символов)")
+
+                    jsonBody?.let { ScheduleParser.parseGroupsJson(it) } ?: emptyList()
                 }
 
                 if (allGroups.isNotEmpty()) {
                     groupsUiState = GroupsUiState.Success(allGroups)
+
+                    // Auto-fix for legacy group IDs or missing IDs if we have a name
+                    val savedName = prefs.getString("selected_group_name", null)
+                    val savedId = prefs.getString("selected_group_id", null)
+                    
+                    if (!savedName.isNullOrBlank()) {
+                        val matchingGroup = allGroups.find { it.name.equals(savedName, ignoreCase = true) }
+                        if (matchingGroup != null && matchingGroup.id != savedId) {
+                            selectGroup(matchingGroup)
+                        }
+                    }
                 } else {
                     groupsUiState = GroupsUiState.Error("Не удалось загрузить список групп")
                 }
