@@ -21,27 +21,35 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
-        
+
         Log.d("FCM", "From: ${remoteMessage.from}")
 
-        // Handle data payload
-        if (remoteMessage.data.isNotEmpty()) {
-            Log.d("FCM", "Message data payload: ${remoteMessage.data}")
-            handleDataPayload(remoteMessage.data)
-        }
+        val dataTitle = remoteMessage.data["title"] ?: remoteMessage.data["gcm.notification.title"]
+        val dataBody = remoteMessage.data["body"] ?: remoteMessage.data["message"] ?: remoteMessage.data["gcm.notification.body"]
+        val route = remoteMessage.data["route"]
 
-        // Handle notification payload
-        remoteMessage.notification?.let {
-            Log.d("FCM", "Message Notification Body: ${it.body}")
-            showNotification(
-                title = it.title ?: "MGUU Schedule",
-                body = it.body ?: "",
-                targetRoute = remoteMessage.data["route"]
-            )
+        val notifTitle = remoteMessage.notification?.title
+        val notifBody = remoteMessage.notification?.body
+
+        val finalTitle = notifTitle ?: dataTitle ?: "Объявление"
+        val finalBody = notifBody ?: dataBody ?: ""
+
+        if (finalBody.isNotBlank()) {
+            // Save to Notification History DB
             saveToHistory(
-                title = it.title ?: "Объявление",
-                body = it.body ?: "",
-                type = "GENERAL"
+                title = finalTitle,
+                body = finalBody,
+                type = "GENERAL",
+                msgId = remoteMessage.messageId
+            )
+
+            // If the app is in foreground, FCM calls this method and we manually show the notification.
+            // If the app is in background and payload has "notification", FCM shows it automatically,
+            // but we still save it to DB here!
+            showNotification(
+                title = finalTitle,
+                body = finalBody,
+                targetRoute = route
             )
         }
     }
@@ -50,15 +58,6 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         Log.d("FCM", "Refreshed token: $token")
         // If we had a backend, we'd send the token here.
         // sendRegistrationToServer(token)
-    }
-
-    private fun handleDataPayload(data: Map<String, String>) {
-        val title = data["title"] ?: return
-        val body = data["body"] ?: return
-        val route = data["route"]
-
-        showNotification(title, body, route)
-        saveToHistory(title, body, "GENERAL")
     }
 
     private fun showNotification(title: String, body: String, targetRoute: String?) {
@@ -95,7 +94,13 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         notificationManager.notify(System.currentTimeMillis().toInt(), notificationBuilder.build())
     }
 
-    private fun saveToHistory(title: String, body: String, type: String = "GENERAL") {
+    private fun saveToHistory(title: String, body: String, type: String = "GENERAL", msgId: String?) {
+        val prefs = getSharedPreferences("processed_fcm_ids", Context.MODE_PRIVATE)
+        if (msgId != null) {
+            if (prefs.getBoolean(msgId, false)) return // Уже сохранено
+            prefs.edit().putBoolean(msgId, true).apply()
+        }
+
         CoroutineScope(Dispatchers.IO).launch {
             val db = AppDatabase.getDatabase(this@MyFirebaseMessagingService)
             db.notificationDao().insertNotification(

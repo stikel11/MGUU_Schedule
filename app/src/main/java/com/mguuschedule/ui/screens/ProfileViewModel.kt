@@ -60,7 +60,7 @@ data class StorageUiState(
 sealed class UpdateUiState {
     object Idle : UpdateUiState()
     object Checking : UpdateUiState()
-    data class UpdateAvailable(val release: com.mguuschedule.util.GitHubRelease) : UpdateUiState()
+    data class UpdateAvailable(val release: com.mguuschedule.util.GitHubReleaseInfo) : UpdateUiState()
     object NoUpdate : UpdateUiState()
     data class Downloading(val progress: Int) : UpdateUiState()
     data class Downloaded(val file: java.io.File) : UpdateUiState()
@@ -336,7 +336,7 @@ class ProfileViewModel(
             result.onSuccess { release ->
                 if (release != null) {
                     val currentVersion = com.mguuschedule.BuildConfig.VERSION_NAME
-                    if (com.mguuschedule.util.UpdateManager.isNewerVersion(currentVersion, release.versionName)) {
+                    if (com.mguuschedule.util.UpdateManager.isNewerVersion(currentVersion, release.versionClean)) {
                         updateState = UpdateUiState.UpdateAvailable(release)
                     } else {
                         updateState = UpdateUiState.NoUpdate

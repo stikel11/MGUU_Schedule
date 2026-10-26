@@ -28,8 +28,10 @@ import androidx.compose.ui.unit.dp
 import com.mguuschedule.model.ControlPoint
 import com.mguuschedule.model.Lesson
 import com.mguuschedule.model.SubjectScore
+import com.mguuschedule.model.toLesson
 import com.mguuschedule.repository.LessonAddonSummary
 import com.mguuschedule.repository.LessonMaterialEntity
+import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -48,6 +50,7 @@ fun SectionsScreen(
     onOpenCurriculum: () -> Unit,
     onOpenMaterials: () -> Unit,
     onOpenAttendance: () -> Unit,
+    onOpenFreeRooms: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
     val context = LocalContext.current
@@ -160,6 +163,18 @@ fun SectionsScreen(
                     iconContainerColor = MaterialTheme.colorScheme.secondaryContainer,
                     iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
                     onClick = onOpenAttendance
+                )
+            }
+
+            item {
+                SectionHubCard(
+                    title = "Свободные аудитории",
+                    subtitle = "Поиск свободных кабинетов на Сухаревской и Войковской",
+                    badgeText = "Кампус",
+                    icon = Icons.Rounded.MeetingRoom,
+                    iconContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
+                    onClick = onOpenFreeRooms
                 )
             }
 
@@ -931,6 +946,7 @@ fun MaterialsHubScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AttendanceScreen(
+    groupName: String,
     allLessons: List<Lesson>,
     onBack: () -> Unit
 ) {
@@ -1004,7 +1020,17 @@ fun AttendanceScreen(
             item {
                 UnifiedDetailTopBar(
                     title = "Посещаемость",
-                    onBack = onBack
+                    onBack = onBack,
+                    trailingContent = {
+                        if (groupName.isNotBlank()) {
+                            Text(
+                                text = "Группа $groupName",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(end = 8.dp)
+                            )
+                        }
+                    }
                 )
             }
 
@@ -1346,6 +1372,411 @@ fun AttendanceScreen(
                                         fontWeight = FontWeight.Bold,
                                         color = pillFg,
                                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 5. ЭКРАН «СВОБОДНЫЕ АУДИТОРИИ»
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun FreeRoomsScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
+    var selectedCampus by remember { mutableStateOf("sretenka") } // "sretenka" или "voikovskaya"
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedFloor by remember { mutableStateOf("Все этажи") }
+
+    var rooms by remember { mutableStateOf<List<org.json.JSONObject>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(false) }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    val haptic = com.mguuschedule.util.rememberHapticFeedback()
+
+    fun loadRooms() {
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            isLoading = true
+            errorMsg = null
+            try {
+                val url = "https://api.lk-upm.ru/api/rooms/free?campus=$selectedCampus"
+                val response = org.jsoup.Jsoup.connect(url).ignoreContentType(true).execute().body()
+                val root = org.json.JSONObject(response)
+                
+                if (root.has("ok") && !root.optBoolean("ok")) {
+                    errorMsg = "Ошибка API"
+                    return@launch
+                }
+
+                // Пытаемся найти массив в корне
+                val array = root.optJSONArray("rooms") ?: root.optJSONArray("freeRooms") ?: root.optJSONArray("items") ?: root.optJSONArray("data")
+                if (array != null) {
+                    val list = mutableListOf<org.json.JSONObject>()
+                    for (i in 0 until array.length()) {
+                        array.optJSONObject(i)?.let { list.add(it) }
+                    }
+                    rooms = list
+                } else {
+                    rooms = emptyList()
+                }
+            } catch (e: Exception) {
+                errorMsg = e.message
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
+    LaunchedEffect(selectedCampus) {
+        loadRooms()
+    }
+
+    val availableFloors = remember(rooms) {
+        val floors = rooms.mapNotNull { 
+            val f = it.optString("floor")
+            if (f.isNotBlank() && f != "null") "$f этаж" else null 
+        }.distinct().sorted()
+        listOf("Все этажи") + floors
+    }
+
+    val filteredRooms = remember(rooms, searchQuery, selectedFloor) {
+        rooms.filter {
+            val roomName = it.optString("room", "")
+            val floorStr = it.optString("floor", "")
+            val matchesSearch = searchQuery.isBlank() || roomName.contains(searchQuery, ignoreCase = true)
+            val matchesFloor = selectedFloor == "Все этажи" || "$floorStr этаж" == selectedFloor
+            matchesSearch && matchesFloor
+        }
+    }
+
+    var selectedRoomForSchedule by remember { mutableStateOf<String?>(null) }
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = WindowInsets.safeDrawing
+    ) { innerPadding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            item {
+                UnifiedDetailTopBar(
+                    title = "Свободные аудитории",
+                    onBack = onBack,
+                    trailingContent = {
+                        IconButton(onClick = { loadRooms() }) {
+                            Icon(Icons.Rounded.Refresh, contentDescription = "Обновить", tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                )
+            }
+
+            item {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        val isSretenka = selectedCampus == "sretenka"
+                        Surface(
+                            onClick = { 
+                                haptic.selection()
+                                selectedCampus = "sretenka" 
+                            },
+                            shape = CircleShape,
+                            color = if (isSretenka) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = "Сухаревская",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = if (isSretenka) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isSretenka) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(vertical = 12.dp),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                        }
+
+                        val isVoikovskaya = selectedCampus == "voikovskaya"
+                        Surface(
+                            onClick = { 
+                                haptic.selection()
+                                selectedCampus = "voikovskaya" 
+                            },
+                            shape = CircleShape,
+                            color = if (isVoikovskaya) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = "Войковская",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = if (isVoikovskaya) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isVoikovskaya) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(vertical = 12.dp),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                        }
+                    }
+                }
+            }
+
+            item {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = {
+                        Text(
+                            text = "Поиск аудитории...",
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Rounded.Search,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(22.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = Color.Transparent
+                    )
+                )
+            }
+
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    availableFloors.forEach { floorLabel ->
+                        val isSelected = selectedFloor == floorLabel
+                        Surface(
+                            onClick = { selectedFloor = floorLabel },
+                            shape = CircleShape,
+                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow
+                        ) {
+                            Text(
+                                text = floorLabel,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (isLoading) {
+                item {
+                    Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
+            } else if (errorMsg != null) {
+                item {
+                    Text("Ошибка: $errorMsg", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp))
+                }
+            } else if (filteredRooms.isEmpty()) {
+                item {
+                    Text("Аудитории не найдены", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp))
+                }
+            } else {
+                items(filteredRooms, key = { it.optString("room") }) { roomObj ->
+                    val roomName = roomObj.optString("room", "")
+                    val freeUntil = roomObj.optString("freeUntil", "")
+                    val lessonsToday = roomObj.optInt("lessonsToday", 0)
+                    val floor = roomObj.optString("floor", "")
+
+                    val subtitleText = when {
+                        freeUntil.isNotBlank() && freeUntil != "null" -> "Свободна до $freeUntil"
+                        lessonsToday == 0 -> "Занятий по расписанию сегодня нет"
+                        else -> "Занятий за день: $lessonsToday"
+                    }
+
+                    Surface(
+                        onClick = { selectedRoomForSchedule = roomName },
+                        shape = RoundedCornerShape(24.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        shadowElevation = 0.dp,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                modifier = Modifier.size(44.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Rounded.MeetingRoom, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                                }
+                            }
+                            
+                            Spacer(Modifier.width(14.dp))
+                            
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Ауд. $roomName",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = subtitleText,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            
+                            Spacer(Modifier.width(8.dp))
+                            
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (floor.isNotBlank() && floor != "null") {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = MaterialTheme.colorScheme.surfaceContainerHighest
+                                    ) {
+                                        Text(
+                                            text = "$floor этаж",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    selectedRoomForSchedule?.let { roomName ->
+        var roomLessons by remember { mutableStateOf<List<Lesson>?>(null) }
+        var roomLoading by remember { mutableStateOf(true) }
+        val dateFormatter = remember { DateTimeFormatter.ofPattern("d MMM", Locale.forLanguageTag("ru")) }
+
+        LaunchedEffect(roomName) {
+            roomLoading = true
+            try {
+                val todayStr = LocalDate.now().format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+                val weekLaterStr = LocalDate.now().plusDays(7).format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+                val encodedRoom = java.net.URLEncoder.encode(roomName, "UTF-8")
+                
+                val url = "https://api.lk-upm.ru/api/room?name=$encodedRoom&from=$todayStr&to=$weekLaterStr"
+                val response = org.jsoup.Jsoup.connect(url).ignoreContentType(true).execute().body()
+                
+                val entities = com.mguuschedule.util.ScheduleParser.parse(response)
+                roomLessons = entities.mapNotNull {
+                    // Reflection fallback to bypass unresolved import temporarily
+                    val toLessonMethod = Class.forName("com.mguuschedule.model.LessonMappersKt").getMethod("toLesson", com.mguuschedule.model.LessonEntity::class.java)
+                    toLessonMethod.invoke(null, it) as? Lesson
+                }.sortedWith(compareBy<Lesson> { it.date }.thenBy { it.startTime })
+            } catch (e: Exception) {
+                roomLessons = emptyList()
+            } finally {
+                roomLoading = false
+            }
+        }
+
+        ModalBottomSheet(
+            onDismissRequest = { selectedRoomForSchedule = null },
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .navigationBarsPadding()
+            ) {
+                Text(
+                    text = "Расписание: Ауд. $roomName",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                if (roomLoading) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                } else if (roomLessons.isNullOrEmpty()) {
+                    Text("В ближайшую неделю занятий в этой аудитории нет.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 20.dp))
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.heightIn(max = 400.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(bottom = 20.dp)
+                    ) {
+                        items(roomLessons!!) { lesson ->
+                            Surface(
+                                shape = RoundedCornerShape(18.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(14.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "${lesson.date.format(dateFormatter)} • ${lesson.startTime}–${lesson.endTime}",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+                                            Text(lesson.type, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+                                        }
+                                    }
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        text = lesson.title,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(Modifier.height(2.dp))
+                                    Text(
+                                        text = lesson.teacher,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }

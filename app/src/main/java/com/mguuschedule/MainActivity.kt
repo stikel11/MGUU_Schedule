@@ -32,9 +32,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.*
+import kotlinx.coroutines.delay
+import com.mguuschedule.ui.screens.NotificationHistoryViewModel
+import com.mguuschedule.ui.screens.NotificationHistoryViewModelFactory
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.animation.core.animate
@@ -88,6 +92,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         
         CrashHandler.init(applicationContext)
+        processFCMIntent(intent)
 
         splashScreen.setOnExitAnimationListener { splashScreenProvider ->
             val splashView = splashScreenProvider.view
@@ -128,6 +133,7 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(Unit) {
                 com.mguuschedule.fcm.FCMManager.initialize()
                 com.mguuschedule.config.RemoteConfigManager.initialize(app)
+                profileViewModel.checkForUpdates() // Start background update check
             }
 
             val emergencyAnnouncement by com.mguuschedule.config.RemoteConfigManager.announcement.collectAsState()
@@ -266,6 +272,123 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                     }
+
+                    // Bottom Sheet for GitHub Updates
+                    val updateState = profileViewModel.updateState
+                    if (updateState is UpdateUiState.UpdateAvailable) {
+                        val release = updateState.release
+                        val skippedTag = prefs.getString("skipped_update_tag", null)
+                        if (release.tagName != skippedTag) {
+                            var showSheet by remember { mutableStateOf(true) }
+                            if (showSheet) {
+                                @OptIn(ExperimentalMaterial3Api::class)
+                                ModalBottomSheet(
+                                    onDismissRequest = { showSheet = false },
+                                    shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 24.dp, vertical = 16.dp)
+                                            .navigationBarsPadding(),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Surface(
+                                            shape = RoundedCornerShape(16.dp),
+                                            color = MaterialTheme.colorScheme.primaryContainer,
+                                            modifier = Modifier.size(48.dp)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.SystemUpdate,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                    modifier = Modifier.size(24.dp)
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Text(
+                                            text = "Доступно обновление",
+                                            style = MaterialTheme.typography.titleLarge,
+                                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = MaterialTheme.colorScheme.primaryContainer
+                                        ) {
+                                            Text(
+                                                text = release.tagName,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(16.dp))
+                                        
+                                        // Changelog Box
+                                        Surface(
+                                            shape = RoundedCornerShape(20.dp),
+                                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .heightIn(min = 80.dp, max = 280.dp)
+                                        ) {
+                                            val cleanChangelog = release.changelog
+                                                .replace("###", "")
+                                                .replace("##", "")
+                                                .replace("#", "")
+                                                .replace("**", "")
+                                                .trim()
+                                            
+                                            androidx.compose.foundation.lazy.LazyColumn(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                contentPadding = PaddingValues(16.dp)
+                                            ) {
+                                                item {
+                                                    Text(
+                                                        text = "Что нового:\n$cleanChangelog",
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.height(20.dp))
+                                        
+                                        Button(
+                                            onClick = {
+                                                showSheet = false
+                                                profileViewModel.downloadAndInstallUpdate(app, release.apkDownloadUrl)
+                                            },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(52.dp),
+                                            shape = RoundedCornerShape(26.dp)
+                                        ) {
+                                            Text("Скачать и установить", fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                                        }
+                                        
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        
+                                        TextButton(
+                                            onClick = {
+                                                prefs.edit().putString("skipped_update_tag", release.tagName).apply()
+                                                showSheet = false
+                                            }
+                                        ) {
+                                            Text("Пропустить эту версию", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -369,6 +492,7 @@ fun MainAppScaffold(
                         onOpenCurriculum = { navController.navigate("curriculum") },
                         onOpenMaterials = { navController.navigate("materials_hub") },
                         onOpenAttendance = { navController.navigate("attendance") },
+                        onOpenFreeRooms = { navController.navigate("free_rooms") },
                         onOpenSettings = { navController.navigate(Screen.Settings.route) }
                     )
                 }
@@ -399,7 +523,15 @@ fun MainAppScaffold(
                 val allLessons by scheduleViewModel.allLessonsFlow.collectAsState()
                 ExpressiveDetailScreenContainer(onBack = { navController.popBackStack() }) {
                     com.mguuschedule.ui.screens.AttendanceScreen(
+                        groupName = profileViewModel.selectedGroup?.name ?: "",
                         allLessons = allLessons,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+            }
+            composable("free_rooms") {
+                ExpressiveDetailScreenContainer(onBack = { navController.popBackStack() }) {
+                    com.mguuschedule.ui.screens.FreeRoomsScreen(
                         onBack = { navController.popBackStack() }
                     )
                 }
@@ -662,5 +794,35 @@ fun ExpressiveDetailScreenContainer(
             .background(MaterialTheme.colorScheme.background)
     ) {
         content()
+    }
+}
+
+// ---------------- FCM Helper ----------------
+
+private fun ComponentActivity.processFCMIntent(intent: android.content.Intent?) {
+    val extras = intent?.extras ?: return
+    val msgId = extras.getString("google.message_id")
+    if (!msgId.isNullOrBlank()) {
+        val prefs = getSharedPreferences("processed_fcm_ids", android.content.Context.MODE_PRIVATE)
+        if (prefs.getBoolean(msgId, false)) return // Уже обработано
+        prefs.edit().putBoolean(msgId, true).apply()
+
+        val title = extras.getString("gcm.notification.title") ?: extras.getString("title") ?: "Объявление"
+        val body = extras.getString("gcm.notification.body") ?: extras.getString("body") ?: extras.getString("message")
+
+        if (!body.isNullOrBlank()) {
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                val db = AppDatabase.getDatabase(this@processFCMIntent)
+                db.notificationDao().insertNotification(
+                    com.mguuschedule.repository.NotificationEntity(
+                        title = title,
+                        message = body,
+                        timestamp = System.currentTimeMillis(),
+                        type = "GENERAL",
+                        isRead = false
+                    )
+                )
+            }
+        }
     }
 }

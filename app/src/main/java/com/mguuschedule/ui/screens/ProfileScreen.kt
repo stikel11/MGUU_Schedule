@@ -339,7 +339,7 @@ fun ProfileScreen(
                         is UpdateUiState.Idle -> "Нажмите для проверки наличия обновлений"
                         is UpdateUiState.Checking -> "Проверка наличия обновлений..."
                         is UpdateUiState.NoUpdate -> "У вас установлена последняя версия"
-                        is UpdateUiState.UpdateAvailable -> "Доступна версия ${updateState.release.versionName}! Нажмите для скачивания."
+                        is UpdateUiState.UpdateAvailable -> "Доступна версия ${updateState.release.tagName}! Нажмите для скачивания."
                         is UpdateUiState.Downloading -> "Загрузка: ${updateState.progress}%"
                         is UpdateUiState.Downloaded -> "Скачано. Нажмите для установки."
                         is UpdateUiState.Error -> "Ошибка: ${updateState.message} • Нажмите для повтора"
@@ -364,7 +364,7 @@ fun ProfileScreen(
                                 haptic.click()
                                 when (updateState) {
                                     is UpdateUiState.UpdateAvailable -> {
-                                        viewModel.downloadAndInstallUpdate(context, updateState.release.downloadUrl)
+                                        viewModel.downloadAndInstallUpdate(context, updateState.release.apkDownloadUrl)
                                     }
                                     is UpdateUiState.Downloaded -> {
                                         com.mguuschedule.util.UpdateManager.installApk(context, updateState.file)

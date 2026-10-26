@@ -14,19 +14,24 @@ import java.io.File
 import java.io.FileOutputStream
 import java.net.URL
 
-data class GitHubRelease(
-    val versionName: String,
-    val downloadUrl: String,
-    val body: String
+@androidx.compose.runtime.Immutable
+data class GitHubReleaseInfo(
+    val tagName: String,
+    val versionClean: String,
+    val releaseTitle: String,
+    val changelog: String,
+    val apkDownloadUrl: String,
+    val htmlUrl: String
 )
 
 object UpdateManager {
     private const val GITHUB_API_URL = "https://api.github.com/repos/stikel11/MGUU_Schedule/releases/latest"
 
-    suspend fun checkUpdate(): Result<GitHubRelease?> = withContext(Dispatchers.IO) {
+    suspend fun checkUpdate(): Result<GitHubReleaseInfo?> = withContext(Dispatchers.IO) {
         try {
             val response = Jsoup.connect(GITHUB_API_URL)
                 .ignoreContentType(true)
+                .header("Accept", "application/vnd.github+json")
                 .timeout(10000)
                 .get()
                 .body()
@@ -34,11 +39,13 @@ object UpdateManager {
 
             val json = JsonParser.parseString(response).asJsonObject
             val tagName = json.get("tag_name")?.asString ?: ""
+            val releaseTitle = json.get("name")?.asString ?: tagName
             val body = json.get("body")?.asString ?: ""
+            val htmlUrl = json.get("html_url")?.asString ?: ""
             val assets = json.getAsJsonArray("assets")
 
-            val version = tagName.replace(Regex("[^0-9.]"), "")
-            
+            val versionClean = tagName.replace(Regex("[^0-9.]"), "")
+
             var downloadUrl = ""
             for (asset in assets) {
                 val assetObj = asset.asJsonObject
@@ -49,8 +56,12 @@ object UpdateManager {
                 }
             }
 
-            if (version.isNotBlank() && downloadUrl.isNotBlank()) {
-                Result.success(GitHubRelease(version, downloadUrl, body))
+            if (downloadUrl.isBlank()) {
+                downloadUrl = htmlUrl
+            }
+
+            if (versionClean.isNotBlank() && downloadUrl.isNotBlank()) {
+                Result.success(GitHubReleaseInfo(tagName, versionClean, releaseTitle, body, downloadUrl, htmlUrl))
             } else {
                 Result.success(null) // No valid release found
             }
