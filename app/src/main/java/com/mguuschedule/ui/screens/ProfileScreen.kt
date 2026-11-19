@@ -875,7 +875,7 @@ fun SettingsClickItem(
 ) {
     val iconBgColor = if (isDestructive) MaterialTheme.colorScheme.errorContainer
     else MaterialTheme.colorScheme.surfaceContainerHighest
-    val iconTint = if (isDestructive) MaterialTheme.colorScheme.error
+    val iconTint = if (isDestructive) MaterialTheme.colorScheme.onErrorContainer
     else MaterialTheme.colorScheme.primary
     val titleColor = if (isDestructive) MaterialTheme.colorScheme.error
     else MaterialTheme.colorScheme.onSurface
@@ -884,7 +884,7 @@ fun SettingsClickItem(
         onClick = onClick,
         enabled = enabled,
         shape = shape,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -943,7 +943,7 @@ fun SettingsSwitchItem(
     Surface(
         onClick = { onCheckedChange(!checked) },
         shape = shape,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(

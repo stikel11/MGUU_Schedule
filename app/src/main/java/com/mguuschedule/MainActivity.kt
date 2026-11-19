@@ -13,7 +13,12 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.core.animateDp
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -36,10 +41,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import com.mguuschedule.ui.components.rememberDeviceCornerRadius
 import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
@@ -410,8 +418,11 @@ fun MainAppScaffold(
     val lessonIdExtra = remember(activity) { activity?.intent?.getStringExtra("navigate_to_lesson_id") }
     val routeExtra = remember(activity) { activity?.intent?.getStringExtra("navigate_to_route") }
 
-    LaunchedEffect(selectedGroup) {
-        selectedGroup?.let { scheduleViewModel.loadSchedule(it.id) }
+    LaunchedEffect(selectedGroup?.id, profileViewModel.selectedZachetka) {
+        selectedGroup?.let { group ->
+            scheduleViewModel.loadSchedule(group.id)
+            ratingViewModel.onGroupOrStudentChanged(group.id, profileViewModel.selectedZachetka)
+        }
     }
 
     if (lessonIdExtra != null) {
@@ -426,6 +437,10 @@ fun MainAppScaffold(
         }
     }
 
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentDestination = navBackStackEntry?.destination
+    val isMainScreen = currentDestination?.route in BottomTabRoutes
+
     Box(modifier = Modifier.fillMaxSize()) {
         NavHost(
             navController = navController,
@@ -435,27 +450,28 @@ fun MainAppScaffold(
                 .background(MaterialTheme.colorScheme.background),
             enterTransition = {
                 val isTabSwitch = initialState.destination.route in BottomTabRoutes && targetState.destination.route in BottomTabRoutes
-                if (isTabSwitch) com.mguuschedule.ui.theme.AppMotionScheme.tabEnterTransition()
-                else com.mguuschedule.ui.theme.AppMotionScheme.detailEnterTransition()
+                if (isTabSwitch) AppMotionScheme.tabEnterTransition()
+                else AppMotionScheme.detailEnterTransition()
             },
             exitTransition = {
                 val isTabSwitch = initialState.destination.route in BottomTabRoutes && targetState.destination.route in BottomTabRoutes
-                if (isTabSwitch) com.mguuschedule.ui.theme.AppMotionScheme.tabExitTransition()
-                else com.mguuschedule.ui.theme.AppMotionScheme.detailBackgroundExitTransition()
+                if (isTabSwitch) AppMotionScheme.tabExitTransition()
+                else AppMotionScheme.detailBackgroundExitTransition()
             },
             popEnterTransition = {
                 val isTabSwitch = initialState.destination.route in BottomTabRoutes && targetState.destination.route in BottomTabRoutes
-                if (isTabSwitch) com.mguuschedule.ui.theme.AppMotionScheme.tabEnterTransition()
-                else com.mguuschedule.ui.theme.AppMotionScheme.detailBackgroundPopEnterTransition()
+                if (isTabSwitch) AppMotionScheme.tabEnterTransition()
+                else AppMotionScheme.detailBackgroundPopEnterTransition()
             },
             popExitTransition = {
                 val isTabSwitch = initialState.destination.route in BottomTabRoutes && targetState.destination.route in BottomTabRoutes
-                if (isTabSwitch) com.mguuschedule.ui.theme.AppMotionScheme.tabExitTransition()
-                else com.mguuschedule.ui.theme.AppMotionScheme.detailPopExitTransition()
-            }
+                if (isTabSwitch) AppMotionScheme.tabExitTransition()
+                else AppMotionScheme.detailPopExitTransition()
+            },
+            sizeTransform = { null }
         ) {
             composable(Screen.Schedule.route) {
-                Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                MainTabDestinationContainer(isCoveredByDetail = !isMainScreen) {
                     ScheduleScreen(
                         viewModel = scheduleViewModel,
                         unreadNotificationCount = unreadCount,
@@ -469,14 +485,14 @@ fun MainAppScaffold(
                 }
             }
             composable(Screen.Rating.route) {
-                Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                MainTabDestinationContainer(isCoveredByDetail = !isMainScreen) {
                     RatingScreen(viewModel = ratingViewModel)
                 }
             }
             composable(Screen.Sections.route) {
                 val allLessons by scheduleViewModel.allLessonsFlow.collectAsState()
                 val addonSummaries by scheduleViewModel.lessonAddonSummaries.collectAsState()
-                Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                MainTabDestinationContainer(isCoveredByDetail = !isMainScreen) {
                     com.mguuschedule.ui.screens.SectionsScreen(
                         allLessons = allLessons,
                         addonSummaries = addonSummaries,
@@ -500,11 +516,13 @@ fun MainAppScaffold(
             }
             composable("curriculum") {
                 val allLessons by scheduleViewModel.allLessonsFlow.collectAsState()
+                val ratingSubjects = (ratingViewModel.uiState as? RatingUiState.Success)?.subjects.orEmpty()
+                val controlPointsMap by ratingViewModel.subjectControlPoints.collectAsState()
                 DetailDestinationContainer {
                     com.mguuschedule.ui.screens.CurriculumScreen(
                         allLessons = allLessons,
-                        subjectsFromRating = emptyList(),
-                        controlPointsMap = emptyMap(),
+                        subjectsFromRating = ratingSubjects,
+                        controlPointsMap = controlPointsMap,
                         onBack = { navController.popBackStack() }
                     )
                 }
@@ -631,10 +649,6 @@ fun MainAppScaffold(
             }
         }
 
-        val navBackStackEntry by navController.currentBackStackEntryAsState()
-        val currentDestination = navBackStackEntry?.destination
-        val isMainScreen = currentDestination?.route in BottomTabRoutes
-
         val bgColor = MaterialTheme.colorScheme.background
         val bottomScrimBrush = remember(bgColor) {
             Brush.verticalGradient(
@@ -719,8 +733,8 @@ fun MainAppScaffold(
                         interactionSource = searchInteractionSource,
                         shape = CircleShape,
                         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        shadowElevation = 3.dp,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+                        shadowElevation = 6.dp,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
                         modifier = Modifier
                             .size(56.dp)
                             .graphicsLayer {
@@ -744,17 +758,82 @@ fun MainAppScaffold(
 }
 
 /**
- * Непрозрачный контейнер для детальных экранов внутри NavHost.
- * Не перехватывает жест «Назад» вручную, позволяя встроенному SeekableTransitionState
- * в Navigation Compose 2.8+ выполнять настоящий меэкранный Predictive Back в стиле Pixel.
+ * Аппаратно клиппируемый непрозрачный контейнер для детальных экранов внутри NavHost.
+ *
+ * Вся геометрия скругления углов (под реальный радиус экрана устройства на API 31+) и тень
+ * выполняются исключительно в фазе draw (`graphicsLayer`), без единой рекомпозиции на кадр
+ * во время скраббинга Predictive Back.
  */
 @Composable
-private fun DetailDestinationContainer(
+private fun AnimatedVisibilityScope.DetailDestinationContainer(
     content: @Composable () -> Unit
 ) {
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
+    val transitionProgress = transition.animateFloat(
+        transitionSpec = { tween(durationMillis = 300, easing = AppMotionScheme.PredictiveBackEasing) },
+        label = "detailTransitionProgress"
+    ) { state ->
+        when (state) {
+            EnterExitState.Visible -> 0f
+            EnterExitState.PreEnter -> 1f
+            EnterExitState.PostExit -> 1f
+        }
+    }
+    val deviceCornerRadius = rememberDeviceCornerRadius()
+    val bgColor = MaterialTheme.colorScheme.background
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                val p = transitionProgress.value.coerceIn(0f, 1f)
+                val radiusPx = (deviceCornerRadius.toPx() * p)
+                val isRounded = radiusPx > 1f
+                shape = if (isRounded) RoundedCornerShape(radiusPx) else RectangleShape
+                clip = isRounded
+                shadowElevation = if (isRounded) 16.dp.toPx() * p else 0f
+            }
+            .background(bgColor)
+    ) {
+        content()
+    }
+}
+
+/**
+ * Контейнер верхнеуровневых вкладок внутри NavHost.
+ * Добавляет мягкую вуаль глубины (scrim) в фазе draw ТОЛЬКО при перекрытии детальным экраном
+ * или возврате с него через Predictive Back — при переключении вкладок BottomBar затемнение не срабатывает.
+ */
+@Composable
+private fun AnimatedVisibilityScope.MainTabDestinationContainer(
+    isCoveredByDetail: Boolean,
+    content: @Composable () -> Unit
+) {
+    val scrimAlpha = transition.animateFloat(
+        transitionSpec = { tween(durationMillis = 300, easing = AppMotionScheme.PredictiveBackEasing) },
+        label = "tabScrimAlpha"
+    ) { state ->
+        if (!isCoveredByDetail) {
+            0f
+        } else {
+            when (state) {
+                EnterExitState.Visible -> 0f
+                EnterExitState.PreEnter -> 0.14f
+                EnterExitState.PostExit -> 0.14f
+            }
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .drawWithContent {
+                drawContent()
+                val alpha = scrimAlpha.value
+                if (alpha > 0.001f) {
+                    drawRect(Color.Black.copy(alpha = alpha))
+                }
+            }
     ) {
         content()
     }

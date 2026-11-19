@@ -27,7 +27,7 @@ class RatingUpdateWorker(
 
     private val database = AppDatabase.getDatabase(context)
     private val ratingDao = database.ratingDao()
-    private val repository = RatingRepository(ratingDao)
+    private val repository = RatingRepository(ratingDao, context)
     private val gson = Gson()
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {

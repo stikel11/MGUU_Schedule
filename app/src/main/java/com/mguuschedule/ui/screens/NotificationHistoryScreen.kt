@@ -185,7 +185,7 @@ fun NotificationHistoryScreen(
                                 .fillMaxWidth()
                                 .padding(bottom = 8.dp),
                             shape = CircleShape,
-                            color = MaterialTheme.colorScheme.surfaceContainerLow
+                            color = MaterialTheme.colorScheme.surfaceContainer
                         ) {
                             Row(modifier = Modifier.padding(4.dp)) {
                                 NOTIFICATION_FILTERS.forEachIndexed { index, title ->
@@ -369,7 +369,7 @@ fun NotificationItemCard(item: NotificationEntity) {
 
     Surface(
         shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = MaterialTheme.colorScheme.surfaceContainer,
         shadowElevation = 0.dp,
         tonalElevation = 0.dp,
         modifier = Modifier.fillMaxWidth()

@@ -24,6 +24,7 @@ import java.net.URLEncoder
 class MoodleRepository(private val context: Context) {
 
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val courseCachePrefs = context.getSharedPreferences(COURSE_CACHE_PREFS_NAME, Context.MODE_PRIVATE)
     private val addonsDao: LessonAddonsDao by lazy {
         AppDatabase.getDatabase(context).lessonAddonsDao()
     }
@@ -38,6 +39,7 @@ class MoodleRepository(private val context: Context) {
         const val SSO_URL_SCHEME = "moodlemobile"
 
         const val PREFS_NAME = "moodle_prefs"
+        private const val COURSE_CACHE_PREFS_NAME = "moodle_course_cache"
         private const val KEY_SESSION = "moodle_session_json"
         private const val KEY_COURSES_CACHE = "moodle_courses_cache"
         private const val KEY_DEADLINES_CACHE = "moodle_deadlines_cache"
@@ -51,6 +53,8 @@ class MoodleRepository(private val context: Context) {
         private val gson = Gson()
         private val COURSES_TYPE = object : TypeToken<List<MoodleCourse>>() {}.type
         private val DEADLINES_TYPE = object : TypeToken<List<MoodleDeadline>>() {}.type
+        private val SECTIONS_TYPE = object : TypeToken<List<MoodleCourseSection>>() {}.type
+        private val GRADES_TYPE = object : TypeToken<List<MoodleGradeItem>>() {}.type
 
         fun hasSavedSession(context: Context): Boolean {
             val p = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -74,6 +78,7 @@ class MoodleRepository(private val context: Context) {
             .remove(KEY_DEADLINES_CACHE)
             .remove(KEY_LAST_AUTOLOGIN_TS)
             .apply()
+        courseCachePrefs.edit().clear().apply()
     }
 
     fun loadCachedCourses(): List<MoodleCourse> {
@@ -94,6 +99,32 @@ class MoodleRepository(private val context: Context) {
 
     fun saveCachedDeadlines(deadlines: List<MoodleDeadline>) {
         prefs.edit().putString(KEY_DEADLINES_CACHE, gson.toJson(deadlines)).apply()
+    }
+
+    fun loadCachedCourseSections(courseId: Long): List<MoodleCourseSection> {
+        val raw = courseCachePrefs.getString("sections_$courseId", null) ?: return emptyList()
+        return runCatching { gson.fromJson<List<MoodleCourseSection>>(raw, SECTIONS_TYPE) }
+            .getOrDefault(emptyList())
+    }
+
+    fun saveCachedCourseSections(courseId: Long, sections: List<MoodleCourseSection>) {
+        courseCachePrefs.edit()
+            .putString("sections_$courseId", gson.toJson(sections))
+            .putLong("sections_ts_$courseId", System.currentTimeMillis())
+            .apply()
+    }
+
+    fun loadCachedCourseGrades(courseId: Long): List<MoodleGradeItem> {
+        val raw = courseCachePrefs.getString("grades_$courseId", null) ?: return emptyList()
+        return runCatching { gson.fromJson<List<MoodleGradeItem>>(raw, GRADES_TYPE) }
+            .getOrDefault(emptyList())
+    }
+
+    fun saveCachedCourseGrades(courseId: Long, grades: List<MoodleGradeItem>) {
+        courseCachePrefs.edit()
+            .putString("grades_$courseId", gson.toJson(grades))
+            .putLong("grades_ts_$courseId", System.currentTimeMillis())
+            .apply()
     }
 
     /**
@@ -459,6 +490,7 @@ class MoodleRepository(private val context: Context) {
                 )
             }
         }
+        saveCachedCourseSections(courseId, sections)
         sections
     }
 
@@ -516,6 +548,7 @@ class MoodleRepository(private val context: Context) {
                     )
                 )
             }
+            saveCachedCourseGrades(courseId, grades)
             grades
         }.getOrDefault(emptyList())
     }

@@ -50,6 +50,7 @@ class RatingViewModel(
     private val prefs = application.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
 
     companion object {
+        private const val RATING_STALE_TTL_MS = 30 * 60 * 1000L
         private val gson = Gson()
         private val STUDENT_TYPE = object : TypeToken<StudentRating>() {}.type
         private val SUBJECTS_TYPE = object : TypeToken<List<SubjectScore>>() {}.type
@@ -57,6 +58,9 @@ class RatingViewModel(
         private val PERIODS_TYPE = object : TypeToken<List<AcademicPeriod>>() {}.type
         private val POINTS_MAP_TYPE = object : TypeToken<Map<String, List<ControlPoint>>>() {}.type
     }
+
+    private var lastLoadedGroupId: String? = null
+    private var lastLoadedZachetka: String? = null
 
     private data class ParsedRatingCache(
         val student: StudentRating?,
@@ -165,39 +169,63 @@ class RatingViewModel(
         viewModelScope.launch {
             val groupId = prefs.getString("selected_group_id", "000000283") ?: "000000283"
             val savedZachetka = prefs.getString("selected_zachetka", "") ?: ""
+            lastLoadedGroupId = groupId
+            lastLoadedZachetka = savedZachetka
 
-            val parsed = withContext(Dispatchers.Default) {
+            val (parsed, cachedUpdatedAt) = withContext(Dispatchers.Default) {
                 val instantCacheJson = prefs.getString("rating_latest_instant_cache_$groupId", null)
-                    ?: return@withContext null
+                    ?: return@withContext (null to 0L)
                 val cachedEntity = runCatching {
                     gson.fromJson(instantCacheJson, RatingEntity::class.java)
-                }.getOrNull() ?: return@withContext null
-                parseCachedEntity(cachedEntity, savedZachetka)
+                }.getOrNull() ?: return@withContext (null to 0L)
+                parseCachedEntity(cachedEntity, savedZachetka) to cachedEntity.updatedAt
             }
 
-            var needsLegacyMigrationRefresh = false
+            var needsBackgroundRefresh = false
             if (parsed != null) {
                 applyParsedCache(parsed, savedZachetka)
                 AppLogger.d("RATING", "Отображен кэш БРС для ${parsed.student?.zachetka}")
                 val cachedUrl = parsed.student?.detailUrl.orEmpty()
-                if (cachedUrl.isNotBlank() && !cachedUrl.startsWith(RatingRepository.RATING_API_BASE)) {
-                    needsLegacyMigrationRefresh = true
+                val isLegacyUrl = cachedUrl.isNotBlank() && !cachedUrl.startsWith(RatingRepository.RATING_API_BASE)
+                val isStale = (System.currentTimeMillis() - cachedUpdatedAt) > RATING_STALE_TTL_MS
+                if (isLegacyUrl || isStale) {
+                    needsBackgroundRefresh = true
                 }
             }
 
-            // Asynchronously check Room for newer/other period cache or refresh legacy cache
-            loadRating(forceRefresh = needsLegacyMigrationRefresh)
+            // Проверяем Room или выполняем тихий stale-while-revalidate в фоне
+            loadRating(
+                forceRefresh = needsBackgroundRefresh,
+                silentRefresh = parsed != null && needsBackgroundRefresh
+            )
         }
+    }
+
+    fun onGroupOrStudentChanged(groupId: String, zachetka: String) {
+        if (lastLoadedGroupId == groupId && lastLoadedZachetka == zachetka) return
+        val groupChanged = lastLoadedGroupId != null && lastLoadedGroupId != groupId
+        lastLoadedGroupId = groupId
+        lastLoadedZachetka = zachetka
+        if (groupChanged) {
+            selectedYearId = null
+            selectedSemId = null
+            _subjectControlPoints.value = emptyMap()
+            uiState = RatingUiState.Loading
+        }
+        loadRating(forceRefresh = false, yearId = selectedYearId, semId = selectedSemId)
     }
 
     fun loadRating(
         forceRefresh: Boolean = false,
         yearId: String? = selectedYearId,
-        semId: String? = selectedSemId
+        semId: String? = selectedSemId,
+        silentRefresh: Boolean = false
     ) {
         val groupId = prefs.getString("selected_group_id", "000000283") ?: "000000283"
         val groupName = prefs.getString("selected_group_name", "25М-УГКП21") ?: "25М-УГКП21"
         val savedZachetka = prefs.getString("selected_zachetka", "") ?: ""
+        lastLoadedGroupId = groupId
+        lastLoadedZachetka = savedZachetka
 
         viewModelScope.launch {
             if (!forceRefresh) {
@@ -211,30 +239,42 @@ class RatingViewModel(
                         applyParsedCache(parsed, savedZachetka)
                         isRefreshing = false
                         AppLogger.d("RATING", "Отображен строгий кэш БРС для ${parsed.student?.zachetka}")
+
+                        val isStale = (System.currentTimeMillis() - cachedEntity.updatedAt) > RATING_STALE_TTL_MS
+                        val cachedUrl = parsed.student?.detailUrl.orEmpty()
+                        val isLegacy = cachedUrl.isNotBlank() && !cachedUrl.startsWith(RatingRepository.RATING_API_BASE)
+                        if (isStale || isLegacy) {
+                            // Stale-while-revalidate в фоне без спиннера
+                            loadRating(forceRefresh = true, yearId = parsed.resolvedYearId, semId = parsed.resolvedSemId, silentRefresh = true)
+                        }
                         return@launch
                     }
                 }
             }
 
-            isRefreshing = true
-            refreshStatusText = "Данные обновлены"
-            refreshIsError = false
+            if (!silentRefresh) {
+                isRefreshing = true
+                refreshStatusText = "Данные обновлены"
+                refreshIsError = false
+            }
 
             try {
                 val groupUrl = ratingRepository.buildGroupUrl(groupId, groupName, yearId, semId)
                 AppLogger.d("RATING", "Запрос рейтинга группы: $groupUrl")
 
-                val ratingPage = withTimeoutOrNull(10000L) {
+                val ratingPage = withTimeoutOrNull(12_000L) {
                     ratingRepository.parseGroupList(groupUrl)
                 }
 
                 if (ratingPage == null) {
-                    AppLogger.e("RATING", "ТАЙМАУТ СЕТЕВОГО ЗАПРОСА РЕЙТИНГА (10с)")
-                    refreshStatusText = "Ошибка обновления, показаны кэшированные данные"
-                    refreshIsError = true
-                    isRefreshing = false
+                    AppLogger.e("RATING", "ТАЙМАУТ СЕТЕВОГО ЗАПРОСА РЕЙТИНГА (12с)")
+                    if (!silentRefresh) {
+                        refreshStatusText = "Нет сети — показан кэш"
+                        refreshIsError = true
+                        isRefreshing = false
+                    }
                     if (uiState !is RatingUiState.Success) {
-                        uiState = RatingUiState.Error("Превышено время ожидания сети (10с)")
+                        uiState = RatingUiState.Error("Превышено время ожидания сети")
                     }
                     return@launch
                 }
@@ -410,12 +450,18 @@ class RatingViewModel(
             } catch (e: Exception) {
                 AppLogger.e("RATING", "Ошибка загрузки рейтинга: ${e.message}", e)
                 val previousSuccess = uiState as? RatingUiState.Success
+                if (!silentRefresh) {
+                    refreshStatusText = "Нет сети — показан кэш"
+                    refreshIsError = true
+                }
                 if (previousSuccess?.student == null) {
                     uiState = RatingUiState.Error(e.message ?: "Ошибка подключения к порталу БРС")
                 }
             }
 
-            isRefreshing = false
+            if (!silentRefresh) {
+                isRefreshing = false
+            }
         }
     }
 
@@ -441,19 +487,22 @@ class RatingViewModel(
                 val points = ratingRepository.parseControlPoints(detailUrl)
                 val newMap = _subjectControlPoints.value + (detailUrl to points)
                 _subjectControlPoints.value = newMap
-                
+
                 val groupId = prefs.getString("selected_group_id", "000000283") ?: "000000283"
                 val zachetka = prefs.getString("selected_zachetka", "") ?: ""
                 val cachedEntity = ratingRepository.getCachedOrLatestRating(groupId, zachetka, selectedYearId, selectedSemId)
                 if (cachedEntity != null) {
-                    val serializedPoints = withContext(Dispatchers.Default) { gson.toJson(newMap) }
-                    val updatedEntity = cachedEntity.copy(
-                        controlPointsJson = serializedPoints,
-                        updatedAt = System.currentTimeMillis()
-                    )
+                    val (updatedEntity, instantJson) = withContext(Dispatchers.Default) {
+                        val updated = cachedEntity.copy(
+                            controlPointsJson = gson.toJson(newMap),
+                            updatedAt = System.currentTimeMillis()
+                        )
+                        updated to gson.toJson(updated)
+                    }
                     ratingRepository.saveCachedRating(updatedEntity)
+                    prefs.edit().putString("rating_latest_instant_cache_$groupId", instantJson).apply()
                 }
-            } catch(e: Exception) {
+            } catch (e: Exception) {
                 AppLogger.e("RATING", "Ошибка загрузки КТ: ${e.message}")
             } finally {
                 _loadingControlPoints.value = _loadingControlPoints.value - detailUrl
@@ -468,7 +517,7 @@ class RatingViewModelFactory(
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         val database = AppDatabase.getDatabase(application)
-        val repo = RatingRepository(database.ratingDao())
+        val repo = RatingRepository(database.ratingDao(), application)
         return RatingViewModel(repo, application) as T
     }
 }

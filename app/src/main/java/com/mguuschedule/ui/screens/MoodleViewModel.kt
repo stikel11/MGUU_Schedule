@@ -222,9 +222,15 @@ class MoodleViewModel(
 
             try {
                 val fetchedCourses = repository.fetchCourses(currentSession)
-                courses = fetchedCourses
-                val fetchedDeadlines = repository.fetchUpcomingDeadlines(currentSession, fetchedCourses)
-                deadlines = fetchedDeadlines
+                if (fetchedCourses.isNotEmpty() || courses.isEmpty()) {
+                    courses = fetchedCourses
+                }
+                val fetchedDeadlines = runCatching {
+                    repository.fetchUpcomingDeadlines(currentSession, courses)
+                }.getOrNull()
+                if (fetchedDeadlines != null && (fetchedDeadlines.isNotEmpty() || deadlines.isEmpty())) {
+                    deadlines = fetchedDeadlines
+                }
             } catch (e: InvalidMoodleTokenException) {
                 AppLogger.w("MOODLE_API", "Токен СДО недействителен, сброс сессии")
                 logout(clearWebCookies = false)
@@ -243,30 +249,51 @@ class MoodleViewModel(
         }
     }
 
-    fun openCourse(course: MoodleCourse) {
+    fun openCourse(course: MoodleCourse, forceRefresh: Boolean = false) {
         val currentSession = session ?: return
         selectedCourse = course
-        courseSections = emptyList()
-        courseGrades = emptyList()
         courseDetailError = null
-        isCourseDetailLoading = true
 
         viewModelScope.launch {
+            val (cachedSections, cachedGrades) = withContext(Dispatchers.IO) {
+                repository.loadCachedCourseSections(course.id) to repository.loadCachedCourseGrades(course.id)
+            }
+            val hasCache = cachedSections.isNotEmpty() || cachedGrades.isNotEmpty()
+            if (hasCache && !forceRefresh) {
+                courseSections = cachedSections
+                courseGrades = cachedGrades
+                isCourseDetailLoading = false
+            } else {
+                if (!hasCache) {
+                    courseSections = emptyList()
+                    courseGrades = emptyList()
+                }
+                isCourseDetailLoading = true
+            }
+
             try {
                 val (sections, grades) = coroutineScope {
                     val sectionsDeferred = async { repository.fetchCourseContents(currentSession, course.id) }
                     val gradesDeferred = async { repository.fetchCourseGrades(currentSession, course.id) }
                     sectionsDeferred.await() to gradesDeferred.await()
                 }
-                courseSections = sections
-                courseGrades = grades
+                if (sections.isNotEmpty() || !hasCache) {
+                    courseSections = sections
+                }
+                if (grades.isNotEmpty() || !hasCache) {
+                    courseGrades = grades
+                }
             } catch (e: InvalidMoodleTokenException) {
                 selectedCourse = null
                 logout(clearWebCookies = false)
                 errorMessage = e.message
             } catch (e: Exception) {
                 AppLogger.e("MOODLE_API", "Ошибка загрузки курса ${course.id}: ${e.message}", e)
-                courseDetailError = e.message ?: "Не удалось загрузить материалы курса"
+                if (hasCache) {
+                    statusBanner = "Нет сети — показаны сохранённые материалы курса"
+                } else {
+                    courseDetailError = e.message ?: "Не удалось загрузить материалы курса"
+                }
             } finally {
                 isCourseDetailLoading = false
             }

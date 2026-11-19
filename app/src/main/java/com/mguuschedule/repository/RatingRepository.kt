@@ -1,5 +1,8 @@
 package com.mguuschedule.repository
 
+import android.content.Context
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.mguuschedule.model.AcademicPeriod
 import com.mguuschedule.model.ControlPoint
 import com.mguuschedule.model.EduGroup
@@ -25,7 +28,8 @@ import javax.net.ssl.X509TrustManager
 import kotlin.math.roundToInt
 
 class RatingRepository(
-    private val ratingDao: RatingDao
+    private val ratingDao: RatingDao,
+    private val context: Context? = null
 ) {
 
     private data class CachedYearsData(
@@ -33,6 +37,10 @@ class RatingRepository(
         val defaultYearId: String,
         val fetchedAtMs: Long
     )
+
+    private val metaPrefs by lazy {
+        context?.getSharedPreferences("rating_meta_cache", Context.MODE_PRIVATE)
+    }
 
     companion object {
         const val RATING_API_BASE = "https://schedule.mguu.ru/api/v1/rating"
@@ -43,7 +51,10 @@ class RatingRepository(
         private const val DEFAULT_YEAR_ID = "000000033"
         private const val DEFAULT_SEM_ID = "0"
         private const val YEARS_CACHE_TTL_MS = 10 * 60 * 1000L
+        private const val KEY_YEARS_JSON = "years_meta_json"
 
+        private val gson = Gson()
+        private val STUDENTS_LIST_TYPE = object : TypeToken<List<StudentRating>>() {}.type
         private val WHITESPACE_REGEX = Regex("\\s+")
         private val SYNC_TIME_FORMATTER = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss")
 
@@ -74,6 +85,14 @@ class RatingRepository(
         return ratingDao.getRatingCache(groupId, zachetka, yearId, semId)
     }
 
+    suspend fun getCachedZachetkasForGroup(groupId: String): List<String> = withContext(Dispatchers.IO) {
+        val entity = ratingDao.getLatestRatingCacheForStudent(groupId, "") ?: return@withContext emptyList()
+        runCatching {
+            val students: List<StudentRating> = gson.fromJson(entity.studentsListJson, STUDENTS_LIST_TYPE) ?: emptyList()
+            students.map { it.zachetka }.filter { it.isNotBlank() }.distinct()
+        }.getOrDefault(emptyList())
+    }
+
     suspend fun saveCachedRating(entity: RatingEntity) {
         ratingDao.saveRatingCache(entity)
     }
@@ -96,12 +115,13 @@ class RatingRepository(
     }
 
     /**
-     * Загружает доступные учебные годы из GET /api/v1/rating/years/ (с кэшированием в памяти).
+     * Загружает доступные учебные годы из GET /api/v1/rating/years/ (с кэшированием в памяти и на диске).
      */
     private fun fetchYearsMetadata(): CachedYearsData {
         val now = System.currentTimeMillis()
-        val cached = cachedYearsData
+        val cached = cachedYearsData ?: loadDiskYearsMetadata()
         if (cached != null && (now - cached.fetchedAtMs) < YEARS_CACHE_TTL_MS) {
+            cachedYearsData = cached
             return cached
         }
 
@@ -135,6 +155,7 @@ class RatingRepository(
 
         if (fresh != null) {
             cachedYearsData = fresh
+            saveDiskYearsMetadata(fresh)
             return fresh
         }
 
@@ -146,6 +167,15 @@ class RatingRepository(
             defaultYearId = DEFAULT_YEAR_ID,
             fetchedAtMs = now
         )
+    }
+
+    private fun loadDiskYearsMetadata(): CachedYearsData? {
+        val raw = metaPrefs?.getString(KEY_YEARS_JSON, null) ?: return null
+        return runCatching { gson.fromJson(raw, CachedYearsData::class.java) }.getOrNull()
+    }
+
+    private fun saveDiskYearsMetadata(data: CachedYearsData) {
+        metaPrefs?.edit()?.putString(KEY_YEARS_JSON, gson.toJson(data))?.apply()
     }
 
     /**

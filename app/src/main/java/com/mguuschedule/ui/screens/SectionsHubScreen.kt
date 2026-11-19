@@ -213,7 +213,7 @@ private fun SectionHubCard(
     Surface(
         onClick = onClick,
         shape = shape,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = MaterialTheme.colorScheme.surfaceContainer,
         shadowElevation = 0.dp,
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -360,9 +360,10 @@ fun CurriculumScreen(
             val ratingSubject = subjectsFromRating.firstOrNull {
                 it.title.trim().equals(title, ignoreCase = true)
             }
-            val cps = controlPointsMap.entries.firstOrNull {
-                it.key.trim().equals(title, ignoreCase = true)
-            }?.value.orEmpty()
+            val cps = ratingSubject?.detailUrl?.takeIf { it.isNotBlank() }?.let { controlPointsMap[it] }
+                ?: controlPointsMap.entries.firstOrNull {
+                    it.key.trim().equals(title, ignoreCase = true)
+                }?.value.orEmpty()
 
             val teachers = subjectLessons.map { it.teacher.trim() }
                 .filter { it.isNotBlank() }
@@ -563,7 +564,7 @@ fun CurriculumScreen(
                                         fontWeight = FontWeight.SemiBold,
                                         color = if (item.consultationDate != null)
                                             MaterialTheme.colorScheme.onSurface
-                                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                        else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
@@ -598,7 +599,7 @@ fun CurriculumScreen(
                                         fontWeight = FontWeight.SemiBold,
                                         color = if (item.examOrCreditDate != null)
                                             MaterialTheme.colorScheme.onSurface
-                                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                        else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
@@ -744,7 +745,7 @@ fun MaterialsHubScreen(
                 item {
                     Surface(
                         shape = RoundedCornerShape(24.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        color = MaterialTheme.colorScheme.surfaceContainer,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 16.dp)
@@ -787,7 +788,7 @@ fun MaterialsHubScreen(
                     item(key = "subject_$subjectTitle", contentType = "subject_materials") {
                         Surface(
                             shape = RoundedCornerShape(24.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainerLow,
+                            color = MaterialTheme.colorScheme.surfaceContainer,
                             shadowElevation = 0.dp,
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -995,7 +996,7 @@ fun AttendanceScreen(
             item {
                 Surface(
                     shape = RoundedCornerShape(24.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    color = MaterialTheme.colorScheme.surfaceContainer,
                     shadowElevation = 0.dp,
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -1204,7 +1205,7 @@ fun AttendanceScreen(
                 Surface(
                     onClick = { selectedSubjectForSheet = subjectTitle },
                     shape = RoundedCornerShape(24.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    color = MaterialTheme.colorScheme.surfaceContainer,
                     shadowElevation = 0.dp,
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -1355,50 +1356,94 @@ fun AttendanceScreen(
 @Composable
 fun FreeRoomsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
+    val roomsCachePrefs = remember(context) {
+        context.getSharedPreferences("free_rooms_cache", Context.MODE_PRIVATE)
+    }
     var selectedCampus by remember { mutableStateOf("sretenka") } // "sretenka" или "voikovskaya"
     var searchQuery by remember { mutableStateOf("") }
     var selectedFloor by remember { mutableStateOf("Все этажи") }
 
     var rooms by remember { mutableStateOf<List<org.json.JSONObject>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
+    var isShowingCache by remember { mutableStateOf(false) }
+    var cachedTimeLabel by remember { mutableStateOf<String?>(null) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val haptic = com.mguuschedule.util.rememberHapticFeedback()
 
-    fun loadRooms() {
+    fun parseRoomsArray(rawJson: String): List<org.json.JSONObject>? {
+        return runCatching {
+            val root = org.json.JSONObject(rawJson)
+            if (root.has("ok") && !root.optBoolean("ok")) return@runCatching null
+            val array = root.optJSONArray("rooms") ?: root.optJSONArray("freeRooms") ?: root.optJSONArray("items") ?: root.optJSONArray("data")
+            if (array != null) {
+                val list = ArrayList<org.json.JSONObject>(array.length())
+                for (i in 0 until array.length()) {
+                    array.optJSONObject(i)?.let { list.add(it) }
+                }
+                list
+            } else {
+                emptyList()
+            }
+        }.getOrNull()
+    }
+
+    fun loadRooms(forceRefresh: Boolean = false) {
         val campus = selectedCampus
         scope.launch {
-            isLoading = true
             errorMsg = null
+            // 1. Мгновенно поднимаем локальный кэш для выбранного кампуса
+            val (cachedList, cachedTs) = withContext(Dispatchers.IO) {
+                val raw = roomsCachePrefs.getString("rooms_$campus", null)
+                val ts = roomsCachePrefs.getLong("rooms_ts_$campus", 0L)
+                val parsed = raw?.let { parseRoomsArray(it) }
+                parsed to ts
+            }
+            val hasCache = !cachedList.isNullOrEmpty()
+            if (!cachedList.isNullOrEmpty() && !forceRefresh) {
+                rooms = cachedList
+                isShowingCache = true
+                cachedTimeLabel = if (cachedTs > 0L) {
+                    Instant.ofEpochMilli(cachedTs)
+                        .atZone(ZoneId.systemDefault())
+                        .format(DateTimeFormatter.ofPattern("HH:mm"))
+                } else null
+                isLoading = false
+            } else {
+                isLoading = true
+            }
+
+            // 2. Обновляем из сети в фоне (Stale-While-Revalidate)
             try {
-                val result = withContext(Dispatchers.IO) {
+                val freshJson = withContext(Dispatchers.IO) {
                     val url = "https://api.lk-upm.ru/api/rooms/free?campus=$campus"
-                    val response = org.jsoup.Jsoup.connect(url).ignoreContentType(true).execute().body()
-                    val root = org.json.JSONObject(response)
-
-                    if (root.has("ok") && !root.optBoolean("ok")) {
-                        return@withContext null
-                    }
-
-                    val array = root.optJSONArray("rooms") ?: root.optJSONArray("freeRooms") ?: root.optJSONArray("items") ?: root.optJSONArray("data")
-                    if (array != null) {
-                        val list = ArrayList<org.json.JSONObject>(array.length())
-                        for (i in 0 until array.length()) {
-                            array.optJSONObject(i)?.let { list.add(it) }
-                        }
-                        list
-                    } else {
-                        emptyList()
-                    }
+                    org.jsoup.Jsoup.connect(url)
+                        .ignoreContentType(true)
+                        .timeout(10_000)
+                        .execute()
+                        .body()
                 }
+                val parsedFresh = withContext(Dispatchers.Default) { parseRoomsArray(freshJson) }
 
-                if (result == null) {
-                    errorMsg = "Ошибка API"
+                if (parsedFresh == null) {
+                    if (!hasCache) errorMsg = "Ошибка API"
                 } else {
-                    rooms = result
+                    rooms = parsedFresh
+                    isShowingCache = false
+                    cachedTimeLabel = null
+                    withContext(Dispatchers.IO) {
+                        roomsCachePrefs.edit()
+                            .putString("rooms_$campus", freshJson)
+                            .putLong("rooms_ts_$campus", System.currentTimeMillis())
+                            .apply()
+                    }
                 }
             } catch (e: Exception) {
-                errorMsg = e.message
+                if (!hasCache) {
+                    errorMsg = e.message ?: "Нет подключения к сети"
+                } else {
+                    isShowingCache = true
+                }
             } finally {
                 isLoading = false
             }
@@ -1406,7 +1451,8 @@ fun FreeRoomsScreen(onBack: () -> Unit) {
     }
 
     LaunchedEffect(selectedCampus) {
-        loadRooms()
+        selectedFloor = "Все этажи"
+        loadRooms(forceRefresh = false)
     }
 
     val availableFloors = remember(rooms) {
@@ -1445,11 +1491,28 @@ fun FreeRoomsScreen(onBack: () -> Unit) {
                     title = "Свободные аудитории",
                     onBack = onBack,
                     trailingContent = {
-                        IconButton(onClick = { loadRooms() }) {
+                        IconButton(onClick = { loadRooms(forceRefresh = true) }) {
                             Icon(Icons.Rounded.Refresh, contentDescription = "Обновить", tint = MaterialTheme.colorScheme.primary)
                         }
                     }
                 )
+            }
+
+            if (isShowingCache && cachedTimeLabel != null) {
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "Показан сохранённый кэш от $cachedTimeLabel",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                        )
+                    }
+                }
             }
 
             item {
@@ -1598,7 +1661,7 @@ fun FreeRoomsScreen(onBack: () -> Unit) {
                     Surface(
                         onClick = { selectedRoomForSchedule = roomName },
                         shape = RoundedCornerShape(24.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        color = MaterialTheme.colorScheme.surfaceContainer,
                         shadowElevation = 0.dp,
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -1670,24 +1733,52 @@ fun FreeRoomsScreen(onBack: () -> Unit) {
         val dateFormatter = remember { DateTimeFormatter.ofPattern("d MMM", Locale.forLanguageTag("ru")) }
 
         LaunchedEffect(roomName) {
-            roomLoading = true
+            val cacheKey = "room_sched_${roomName.trim().lowercase()}"
+            val cachedLessons = withContext(Dispatchers.IO) {
+                val raw = roomsCachePrefs.getString(cacheKey, null) ?: return@withContext null
+                runCatching {
+                    com.mguuschedule.util.ScheduleParser.parse(raw)
+                        .mapNotNull { it.toLesson() }
+                        .sortedWith(compareBy<Lesson> { it.date }.thenBy { it.startTime })
+                }.getOrNull()
+            }
+            if (cachedLessons != null) {
+                roomLessons = cachedLessons
+                roomLoading = false
+            } else {
+                roomLoading = true
+            }
+
             try {
-                val loaded = withContext(Dispatchers.IO) {
+                val (freshResponse, loaded) = withContext(Dispatchers.IO) {
                     val today = LocalDate.now()
                     val todayStr = today.format(ROOM_API_DATE_FORMATTER)
                     val weekLaterStr = today.plusDays(7).format(ROOM_API_DATE_FORMATTER)
                     val encodedRoom = java.net.URLEncoder.encode(roomName, "UTF-8")
 
                     val url = "https://api.lk-upm.ru/api/room?name=$encodedRoom&from=$todayStr&to=$weekLaterStr"
-                    val response = org.jsoup.Jsoup.connect(url).ignoreContentType(true).execute().body()
+                    val response = org.jsoup.Jsoup.connect(url)
+                        .ignoreContentType(true)
+                        .timeout(10_000)
+                        .execute()
+                        .body()
 
-                    com.mguuschedule.util.ScheduleParser.parse(response)
+                    val parsed = com.mguuschedule.util.ScheduleParser.parse(response)
                         .mapNotNull { it.toLesson() }
                         .sortedWith(compareBy<Lesson> { it.date }.thenBy { it.startTime })
+                    response to parsed
                 }
                 roomLessons = loaded
+                withContext(Dispatchers.IO) {
+                    roomsCachePrefs.edit()
+                        .putString(cacheKey, freshResponse)
+                        .putLong("${cacheKey}_ts", System.currentTimeMillis())
+                        .apply()
+                }
             } catch (e: Exception) {
-                roomLessons = emptyList()
+                if (cachedLessons == null) {
+                    roomLessons = emptyList()
+                }
             } finally {
                 roomLoading = false
             }

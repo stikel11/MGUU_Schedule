@@ -257,7 +257,7 @@ fun WeekCalendar(
                                         text = name,
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
                                     )
                                 }
                             }
@@ -346,16 +346,16 @@ fun DayItem(
     val targetTextColor = when {
         isSelected -> MaterialTheme.colorScheme.onPrimary
         isToday -> MaterialTheme.colorScheme.onTertiaryContainer
-        isWeekend -> MaterialTheme.colorScheme.error.copy(alpha = if (isSameMonth) 1f else 0.38f)
-        !isSameMonth -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+        isWeekend -> MaterialTheme.colorScheme.error.copy(alpha = if (isSameMonth) 1f else 0.55f)
+        !isSameMonth -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.58f)
         else -> MaterialTheme.colorScheme.onSurface
     }
     
     val targetLabelColor = when {
-        isSelected -> MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f)
-        isToday -> MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.85f)
-        isWeekend -> MaterialTheme.colorScheme.error.copy(alpha = if (isSameMonth) 0.75f else 0.38f)
-        !isSameMonth -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+        isSelected -> MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.90f)
+        isToday -> MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.90f)
+        isWeekend -> MaterialTheme.colorScheme.error.copy(alpha = if (isSameMonth) 0.90f else 0.55f)
+        !isSameMonth -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.58f)
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
 
@@ -374,7 +374,7 @@ fun DayItem(
         targetValue = when {
             isSelected -> MaterialTheme.colorScheme.primary
             isToday -> MaterialTheme.colorScheme.tertiaryContainer
-            else -> MaterialTheme.colorScheme.surfaceContainerLow
+            else -> MaterialTheme.colorScheme.surfaceContainer
         },
         animationSpec = AppMotionScheme.fastEffectsSpec(),
         label = "bgColor"

@@ -433,7 +433,7 @@ fun LessonRow(
     val containerColor = if (status == LessonStatus.CURRENT) {
         MaterialTheme.colorScheme.primaryContainer
     } else {
-        MaterialTheme.colorScheme.surfaceContainerLow
+        MaterialTheme.colorScheme.surfaceContainer
     }
     
     val contentColor = if (status == LessonStatus.CURRENT) {
@@ -485,7 +485,7 @@ fun LessonRow(
                 text = endTimeStr, 
                 style = MaterialTheme.typography.bodyMedium, 
                 fontWeight = FontWeight.Medium,
-                color = if (status == LessonStatus.CURRENT) MaterialTheme.colorScheme.primary.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
+                color = if (status == LessonStatus.CURRENT) MaterialTheme.colorScheme.primary.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         
@@ -533,7 +533,7 @@ fun LessonRow(
                             text = "Идет сейчас • Осталось $remaining мин",
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     }
                     
@@ -545,8 +545,8 @@ fun LessonRow(
                             .fillMaxWidth()
                             .height(6.dp)
                             .clip(CircleShape),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        trackColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.22f)
                     )
                     
                     Spacer(modifier = Modifier.height(12.dp))
@@ -565,7 +565,7 @@ fun LessonRow(
                         Surface(
                             shape = CircleShape,
                             color = if (status == LessonStatus.CURRENT) {
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                                MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.14f)
                             } else {
                                 MaterialTheme.colorScheme.secondaryContainer
                             },
@@ -575,7 +575,7 @@ fun LessonRow(
                                 text = typeName,
                                 style = MaterialTheme.typography.labelMedium,
                                 color = if (status == LessonStatus.CURRENT) {
-                                    MaterialTheme.colorScheme.primary
+                                    MaterialTheme.colorScheme.onPrimaryContainer
                                 } else {
                                     MaterialTheme.colorScheme.onSecondaryContainer
                                 },
@@ -609,7 +609,7 @@ fun LessonRow(
                         Spacer(modifier = Modifier.width(8.dp))
                         Surface(
                             shape = CircleShape,
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest
                         ) {
                             Text(
                                 text = "Завершилась",
@@ -646,7 +646,11 @@ fun LessonRow(
                         text = lesson.teacher, 
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Normal,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = if (status == LessonStatus.CURRENT) {
+                            MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.84f)
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
                         modifier = Modifier.weight(1f),
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
@@ -656,7 +660,11 @@ fun LessonRow(
 
                     Surface(
                         shape = CircleShape,
-                        color = MaterialTheme.colorScheme.surfaceContainerHighest
+                        color = if (status == LessonStatus.CURRENT) {
+                            MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.14f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainerHighest
+                        }
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
@@ -666,14 +674,22 @@ fun LessonRow(
                                 imageVector = Icons.Rounded.Place, 
                                 contentDescription = null, 
                                 modifier = Modifier.size(14.dp), 
-                                tint = MaterialTheme.colorScheme.primary
+                                tint = if (status == LessonStatus.CURRENT) {
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.primary
+                                }
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 text = roomFormatted, 
                                 style = MaterialTheme.typography.labelMedium, 
                                 fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = if (status == LessonStatus.CURRENT) {
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                }
                             )
                         }
                     }
@@ -685,7 +701,11 @@ fun LessonRow(
                     enter = expandVertically(AppMotionScheme.defaultSpatialSpec()) + fadeIn(AppMotionScheme.fastEffectsSpec()),
                     exit = shrinkVertically(AppMotionScheme.defaultSpatialSpec()) + fadeOut(AppMotionScheme.fastEffectsSpec())
                 ) {
-                    val bentoCardBg = MaterialTheme.colorScheme.surfaceContainerHighest
+                    val bentoCardBg = if (status == LessonStatus.CURRENT) {
+                        MaterialTheme.colorScheme.surface
+                    } else {
+                        MaterialTheme.colorScheme.surfaceContainerHighest
+                    }
 
                     Column(modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
                         if (addonSummary?.hasTasks == true) {

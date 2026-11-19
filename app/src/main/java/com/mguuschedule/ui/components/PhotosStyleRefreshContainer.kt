@@ -155,11 +155,25 @@ fun PhotosStyleRefreshContainer(
     val isPullVisible by remember { derivedStateOf { offsetAnim.value > 2f } }
 
     val backgroundColor = MaterialTheme.colorScheme.background
-    val isDarkTheme = com.mguuschedule.ui.theme.LocalIsDarkTheme.current
-    val recessedWellColor = if (isDarkTheme) {
-        MaterialTheme.colorScheme.surfaceContainerLowest
+    // Выразительная подложка MD3 Expressive (secondaryContainer):
+    // заметно и гармонично отличается от основного фона (background) и карточек (surfaceContainer)
+    // как в светлой (Tone 90 с цветовым акцентом), так и в тёмной теме (Tone 30 с цветовым акцентом),
+    // динамически подстраиваясь под палитру Material You.
+    val recessedWellColor = MaterialTheme.colorScheme.secondaryContainer
+    val donePillBgColor = if (isError) {
+        MaterialTheme.colorScheme.errorContainer
     } else {
-        MaterialTheme.colorScheme.surfaceContainerHighest
+        MaterialTheme.colorScheme.surface
+    }
+    val donePillIconColor = if (isError) {
+        MaterialTheme.colorScheme.error
+    } else {
+        MaterialTheme.colorScheme.primary
+    }
+    val donePillTextColor = if (isError) {
+        MaterialTheme.colorScheme.onErrorContainer
+    } else {
+        MaterialTheme.colorScheme.onSurface
     }
 
     Box(
@@ -201,7 +215,9 @@ fun PhotosStyleRefreshContainer(
                     if (isDone) {
                         Surface(
                             shape = RoundedCornerShape(20.dp),
-                            color = if (isError) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer
+                            color = donePillBgColor,
+                            tonalElevation = 0.dp,
+                            shadowElevation = 2.dp
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -211,14 +227,14 @@ fun PhotosStyleRefreshContainer(
                                 Icon(
                                     imageVector = if (isError) Icons.Rounded.Warning else Icons.Rounded.CheckCircle,
                                     contentDescription = null,
-                                    tint = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                    tint = donePillIconColor,
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Text(
                                     text = statusText,
                                     style = MaterialTheme.typography.labelLarge,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = if (isError) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSecondaryContainer
+                                    color = donePillTextColor
                                 )
                             }
                         }
@@ -233,7 +249,7 @@ fun PhotosStyleRefreshContainer(
         }
 
         // 2. Сдвигающийся вниз основной экран со скругленными верхними углами (/‾\)
-        // Смещение и скругление выполняются в Layout/Draw без рекомпозиции content()
+        // Смещение, тень и скругление выполняются в Layout/Draw без рекомпозиции content()
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -243,8 +259,10 @@ fun PhotosStyleRefreshContainer(
                     if (progress > 0.01f) {
                         val radius = (28.dp * progress)
                         shape = RoundedCornerShape(topStart = radius, topEnd = radius)
+                        shadowElevation = 6.dp.toPx() * progress
                         clip = true
                     } else {
+                        shadowElevation = 0f
                         clip = false
                     }
                 }

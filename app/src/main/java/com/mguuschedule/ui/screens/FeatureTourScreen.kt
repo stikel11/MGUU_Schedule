@@ -131,15 +131,17 @@ fun FeatureTourScreen(
                 state = pagerState,
                 modifier = Modifier
                     .weight(1f)
+                    .fillMaxWidth()
                     .graphicsLayer {
-                        val p = AppMotionScheme.StandardEasing.transform(pagerBackProgress.value)
+                        val p = AppMotionScheme.StandardDecelerateEasing.transform(pagerBackProgress.value.coerceIn(0f, 1f))
                         val dir = if (pagerSwipeEdge == BackEventCompat.EDGE_LEFT) 1f else -1f
                         translationX = dir * 24.dp.toPx() * p
                         val s = 1f - (p * 0.04f)
                         scaleX = s
                         scaleY = s
+                        clip = p > 0.002f
+                        shape = if (clip) RoundedCornerShape((24f * p).dp) else androidx.compose.ui.graphics.RectangleShape
                     }
-                    .fillMaxWidth()
             ) { page ->
                 Column(
                     modifier = Modifier

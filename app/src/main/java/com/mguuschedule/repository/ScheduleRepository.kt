@@ -2,6 +2,8 @@ package com.mguuschedule.repository
 
 import android.content.Context
 import android.util.Log
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.mguuschedule.model.EducationLevel
 import com.mguuschedule.model.Group
 import com.mguuschedule.model.LessonEntity
@@ -25,17 +27,30 @@ import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 
+data class ScheduleSyncResult(
+    val lessons: List<LessonEntity>,
+    val fromNetwork: Boolean,
+    val errorMessage: String? = null
+)
+
 class ScheduleRepository(private val context: Context, private val database: AppDatabase) {
     private val dao: ScheduleDao = database.scheduleDao()
     private val addonsDao: LessonAddonsDao = database.lessonAddonsDao()
     private val prefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-    
+    private val cachePrefs = context.getSharedPreferences("schedule_cache", Context.MODE_PRIVATE)
+
     companion object {
         const val SCHEDULE_API_BASE = "https://schedule.mguu.ru/api/v1/schedule"
         private const val SCHEDULE_ORIGIN = "https://schedule.mguu.ru"
         private const val SCHEDULE_REFERER = "https://schedule.mguu.ru/schedule"
         private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 14; Pixel 9 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
+        private const val KEY_GROUPS_CACHE = "all_groups_cache_json"
+        private const val KEY_GROUPS_CACHE_TS = "all_groups_cache_ts"
+        private const val KEY_CACHED_GROUP_ID = "cached_schedule_group_id"
+        private const val KEY_LAST_UPDATE_TIME = "last_update_time"
 
+        private val gson = Gson()
+        private val GROUPS_TYPE = object : TypeToken<List<Group>>() {}.type
         private val SYNC_TIME_FORMATTER = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")
         private val TRUST_ALL_SSL_FACTORY by lazy {
             val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
@@ -70,6 +85,28 @@ class ScheduleRepository(private val context: Context, private val database: App
     }
 
     /**
+     * Возвращает кэшированный список всех групп (для мгновенного открытия и работы офлайн).
+     */
+    suspend fun getCachedGroups(): List<Group> = withContext(Dispatchers.IO) {
+        val raw = cachePrefs.getString(KEY_GROUPS_CACHE, null) ?: return@withContext emptyList()
+        runCatching { gson.fromJson<List<Group>>(raw, GROUPS_TYPE) }.getOrDefault(emptyList())
+    }
+
+    private fun saveCachedGroups(groups: List<Group>) {
+        if (groups.isEmpty()) return
+        cachePrefs.edit()
+            .putString(KEY_GROUPS_CACHE, gson.toJson(groups))
+            .putLong(KEY_GROUPS_CACHE_TS, System.currentTimeMillis())
+            .apply()
+    }
+
+    fun getCachedGroupId(): String? = cachePrefs.getString(KEY_CACHED_GROUP_ID, null)
+
+    suspend fun getAllCachedLessons(): List<LessonEntity> = withContext(Dispatchers.IO) {
+        dao.getAllLessons()
+    }
+
+    /**
      * Загружает расписание напрямую с https://schedule.mguu.ru/api/v1/schedule без записи в Room.
      */
     suspend fun fetchRemoteLessons(
@@ -91,7 +128,8 @@ class ScheduleRepository(private val context: Context, private val database: App
     }
 
     /**
-     * Загружает список всех групп (бакалавриат, магистратура, аспирантура) с https://schedule.mguu.ru.
+     * Загружает список всех групп (бакалавриат, магистратура, аспирантура) с https://schedule.mguu.ru
+     * и сохраняет результат в локальный кэш. При сбое сети возвращает сохранённый кэш.
      */
     suspend fun fetchAllGroups(): List<Group> = withContext(Dispatchers.IO) {
         val levels = listOf(
@@ -99,7 +137,7 @@ class ScheduleRepository(private val context: Context, private val database: App
             "mag" to EducationLevel.MASTER,
             "asp" to EducationLevel.MASTER
         )
-        coroutineScope {
+        val fresh = coroutineScope {
             levels.map { (code, level) ->
                 async {
                     runCatching {
@@ -112,6 +150,66 @@ class ScheduleRepository(private val context: Context, private val database: App
                 }
             }.awaitAll().flatten()
         }
+
+        if (fresh.isNotEmpty()) {
+            saveCachedGroups(fresh)
+            fresh
+        } else {
+            getCachedGroups()
+        }
+    }
+
+    /**
+     * Синхронизирует расписание с портала с честным флагом источника ([ScheduleSyncResult.fromNetwork]).
+     * При ошибке сети сохраняет и возвращает локальный кэш Room, не затирая его пустым ответом.
+     */
+    suspend fun syncSchedule(
+        groupId: String = "000000311",
+        startDate: String = "",
+        endDate: String = ""
+    ): ScheduleSyncResult = withContext(Dispatchers.IO) {
+        var fetchError: String? = null
+        val remoteLessons = runCatching {
+            fetchRemoteLessons(groupId = groupId, startDate = startDate, endDate = endDate)
+        }.onFailure { e ->
+            fetchError = e.message ?: "Ошибка сети"
+            AppLogger.e("API_PARSER", "Ошибка загрузки расписания с schedule.mguu.ru: ${e.message}", e)
+        }.getOrNull()
+
+        if (!remoteLessons.isNullOrEmpty()) {
+            dao.replaceAll(remoteLessons)
+
+            val nowMs = System.currentTimeMillis()
+            val nowStr = LocalDateTime.now().format(SYNC_TIME_FORMATTER)
+            prefs.edit().putString("last_sync_time", nowStr).apply()
+            // Синхронизируем снэпшот с ScheduleUpdateWorker и метаданными группы
+            cachePrefs.edit()
+                .putString("cache_$groupId", gson.toJson(remoteLessons))
+                .putString(KEY_CACHED_GROUP_ID, groupId)
+                .putLong(KEY_LAST_UPDATE_TIME, nowMs)
+                .apply()
+
+            AppLogger.d("API_PARSER", "Обновлено расписание в БД и кэше: ${remoteLessons.size} пар")
+            ScheduleSyncResult(lessons = remoteLessons, fromNetwork = true)
+        } else {
+            val cachedLessons = dao.getAllLessons()
+            val cachedForGroup = getCachedGroupId()
+            val canUseCache = cachedLessons.isNotEmpty() && (cachedForGroup == null || cachedForGroup == groupId)
+            if (canUseCache) {
+                AppLogger.d("API_PARSER", "Сеть недоступна или пустой ответ, возвращаем локальный кэш: ${cachedLessons.size} пар")
+                ScheduleSyncResult(
+                    lessons = cachedLessons,
+                    fromNetwork = false,
+                    errorMessage = fetchError ?: "Пустой ответ сервера"
+                )
+            } else {
+                ScheduleSyncResult(
+                    lessons = emptyList(),
+                    fromNetwork = remoteLessons != null && fetchError == null,
+                    errorMessage = fetchError
+                )
+            }
+        }
     }
 
     suspend fun fetchScheduleFromPortal(
@@ -119,46 +217,34 @@ class ScheduleRepository(private val context: Context, private val database: App
         groupName: String = "",
         startDate: String = "",
         endDate: String = ""
-    ): List<LessonEntity> = withContext(Dispatchers.IO) {
-        var lessons = runCatching {
-            fetchRemoteLessons(groupId = groupId, startDate = startDate, endDate = endDate)
-        }.onFailure { e ->
-            AppLogger.e("API_PARSER", "Ошибка загрузки расписания с schedule.mguu.ru: ${e.message}", e)
-        }.getOrDefault(emptyList())
+    ): List<LessonEntity> = syncSchedule(
+        groupId = groupId,
+        startDate = startDate,
+        endDate = endDate
+    ).lessons
 
-        // Сохраняем в базу только если есть успешный парсинг и не пустой список,
-        // иначе оставляем старый кэш.
-        if (lessons.isNotEmpty()) {
-            dao.replaceAll(lessons)
-
-            val nowStr = LocalDateTime.now().format(SYNC_TIME_FORMATTER)
-            prefs.edit().putString("last_sync_time", nowStr).apply()
-
-            AppLogger.d("API_PARSER", "Обновлено расписание в БД (очистка + вставка транзакцией)")
-        } else {
-            val cachedLessons = dao.getAllLessons()
-            if (cachedLessons.isNotEmpty()) {
-                AppLogger.d("API_PARSER", "API вернул пустой список или ошибку, оставляем локальный кэш: ${cachedLessons.size} пар")
-                lessons = cachedLessons
-            }
-        }
-        lessons
-    }
-    
     suspend fun fetchSchedule(
         groupId: String,
         groupName: String,
         daysCount: Int
     ): Result<List<LessonEntity>> = try {
-        val lessons = fetchScheduleFromPortal(groupId = groupId)
-        Result.success(lessons)
+        val sync = syncSchedule(groupId = groupId)
+        if (sync.fromNetwork || sync.lessons.isNotEmpty()) {
+            Result.success(sync.lessons)
+        } else {
+            Result.failure(Exception(sync.errorMessage ?: "Не удалось загрузить расписание"))
+        }
     } catch (e: Exception) {
         Result.failure(e)
     }
 
-    suspend fun clearDatabase() {
-        AppLogger.w("CACHE", "Локальный кэш Room принудительно очищен пользователем")
+    suspend fun clearDatabase() = withContext(Dispatchers.IO) {
+        AppLogger.w("CACHE", "Локальный кэш расписания Room очищен")
         dao.clearSchedule()
+        cachePrefs.edit()
+            .remove(KEY_CACHED_GROUP_ID)
+            .remove(KEY_LAST_UPDATE_TIME)
+            .apply()
     }
 
     suspend fun getLessonsCount(): Int {
@@ -170,9 +256,9 @@ class ScheduleRepository(private val context: Context, private val database: App
     }
 
     fun getTotalLessonsCountFlow() = dao.getTotalLessonsCountFlow()
-    
+
     suspend fun getEarliestDate() = dao.getEarliestDate()
-    
+
     suspend fun getLatestDate() = dao.getLatestDate()
 
     fun getLessonsByDateFlow(date: String) = dao.getLessonsForDate(date)

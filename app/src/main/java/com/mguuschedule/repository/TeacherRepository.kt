@@ -17,8 +17,8 @@ class TeacherRepository(private val context: Context) {
     private val prefs = context.getSharedPreferences("teacher_cache", Context.MODE_PRIVATE)
     private val gson = GsonBuilder().create()
 
-    private fun getCacheKey(teacherName: String): String = "teacher_${normalizeName(teacherName).hashCode()}"
-    private fun getCacheTimeKey(teacherName: String): String = "teacher_time_${normalizeName(teacherName).hashCode()}"
+    private fun getCacheKey(teacherName: String): String = "teacher_${normalizeName(teacherName).lowercase().hashCode()}"
+    private fun getCacheTimeKey(teacherName: String): String = "teacher_time_${normalizeName(teacherName).lowercase().hashCode()}"
 
     suspend fun getCachedTeacherProfile(teacherName: String): CampusTeacher? = withContext(Dispatchers.IO) {
         val json = prefs.getString(getCacheKey(teacherName), null) ?: return@withContext null
@@ -50,7 +50,7 @@ class TeacherRepository(private val context: Context) {
             
             AppLogger.d("TEACHER_PARSER", "Поиск преподавателя: $searchUrl")
             
-            val searchResponse = Jsoup.connect(searchUrl).ignoreContentType(true).execute().body()
+            val searchResponse = Jsoup.connect(searchUrl).ignoreContentType(true).timeout(10_000).execute().body()
             val searchJson = JsonParser.parseString(searchResponse).asJsonObject
             val items = searchJson.getAsJsonArray("items")
             
@@ -89,7 +89,7 @@ class TeacherRepository(private val context: Context) {
 
             // Шаг 2. Загружаем информацию о профиле преподавателя (JSON API)
             val profileApiUrl = "https://campusapp.ru/api/next/teachers/$targetTeacherId"
-            val profileResponse = Jsoup.connect(profileApiUrl).ignoreContentType(true).execute().body()
+            val profileResponse = Jsoup.connect(profileApiUrl).ignoreContentType(true).timeout(10_000).execute().body()
             val profileJson = JsonParser.parseString(profileResponse).asJsonObject
 
             val bestMatchName = profileJson.get("name")?.asString ?: normalizedName
@@ -127,7 +127,7 @@ class TeacherRepository(private val context: Context) {
             val reviewsUrl = "https://campusapp.ru/reviews/teachers/teacher-$targetTeacherId"
             AppLogger.d("TEACHER_PARSER", "URL страницы с отзывами: $reviewsUrl")
 
-            val doc = Jsoup.connect(reviewsUrl).get()
+            val doc = Jsoup.connect(reviewsUrl).timeout(10_000).get()
             val reviewArticles = doc.select("article")
             AppLogger.d("TEACHER_PARSER", "Найдено DOM контейнеров отзывов: ${reviewArticles.size}")
 

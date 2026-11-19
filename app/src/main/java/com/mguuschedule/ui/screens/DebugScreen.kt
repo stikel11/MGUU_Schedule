@@ -475,14 +475,14 @@ fun LogItem(
     var isExpanded by remember { mutableStateOf(false) }
 
     val containerColor = when {
-        entry.level == "ERROR" -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
-        entry.level == "WARN" -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)
+        entry.level == "ERROR" -> MaterialTheme.colorScheme.errorContainer
+        entry.level == "WARN" -> MaterialTheme.colorScheme.tertiaryContainer
         else -> Color.Transparent
     }
 
     val contentColor = when {
-        entry.level == "ERROR" -> MaterialTheme.colorScheme.error
-        entry.level == "WARN" -> MaterialTheme.colorScheme.tertiary
+        entry.level == "ERROR" -> MaterialTheme.colorScheme.onErrorContainer
+        entry.level == "WARN" -> MaterialTheme.colorScheme.onTertiaryContainer
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
 

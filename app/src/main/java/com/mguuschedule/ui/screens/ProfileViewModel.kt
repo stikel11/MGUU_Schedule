@@ -78,7 +78,7 @@ class ProfileViewModel(
         _scrollToTopTrigger.value += 1
     }
     private val prefs = application.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-    private val ratingRepository = RatingRepository(AppDatabase.getDatabase(application).ratingDao())
+    private val ratingRepository = RatingRepository(AppDatabase.getDatabase(application).ratingDao(), application)
 
     var groupsUiState: GroupsUiState by mutableStateOf(GroupsUiState.Loading)
         private set
@@ -191,7 +191,13 @@ class ProfileViewModel(
 
     fun loadGroups() {
         viewModelScope.launch {
-            groupsUiState = GroupsUiState.Loading
+            val cachedGroups = repository.getCachedGroups()
+            if (cachedGroups.isNotEmpty()) {
+                groupsUiState = GroupsUiState.Success(cachedGroups)
+            } else {
+                groupsUiState = GroupsUiState.Loading
+            }
+
             try {
                 val allGroups = repository.fetchAllGroups()
 
@@ -201,18 +207,20 @@ class ProfileViewModel(
                     // Auto-fix for legacy group IDs or missing IDs if we have a name
                     val savedName = prefs.getString("selected_group_name", null)
                     val savedId = prefs.getString("selected_group_id", null)
-                    
+
                     if (!savedName.isNullOrBlank()) {
                         val matchingGroup = allGroups.find { it.name.equals(savedName, ignoreCase = true) }
                         if (matchingGroup != null && matchingGroup.id != savedId) {
                             selectGroup(matchingGroup)
                         }
                     }
-                } else {
+                } else if (cachedGroups.isEmpty()) {
                     groupsUiState = GroupsUiState.Error("Не удалось загрузить список групп")
                 }
             } catch (e: Exception) {
-                groupsUiState = GroupsUiState.Error(e.message ?: "Ошибка загрузки групп")
+                if (cachedGroups.isEmpty()) {
+                    groupsUiState = GroupsUiState.Error(e.message ?: "Ошибка загрузки групп")
+                }
             }
         }
     }
@@ -220,7 +228,13 @@ class ProfileViewModel(
     fun loadZachetkasForSelectedGroup() {
         val group = selectedGroup ?: return
         viewModelScope.launch {
-            zachetkasUiState = ZachetkasUiState.Loading
+            val cachedZachetkas = ratingRepository.getCachedZachetkasForGroup(group.id)
+            if (cachedZachetkas.isNotEmpty()) {
+                zachetkasUiState = ZachetkasUiState.Success(cachedZachetkas)
+            } else {
+                zachetkasUiState = ZachetkasUiState.Loading
+            }
+
             try {
                 val groupUrl = ratingRepository.buildGroupUrl(group.id, group.name)
                 val ratingPage = withContext(Dispatchers.IO) {
@@ -229,11 +243,13 @@ class ProfileViewModel(
                 val zachetkas = ratingPage.students.map { it.zachetka }.filter { it.isNotBlank() }
                 if (zachetkas.isNotEmpty()) {
                     zachetkasUiState = ZachetkasUiState.Success(zachetkas)
-                } else {
+                } else if (cachedZachetkas.isEmpty()) {
                     zachetkasUiState = ZachetkasUiState.Error("Зачетки для выбранной группы не найдены")
                 }
             } catch (e: Exception) {
-                zachetkasUiState = ZachetkasUiState.Error("Не удалось загрузить зачетки группы")
+                if (cachedZachetkas.isEmpty()) {
+                    zachetkasUiState = ZachetkasUiState.Error("Не удалось загрузить зачетки группы")
+                }
             }
         }
     }

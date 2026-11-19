@@ -50,6 +50,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -124,118 +126,31 @@ fun MoodleScreen(
         }
     }
 
-    // 1. Поток SSO-авторизации через Портал МГУУ (ks-auth.mguu.ru -> moodlemobile://token=...)
-    if (ssoLaunchUrl != null) {
-        PredictiveBackContainer(onBack = { viewModel.cancelSsoLogin() }) {
-            MoodleWebPortalScreen(
-                title = "Вход через Портал МГУУ",
-                initialUrl = ssoLaunchUrl,
-                isSsoMode = true,
-                snackbarHostState = snackbarHostState,
-                onBack = { viewModel.cancelSsoLogin() },
-                onSsoCallback = { viewModel.onSsoCallbackUrl(it) },
-                onNotify = { viewModel.showStatus(it) }
-            )
-        }
-        return
-    }
-
-    // 2. Полноэкранный веб-портал (без входа через API)
-    if (standaloneWebUrl != null) {
-        PredictiveBackContainer(onBack = { viewModel.closeStandaloneWebPortal() }) {
-            MoodleWebPortalScreen(
-                title = "СДО МГУУ (Портал)",
-                initialUrl = standaloneWebUrl,
-                isSsoMode = false,
-                snackbarHostState = snackbarHostState,
-                onBack = { viewModel.closeStandaloneWebPortal() },
-                onSsoCallback = { viewModel.onSsoCallbackUrl(it) },
-                onNotify = { viewModel.showStatus(it) }
-            )
-        }
-        return
-    }
-
-    // 3. Детальный экран выбранного курса
-    if (session != null && selectedCourse != null) {
-        PredictiveBackContainer(onBack = { viewModel.closeCourse() }) {
-            MoodleCourseDetailScreen(
-                course = selectedCourse,
-                sections = viewModel.courseSections,
-                grades = viewModel.courseGrades,
-                isLoading = viewModel.isCourseDetailLoading,
-                errorMessage = viewModel.courseDetailError,
-                snackbarHostState = snackbarHostState,
-                onBack = { viewModel.closeCourse() },
-                onRetry = { viewModel.openCourse(selectedCourse) },
-                onOpenUrl = { url -> viewModel.openInPortal(url) },
-                onDownloadFile = { file ->
-                    val started = enqueueMoodleDownload(context, file.fileUrl, file.fileName, file.mimeType)
-                    if (started) {
-                        haptic.click()
-                        viewModel.showStatus("Загрузка «${file.fileName}» начата")
-                    }
-                },
-                onAttachToLesson = { title, url, fileName, mimeType, sizeBytes ->
-                    pendingAttachment = PendingLessonAttachment(
-                        title = title,
-                        url = url,
-                        fileName = fileName,
-                        mimeType = mimeType,
-                        sizeBytes = sizeBytes,
-                        courseHint = selectedCourse.fullName
-                    )
-                }
-            )
-        }
-
-        pendingAttachment?.let { attachment ->
-            AttachMoodleToLessonSheet(
-                attachment = attachment,
-                allLessons = allLessons,
-                onDismiss = { pendingAttachment = null },
-                onSelectLesson = { lesson ->
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Базовый слой (авторизация или главный экран СДО) всегда остаётся под оверлеем,
+        // чтобы при предиктивном жесте «Назад» пользователь видел реальный превью-экран.
+        if (session == null) {
+            MoodleAuthScreen(
+                isLoggingIn = viewModel.isLoggingIn,
+                errorMessage = viewModel.errorMessage,
+                onBack = onBack,
+                onLogin = { user, pass ->
                     haptic.click()
-                    viewModel.attachResourceToLesson(
-                        lesson = lesson,
-                        title = attachment.title,
-                        url = attachment.url,
-                        fileName = attachment.fileName,
-                        mimeType = attachment.mimeType,
-                        sizeBytes = attachment.sizeBytes
-                    )
-                    pendingAttachment = null
-                }
+                    viewModel.loginWithCredentials(user, pass)
+                },
+                onSsoLogin = {
+                    haptic.click()
+                    viewModel.startSsoLogin()
+                },
+                onOpenWebPortal = {
+                    haptic.click()
+                    viewModel.openStandaloneWebPortal(MoodleRepository.MOODLE_MY_URL)
+                },
+                onClearError = { viewModel.clearError() }
             )
-        }
-        return
-    }
-
-    // 4. Экран авторизации (если сессия не сохранена)
-    if (session == null) {
-        MoodleAuthScreen(
-            isLoggingIn = viewModel.isLoggingIn,
-            errorMessage = viewModel.errorMessage,
-            onBack = onBack,
-            onLogin = { user, pass ->
-                haptic.click()
-                viewModel.loginWithCredentials(user, pass)
-            },
-            onSsoLogin = {
-                haptic.click()
-                viewModel.startSsoLogin()
-            },
-            onOpenWebPortal = {
-                haptic.click()
-                viewModel.openStandaloneWebPortal(MoodleRepository.MOODLE_MY_URL)
-            },
-            onClearError = { viewModel.clearError() }
-        )
-        return
-    }
-
-    // 5. Основной экран авторизованного клиента СДО (Курсы / Задания / Портал)
-    Scaffold(
+        } else {
+            // Основной экран авторизованного клиента СДО (Курсы / Задания / Портал)
+            Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets.statusBars,
         snackbarHost = { SnackbarHost(snackbarHostState) }
@@ -427,6 +342,107 @@ fun MoodleScreen(
                 }
             }
         )
+    }
+        }
+
+        // Оверлей 1: Детальный экран выбранного курса поверх списка курсов (с превью при Predictive Back)
+        if (session != null && selectedCourse != null) {
+            PredictiveBackContainer(
+                onBack = { viewModel.closeCourse() },
+                backdropColor = Color.Black.copy(alpha = 0.22f)
+            ) {
+                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                    MoodleCourseDetailScreen(
+                        course = selectedCourse,
+                        sections = viewModel.courseSections,
+                        grades = viewModel.courseGrades,
+                        isLoading = viewModel.isCourseDetailLoading,
+                        errorMessage = viewModel.courseDetailError,
+                        snackbarHostState = snackbarHostState,
+                        onBack = { viewModel.closeCourse() },
+                        onRetry = { viewModel.openCourse(selectedCourse, forceRefresh = true) },
+                        onOpenUrl = { url -> viewModel.openInPortal(url) },
+                        onDownloadFile = { file ->
+                            val started = enqueueMoodleDownload(context, file.fileUrl, file.fileName, file.mimeType)
+                            if (started) {
+                                haptic.click()
+                                viewModel.showStatus("Загрузка «${file.fileName}» начата")
+                            }
+                        },
+                        onAttachToLesson = { title, url, fileName, mimeType, sizeBytes ->
+                            pendingAttachment = PendingLessonAttachment(
+                                title = title,
+                                url = url,
+                                fileName = fileName,
+                                mimeType = mimeType,
+                                sizeBytes = sizeBytes,
+                                courseHint = selectedCourse.fullName
+                            )
+                        }
+                    )
+                }
+            }
+
+            pendingAttachment?.let { attachment ->
+                AttachMoodleToLessonSheet(
+                    attachment = attachment,
+                    allLessons = allLessons,
+                    onDismiss = { pendingAttachment = null },
+                    onSelectLesson = { lesson ->
+                        haptic.click()
+                        viewModel.attachResourceToLesson(
+                            lesson = lesson,
+                            title = attachment.title,
+                            url = attachment.url,
+                            fileName = attachment.fileName,
+                            mimeType = attachment.mimeType,
+                            sizeBytes = attachment.sizeBytes
+                        )
+                        pendingAttachment = null
+                    }
+                )
+            }
+        }
+
+        // Оверлей 2: Полноэкранный веб-портал (без входа через API)
+        if (standaloneWebUrl != null) {
+            PredictiveBackContainer(
+                onBack = { viewModel.closeStandaloneWebPortal() },
+                backdropColor = Color.Black.copy(alpha = 0.22f)
+            ) {
+                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                    MoodleWebPortalScreen(
+                        title = "СДО МГУУ (Портал)",
+                        initialUrl = standaloneWebUrl,
+                        isSsoMode = false,
+                        snackbarHostState = snackbarHostState,
+                        onBack = { viewModel.closeStandaloneWebPortal() },
+                        onSsoCallback = { viewModel.onSsoCallbackUrl(it) },
+                        onNotify = { viewModel.showStatus(it) }
+                    )
+                }
+            }
+        }
+
+        // Оверлей 3: Поток SSO-авторизации через Портал МГУУ (ks-auth.mguu.ru -> moodlemobile://token=...)
+        if (ssoLaunchUrl != null) {
+            PredictiveBackContainer(
+                onBack = { viewModel.cancelSsoLogin() },
+                backdropColor = Color.Black.copy(alpha = 0.22f)
+            ) {
+                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                    MoodleWebPortalScreen(
+                        title = "Вход через Портал МГУУ",
+                        initialUrl = ssoLaunchUrl,
+                        isSsoMode = true,
+                        snackbarHostState = snackbarHostState,
+                        onBack = { viewModel.cancelSsoLogin() },
+                        onSsoCallback = { viewModel.onSsoCallbackUrl(it) },
+                        onNotify = { viewModel.showStatus(it) }
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -1783,10 +1799,15 @@ private fun EmbeddedMoodleWebView(
             )
         }
 
-        AndroidView(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
+                .clipToBounds()
+        ) {
+        AndroidView(
+            modifier = Modifier
+                .fillMaxSize()
                 .graphicsLayer {
                     val p = AppMotionScheme.StandardEasing.transform(webBackProgress.value.coerceIn(0f, 1f))
                     val dir = if (webSwipeEdge == BackEventCompat.EDGE_LEFT) 1f else -1f
@@ -1794,8 +1815,8 @@ private fun EmbeddedMoodleWebView(
                     val s = 1f - (p * 0.04f)
                     scaleX = s
                     scaleY = s
-                    clip = p > 0.005f
-                    shape = if (clip) RoundedCornerShape((20f * p).dp) else RectangleShape
+                    clip = p > 0.002f
+                    shape = if (clip) RoundedCornerShape((24f * p).dp) else RectangleShape
                 },
             factory = { ctx ->
                 WebView(ctx).apply {
@@ -1907,6 +1928,7 @@ private fun EmbeddedMoodleWebView(
                 }
             }
         )
+        }
     }
 }
 

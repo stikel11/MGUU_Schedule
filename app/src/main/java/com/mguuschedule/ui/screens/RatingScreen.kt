@@ -300,7 +300,7 @@ fun RatingScreen(
                                 item(key = "rating_empty", contentType = "empty") {
                                     Surface(
                                         shape = RoundedCornerShape(24.dp),
-                                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                        color = MaterialTheme.colorScheme.surfaceContainer,
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
                                         Column(
@@ -550,7 +550,7 @@ fun SubjectScoreCard(
 
     Surface(
         shape = shape,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier.fillMaxWidth(),
         onClick = onClick
     ) {
@@ -685,7 +685,7 @@ fun ScoreLabelValue(label: String, value: String, isPrimary: Boolean = false) {
 fun ControlPointRow(point: ControlPoint) {
     Surface(
         shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh
+        color = MaterialTheme.colorScheme.surfaceContainerHighest
     ) {
         Row(
             modifier = Modifier

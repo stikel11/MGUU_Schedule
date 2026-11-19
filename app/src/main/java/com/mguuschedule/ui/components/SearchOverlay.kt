@@ -121,7 +121,7 @@ fun SearchOverlay(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
                     .graphicsLayer {
-                        val p = AppMotionScheme.StandardEasing.transform(clearBackProgress.value)
+                        val p = AppMotionScheme.StandardDecelerateEasing.transform(clearBackProgress.value.coerceIn(0f, 1f))
                         val dir = if (clearSwipeEdge == BackEventCompat.EDGE_LEFT) 1f else -1f
                         translationX = dir * 16.dp.toPx() * p
                         val s = 1f - (p * 0.03f)
@@ -221,7 +221,7 @@ fun SearchOverlay(
                                 .fillMaxWidth()
                                 .padding(top = 16.dp),
                             shape = RoundedCornerShape(24.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainerLow
+                            color = MaterialTheme.colorScheme.surfaceContainer
                         ) {
                             Column(
                                 modifier = Modifier.padding(24.dp),
@@ -618,13 +618,13 @@ fun SearchItemCard(lesson: Lesson, onClick: () -> Unit) {
 fun SearchChip(text: String, isPrimary: Boolean = false) {
     Surface(
         shape = RoundedCornerShape(8.dp),
-        color = if (isPrimary) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else MaterialTheme.colorScheme.surfaceContainerHighest
+        color = if (isPrimary) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest
     ) {
         Text(
             text = text,
             style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            color = if (isPrimary) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            color = if (isPrimary) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
             fontWeight = if (isPrimary) FontWeight.Bold else FontWeight.Medium
         )
     }

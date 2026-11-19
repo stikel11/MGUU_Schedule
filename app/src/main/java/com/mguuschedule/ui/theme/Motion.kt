@@ -16,16 +16,22 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.ui.graphics.TransformOrigin
 
 /**
- * Единая система движения в стиле Material 3 Expressive (Pixel / Android 16+).
+ * Единая система движения в стиле Material 3 Expressive и нативных приложений Google (Android 15/16).
  *
- * Базируется на официальных пружинных токенах Google ExpressiveMotionTokens:
- * - Spatial-пружины (с лёгким живым откликом) — для геометрии, размеров, смещений, масштаба.
- * - Effects-пружины (критически демпфированные, damping = 1.0f) — для цвета и прозрачности без перелёта.
- * - Pop-переходы NavHost настроены под 1:1 скраббинг SeekableTransitionState (Predictive Back).
+ * - Spatial-пружины — для локальной геометрии (чипы, кнопки, карточки, индикаторы).
+ * - Effects-пружины (damping = 1.0f) — для цвета и прозрачности без перелёта.
+ * - Полноэкранная навигация и Predictive Back соответствуют официальным спецификациям Android SystemUI:
+ *   - PredictiveBackEasing = CubicBezierEasing(0.1f, 0.1f, 0f, 1f) (официальный SystemUI-интерполятор)
+ *   - StandardDecelerateEasing = CubicBezierEasing(0f, 0f, 0f, 1f) (интерполятор прогресса жеста)
+ *   - Вперёд и назад экраны остаются 100% непрозрачными (без cross-fade ghosting) и полностью
+ *     уходят за край экрана при завершении перехода (без «телепортации» в последнем кадре).
+ *   - Скругление углов и тень верхнего экрана выполняются на GPU в фазе draw (DetailDestinationContainer).
  */
 object AppMotionScheme {
 
     val StandardEasing = CubicBezierEasing(0.2f, 0f, 0f, 1f)
+    val StandardDecelerateEasing = CubicBezierEasing(0f, 0f, 0f, 1f)
+    val PredictiveBackEasing = CubicBezierEasing(0.1f, 0.1f, 0f, 1f)
     val EmphasizedDecelerateEasing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1f)
     val EmphasizedAccelerateEasing = CubicBezierEasing(0.3f, 0f, 0.8f, 0.15f)
 
@@ -66,17 +72,22 @@ object AppMotionScheme {
         stiffness = 800f
     )
 
-    // 1. Переключение верхнеуровневых вкладок BottomBar (MD3E Fade Through)
+    // 1. Переключение верхнеуровневых вкладок BottomBar (официальный MD3 Fade Through:
+    // старая вкладка полностью исчезает за 90 мс, новая появляется после 90 мс — без пересечения и ghosting)
     fun tabEnterTransition(): EnterTransition =
         fadeIn(
             animationSpec = tween(
                 durationMillis = 210,
-                delayMillis = 55,
+                delayMillis = 90,
                 easing = EmphasizedDecelerateEasing
             )
         ) + scaleIn(
             initialScale = 0.96f,
-            animationSpec = defaultSpatialSpec()
+            animationSpec = tween(
+                durationMillis = 210,
+                delayMillis = 90,
+                easing = EmphasizedDecelerateEasing
+            )
         )
 
     fun tabExitTransition(): ExitTransition =
@@ -87,56 +98,44 @@ object AppMotionScheme {
             )
         )
 
-    // 2. Переход вперёд на детальный экран (Shared Axis X + глубина MD3E)
+    // 2. Переход вперёд на детальный экран (как в Android 15/16 Settings / Pixel:
+    // непрозрачный слайд без перелёта на правом крае и мягкий параллакс нижнего экрана)
     fun detailEnterTransition(): EnterTransition =
         slideInHorizontally(
-            animationSpec = defaultSpatialSpec(),
-            initialOffsetX = { fullWidth -> (fullWidth * 0.18f).toInt() }
-        ) + fadeIn(
-            animationSpec = tween(durationMillis = 200, easing = EmphasizedDecelerateEasing)
-        ) + scaleIn(
-            initialScale = 0.96f,
-            animationSpec = defaultSpatialSpec()
+            animationSpec = tween(durationMillis = 320, easing = EmphasizedDecelerateEasing),
+            initialOffsetX = { fullWidth -> fullWidth }
         )
 
     fun detailBackgroundExitTransition(): ExitTransition =
         slideOutHorizontally(
-            animationSpec = defaultSpatialSpec(),
-            targetOffsetX = { fullWidth -> -(fullWidth * 0.08f).toInt() }
+            animationSpec = tween(durationMillis = 320, easing = EmphasizedDecelerateEasing),
+            targetOffsetX = { fullWidth -> -(fullWidth * 0.22f).toInt() }
         ) + scaleOut(
-            targetScale = 0.95f,
-            animationSpec = defaultSpatialSpec()
-        ) + fadeOut(
-            targetAlpha = 0.76f,
-            animationSpec = tween(durationMillis = 260, easing = StandardEasing)
+            targetScale = 0.96f,
+            transformOrigin = TransformOrigin.Center,
+            animationSpec = tween(durationMillis = 320, easing = EmphasizedDecelerateEasing)
         )
 
-    // 3. Нативный Predictive Back / Pop (скраббится 1:1 через NavHost SeekableTransitionState)
+    // 3. Нативный Predictive Back / Pop (скраббится 1:1 через NavHost SeekableTransitionState).
+    // Оба слоя остаются 100% непрозрачными (без alpha-ghosting), при коммите верхний экран
+    // полностью уходит за границу экрана, а нижний плавно возвращается из параллакса.
     fun detailBackgroundPopEnterTransition(): EnterTransition =
         slideInHorizontally(
-            animationSpec = tween(durationMillis = 300, easing = StandardEasing),
-            initialOffsetX = { fullWidth -> -(fullWidth * 0.08f).toInt() }
+            animationSpec = tween(durationMillis = 300, easing = PredictiveBackEasing),
+            initialOffsetX = { fullWidth -> -(fullWidth * 0.22f).toInt() }
         ) + scaleIn(
-            initialScale = 0.94f,
-            animationSpec = tween(durationMillis = 300, easing = StandardEasing)
-        ) + fadeIn(
-            initialAlpha = 0.76f,
-            animationSpec = tween(durationMillis = 220, easing = StandardEasing)
+            initialScale = 0.96f,
+            transformOrigin = TransformOrigin.Center,
+            animationSpec = tween(durationMillis = 300, easing = PredictiveBackEasing)
         )
 
     fun detailPopExitTransition(): ExitTransition =
         slideOutHorizontally(
-            animationSpec = tween(durationMillis = 300, easing = StandardEasing),
-            targetOffsetX = { fullWidth -> (fullWidth * 0.16f).toInt() }
+            animationSpec = tween(durationMillis = 300, easing = PredictiveBackEasing),
+            targetOffsetX = { fullWidth -> fullWidth }
         ) + scaleOut(
-            targetScale = 0.88f,
-            transformOrigin = TransformOrigin(0.5f, 0.5f),
-            animationSpec = tween(durationMillis = 300, easing = StandardEasing)
-        ) + fadeOut(
-            animationSpec = tween(
-                durationMillis = 180,
-                delayMillis = 100,
-                easing = EmphasizedAccelerateEasing
-            )
+            targetScale = 0.90f,
+            transformOrigin = TransformOrigin.Center,
+            animationSpec = tween(durationMillis = 300, easing = PredictiveBackEasing)
         )
 }
