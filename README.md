@@ -4,9 +4,7 @@ An unofficial Android application for viewing and managing the class schedule of
 
 ## Status
 
-Development is currently on hold.
-
-Latest version: 0.73 beta
+Latest version: 0.80 beta
 
 This version may not work correctly and contains bugs.
 If you have used the app previously, cached data will display correctly, but new data will not be saved.
