@@ -468,6 +468,16 @@ fun MainAppScaffold(
                 if (isTabSwitch) AppMotionScheme.tabExitTransition()
                 else AppMotionScheme.detailPopExitTransition()
             },
+            predictivePopEnterTransition = { swipeEdge ->
+                val isTabSwitch = initialState.destination.route in BottomTabRoutes && targetState.destination.route in BottomTabRoutes
+                if (isTabSwitch) AppMotionScheme.tabEnterTransition()
+                else AppMotionScheme.detailPredictivePopEnterTransition(swipeEdge)
+            },
+            predictivePopExitTransition = { swipeEdge ->
+                val isTabSwitch = initialState.destination.route in BottomTabRoutes && targetState.destination.route in BottomTabRoutes
+                if (isTabSwitch) AppMotionScheme.tabExitTransition()
+                else AppMotionScheme.detailPredictivePopExitTransition(swipeEdge)
+            },
             sizeTransform = { null }
         ) {
             composable(Screen.Schedule.route) {
@@ -808,8 +818,10 @@ private fun AnimatedVisibilityScope.MainTabDestinationContainer(
     isCoveredByDetail: Boolean,
     content: @Composable () -> Unit
 ) {
+    val isDarkTheme = com.mguuschedule.ui.theme.LocalIsDarkTheme.current
+    val maxScrimAlpha = if (isDarkTheme) 0.36f else 0.16f
     val scrimAlpha = transition.animateFloat(
-        transitionSpec = { tween(durationMillis = 300, easing = AppMotionScheme.PredictiveBackEasing) },
+        transitionSpec = { tween(durationMillis = 320, easing = AppMotionScheme.PredictiveBackEasing) },
         label = "tabScrimAlpha"
     ) { state ->
         if (!isCoveredByDetail) {
@@ -817,8 +829,8 @@ private fun AnimatedVisibilityScope.MainTabDestinationContainer(
         } else {
             when (state) {
                 EnterExitState.Visible -> 0f
-                EnterExitState.PreEnter -> 0.14f
-                EnterExitState.PostExit -> 0.14f
+                EnterExitState.PreEnter -> maxScrimAlpha
+                EnterExitState.PostExit -> maxScrimAlpha
             }
         }
     }

@@ -1,8 +1,10 @@
 package com.mguuschedule.ui.theme
 
+import androidx.activity.BackEventCompat
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.spring
@@ -16,16 +18,16 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.ui.graphics.TransformOrigin
 
 /**
- * Единая система движения в стиле Material 3 Expressive и нативных приложений Google (Android 15/16).
+ * Единая система движения в стиле Material 3 Expressive и нативных приложений Google (Pixel / Android 15–16).
  *
  * - Spatial-пружины — для локальной геометрии (чипы, кнопки, карточки, индикаторы).
  * - Effects-пружины (damping = 1.0f) — для цвета и прозрачности без перелёта.
- * - Полноэкранная навигация и Predictive Back соответствуют официальным спецификациям Android SystemUI:
- *   - PredictiveBackEasing = CubicBezierEasing(0.1f, 0.1f, 0f, 1f) (официальный SystemUI-интерполятор)
- *   - StandardDecelerateEasing = CubicBezierEasing(0f, 0f, 0f, 1f) (интерполятор прогресса жеста)
- *   - Вперёд и назад экраны остаются 100% непрозрачными (без cross-fade ghosting) и полностью
- *     уходят за край экрана при завершении перехода (без «телепортации» в последнем кадре).
- *   - Скругление углов и тень верхнего экрана выполняются на GPU в фазе draw (DetailDestinationContainer).
+ * - Полноэкранная навигация и Predictive Back (`predictivePopEnterTransition` / `predictivePopExitTransition`
+ *   в Navigation Compose 2.10+ с учётом стороны свайпа `swipeEdge`):
+ *   - 100% непрозрачные поверхности (без cross-fade ghosting);
+ *   - верхний экран с физическим скруглением углов устройства и лёгким масштабированием (`0.92f`)
+ *     полностью уходит за границу экрана в направлении жеста (не «схлопывается в центр»);
+ *   - нижний экран плавно выезжает из параллакса (`-24%`, `scale 0.94f -> 1.0f`), как в Pixel Settings.
  */
 object AppMotionScheme {
 
@@ -98,44 +100,70 @@ object AppMotionScheme {
             )
         )
 
-    // 2. Переход вперёд на детальный экран (как в Android 15/16 Settings / Pixel:
-    // непрозрачный слайд без перелёта на правом крае и мягкий параллакс нижнего экрана)
+    // 2. Переход вперёд на детальный экран (Pixel Settings / Android 15–16):
+    // новый экран плавно въезжает справа, старый уходит в параллакс -24% + scale 0.94f.
     fun detailEnterTransition(): EnterTransition =
         slideInHorizontally(
-            animationSpec = tween(durationMillis = 320, easing = EmphasizedDecelerateEasing),
+            animationSpec = tween(durationMillis = 340, easing = EmphasizedDecelerateEasing),
             initialOffsetX = { fullWidth -> fullWidth }
         )
 
     fun detailBackgroundExitTransition(): ExitTransition =
         slideOutHorizontally(
-            animationSpec = tween(durationMillis = 320, easing = EmphasizedDecelerateEasing),
-            targetOffsetX = { fullWidth -> -(fullWidth * 0.22f).toInt() }
+            animationSpec = tween(durationMillis = 340, easing = EmphasizedDecelerateEasing),
+            targetOffsetX = { fullWidth -> -(fullWidth * 0.24f).toInt() }
         ) + scaleOut(
-            targetScale = 0.96f,
+            targetScale = 0.94f,
+            transformOrigin = TransformOrigin.Center,
+            animationSpec = tween(durationMillis = 340, easing = EmphasizedDecelerateEasing)
+        )
+
+    // 3. Возврат по кнопке «Назад» (TopBar / 3-кнопочная навигация)
+    fun detailBackgroundPopEnterTransition(): EnterTransition =
+        slideInHorizontally(
+            animationSpec = tween(durationMillis = 320, easing = EmphasizedDecelerateEasing),
+            initialOffsetX = { fullWidth -> -(fullWidth * 0.24f).toInt() }
+        ) + scaleIn(
+            initialScale = 0.94f,
             transformOrigin = TransformOrigin.Center,
             animationSpec = tween(durationMillis = 320, easing = EmphasizedDecelerateEasing)
         )
 
-    // 3. Нативный Predictive Back / Pop (скраббится 1:1 через NavHost SeekableTransitionState).
-    // Оба слоя остаются 100% непрозрачными (без alpha-ghosting), при коммите верхний экран
-    // полностью уходит за границу экрана, а нижний плавно возвращается из параллакса.
-    fun detailBackgroundPopEnterTransition(): EnterTransition =
-        slideInHorizontally(
-            animationSpec = tween(durationMillis = 300, easing = PredictiveBackEasing),
-            initialOffsetX = { fullWidth -> -(fullWidth * 0.22f).toInt() }
-        ) + scaleIn(
-            initialScale = 0.96f,
-            transformOrigin = TransformOrigin.Center,
-            animationSpec = tween(durationMillis = 300, easing = PredictiveBackEasing)
-        )
-
     fun detailPopExitTransition(): ExitTransition =
         slideOutHorizontally(
-            animationSpec = tween(durationMillis = 300, easing = PredictiveBackEasing),
+            animationSpec = tween(durationMillis = 320, easing = EmphasizedDecelerateEasing),
             targetOffsetX = { fullWidth -> fullWidth }
         ) + scaleOut(
-            targetScale = 0.90f,
+            targetScale = 0.92f,
             transformOrigin = TransformOrigin.Center,
-            animationSpec = tween(durationMillis = 300, easing = PredictiveBackEasing)
+            animationSpec = tween(durationMillis = 320, easing = EmphasizedDecelerateEasing)
         )
+
+    // 4. Нативный Predictive Back жест в NavHost 2.10+ с учётом края свайпа (EDGE_LEFT / EDGE_RIGHT).
+    // Работает одинаково чисто и при медленном удержании жеста, и при быстром смахивании (fling):
+    // закрываемый экран с реальным скруглением углов и тенью плавно уходит за край экрана
+    // по направлению жеста, а предыдущий выезжает из параллакса (-24% / +24%) без ghosting.
+    fun detailPredictivePopEnterTransition(swipeEdge: Int): EnterTransition {
+        val direction = if (swipeEdge == BackEventCompat.EDGE_RIGHT) -1 else 1
+        return slideInHorizontally(
+            animationSpec = tween(durationMillis = 340, easing = FastOutSlowInEasing),
+            initialOffsetX = { fullWidth -> -(direction * (fullWidth * 0.24f)).toInt() }
+        ) + scaleIn(
+            initialScale = 0.94f,
+            transformOrigin = TransformOrigin.Center,
+            animationSpec = tween(durationMillis = 340, easing = FastOutSlowInEasing)
+        )
+    }
+
+    fun detailPredictivePopExitTransition(swipeEdge: Int): ExitTransition {
+        val direction = if (swipeEdge == BackEventCompat.EDGE_RIGHT) -1 else 1
+        return slideOutHorizontally(
+            animationSpec = tween(durationMillis = 340, easing = FastOutSlowInEasing),
+            targetOffsetX = { fullWidth -> direction * fullWidth }
+        ) + scaleOut(
+            targetScale = 0.92f,
+            transformOrigin = TransformOrigin.Center,
+            animationSpec = tween(durationMillis = 340, easing = FastOutSlowInEasing)
+        )
+    }
 }

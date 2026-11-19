@@ -98,6 +98,14 @@ fun PredictiveBackContainer(
     var startTouchY by remember { mutableFloatStateOf(0f) }
     var normalizedDeltaY by remember { mutableFloatStateOf(0f) }
 
+    androidx.compose.runtime.LaunchedEffect(enabled) {
+        if (enabled) {
+            progressAnim.snapTo(0f)
+            commitExitAnim.snapTo(0f)
+            normalizedDeltaY = 0f
+        }
+    }
+
     PredictiveBackHandler(enabled = enabled) { progressFlow ->
         try {
             var isFirst = true
@@ -112,10 +120,10 @@ fun PredictiveBackContainer(
                 normalizedDeltaY = rawDelta
                 progressAnim.snapTo(event.progress.coerceIn(0f, 1f))
             }
-            // Коммит жеста: плавный уход поверхности в сторону свайпа без «застывания» по центру
+            // Коммит жеста: плавный уход непрозрачной поверхности за край экрана в сторону свайпа
             commitExitAnim.animateTo(
                 targetValue = 1f,
-                animationSpec = tween(durationMillis = 180, easing = AppMotionScheme.EmphasizedAccelerateEasing)
+                animationSpec = tween(durationMillis = 220, easing = AppMotionScheme.EmphasizedDecelerateEasing)
             )
             onBack()
         } catch (_: CancellationException) {
@@ -153,7 +161,7 @@ fun PredictiveBackContainer(
                     val p = AppMotionScheme.StandardDecelerateEasing.transform(rawP)
                     val exit = commitExitAnim.value.coerceIn(0f, 1f)
 
-                    val scale = (1f - (p * maxScaleReduction)) * (1f - (exit * 0.04f))
+                    val scale = (1f - (p * maxScaleReduction)) * (1f - (exit * 0.02f))
                     val direction = if (swipeEdge == BackEventCompat.EDGE_LEFT) 1f else -1f
                     val previewShiftX = direction * computedMaxShiftX.toPx() * p
                     val commitSlideX = direction * size.width * exit
@@ -162,7 +170,6 @@ fun PredictiveBackContainer(
                     scaleY = scale
                     translationX = previewShiftX + commitSlideX
                     translationY = normalizedDeltaY * computedMaxShiftY.toPx() * p
-                    alpha = 1f - (exit * 0.35f)
 
                     val cornerFraction = (p + exit).coerceIn(0f, 1f)
                     val radiusPx = (effectiveCornerRadius.toPx() * cornerFraction)

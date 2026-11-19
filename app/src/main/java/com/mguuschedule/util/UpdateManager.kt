@@ -126,8 +126,8 @@ object UpdateManager {
     }
 
     fun isNewerVersion(current: String, fetched: String): Boolean {
-        val currentParts = current.split(".").mapNotNull { it.toIntOrNull() }
-        val fetchedParts = fetched.split(".").mapNotNull { it.toIntOrNull() }
+        val currentParts = current.replace(Regex("[^0-9.]"), "").split(".").mapNotNull { it.toIntOrNull() }
+        val fetchedParts = fetched.replace(Regex("[^0-9.]"), "").split(".").mapNotNull { it.toIntOrNull() }
 
         val length = maxOf(currentParts.size, fetchedParts.size)
         for (i in 0 until length) {

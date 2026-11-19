@@ -386,7 +386,7 @@ fun ProfileScreen(
                         // 2: Версия
                         SettingsClickItem(
                             title = "МГУУ Расписание",
-                            subtitle = "Версия ${com.mguuschedule.BuildConfig.VERSION_NAME} beta",
+                            subtitle = "Версия ${com.mguuschedule.BuildConfig.VERSION_NAME}",
                             icon = Icons.Rounded.Info,
                             shape = getItemShape(2, 5),
                             onClick = {
