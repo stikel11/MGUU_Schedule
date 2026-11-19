@@ -4,7 +4,8 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
-import androidx.activity.compose.BackHandler
+import androidx.activity.BackEventCompat
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -26,12 +27,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.mguuschedule.ui.theme.AppMotionScheme
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -43,9 +47,22 @@ fun FeatureTourScreen(
     val pagerState = rememberPagerState(pageCount = { totalPages })
     val scope = rememberCoroutineScope()
 
-    BackHandler(enabled = pagerState.currentPage > 0) {
-        scope.launch {
-            pagerState.animateScrollToPage(pagerState.currentPage - 1)
+    val pagerBackProgress = remember { Animatable(0f) }
+    var pagerSwipeEdge by remember { mutableIntStateOf(BackEventCompat.EDGE_LEFT) }
+
+    PredictiveBackHandler(enabled = pagerState.currentPage > 0) { progressFlow ->
+        try {
+            progressFlow.collect { event ->
+                pagerSwipeEdge = event.swipeEdge
+                pagerBackProgress.snapTo(event.progress.coerceIn(0f, 1f))
+            }
+            val targetPage = (pagerState.currentPage - 1).coerceAtLeast(0)
+            pagerBackProgress.animateTo(0f, AppMotionScheme.fastSpatialSpec())
+            pagerState.animateScrollToPage(targetPage)
+        } catch (_: CancellationException) {
+            scope.launch {
+                pagerBackProgress.animateTo(0f, AppMotionScheme.defaultSpatialSpec())
+            }
         }
     }
 
@@ -76,12 +93,13 @@ fun FeatureTourScreen(
                         val isSelected = pagerState.currentPage == index
                         val width by animateDpAsState(
                             targetValue = if (isSelected) 32.dp else 10.dp,
-                            animationSpec = spring(dampingRatio = 0.78f, stiffness = 340f),
+                            animationSpec = AppMotionScheme.defaultSpatialSpec(),
                             label = "dot_width"
                         )
                         val color by animateColorAsState(
                             targetValue = if (isSelected) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.surfaceContainerHighest,
+                            animationSpec = AppMotionScheme.fastEffectsSpec(),
                             label = "dot_color"
                         )
                         Box(
@@ -96,8 +114,8 @@ fun FeatureTourScreen(
 
                 AnimatedVisibility(
                     visible = pagerState.currentPage < totalPages - 1,
-                    enter = fadeIn(),
-                    exit = fadeOut()
+                    enter = fadeIn(AppMotionScheme.fastEffectsSpec()),
+                    exit = fadeOut(AppMotionScheme.fastEffectsSpec())
                 ) {
                     TextButton(onClick = onFinish) {
                         Text(
@@ -113,6 +131,14 @@ fun FeatureTourScreen(
                 state = pagerState,
                 modifier = Modifier
                     .weight(1f)
+                    .graphicsLayer {
+                        val p = AppMotionScheme.StandardEasing.transform(pagerBackProgress.value)
+                        val dir = if (pagerSwipeEdge == BackEventCompat.EDGE_LEFT) 1f else -1f
+                        translationX = dir * 24.dp.toPx() * p
+                        val s = 1f - (p * 0.04f)
+                        scaleX = s
+                        scaleY = s
+                    }
                     .fillMaxWidth()
             ) { page ->
                 Column(

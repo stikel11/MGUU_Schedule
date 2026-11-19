@@ -34,17 +34,22 @@ import com.mguuschedule.model.Group
 import com.mguuschedule.ui.components.CollapsibleScreenTitle
 import com.mguuschedule.ui.components.StatusBarBlurOverlay
 import com.mguuschedule.util.rememberHapticFeedback
-import dev.chrisbanes.haze.hazeSource
-import dev.chrisbanes.haze.rememberHazeState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
+private val SingleItemShape = RoundedCornerShape(24.dp)
+private val TopItemShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp, bottomStart = 6.dp, bottomEnd = 6.dp)
+private val BottomItemShape = RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp, bottomStart = 24.dp, bottomEnd = 24.dp)
+private val MiddleItemShape = RoundedCornerShape(6.dp)
+
 private fun getItemShape(index: Int, total: Int): Shape {
-    if (total <= 1) return RoundedCornerShape(24.dp)
+    if (total <= 1) return SingleItemShape
     return when (index) {
-        0 -> RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp, bottomStart = 6.dp, bottomEnd = 6.dp)
-        total - 1 -> RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp, bottomStart = 24.dp, bottomEnd = 24.dp)
-        else -> RoundedCornerShape(6.dp)
+        0 -> TopItemShape
+        total - 1 -> BottomItemShape
+        else -> MiddleItemShape
     }
 }
 
@@ -89,7 +94,6 @@ fun ProfileScreen(
     val storageState by viewModel.storageState.collectAsState()
 
     val listState = rememberLazyListState()
-    val hazeState = rememberHazeState()
 
     val scrollToTopTrigger by viewModel.scrollToTopTrigger.collectAsState()
     LaunchedEffect(scrollToTopTrigger) {
@@ -107,9 +111,7 @@ fun ProfileScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
-            modifier = Modifier
-                .fillMaxSize()
-                .hazeSource(hazeState),
+            modifier = Modifier.fillMaxSize(),
             containerColor = Color.Transparent,
             snackbarHost = {
                 SnackbarHost(snackbarHostState) { data ->
@@ -144,12 +146,12 @@ fun ProfileScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                item {
+                item(key = "settings_title", contentType = "title") {
                     CollapsibleScreenTitle(title = "Настройки")
                 }
 
                 // Секция 1: Профиль студента
-                item {
+                item(key = "section_profile", contentType = "section") {
                     SettingsContainer(title = "Профиль студента") {
                         SettingsClickItem(
                             title = "Моя группа",
@@ -158,6 +160,7 @@ fun ProfileScreen(
                             shape = getItemShape(0, 2),
                             onClick = {
                                 haptic.lightTick()
+                                viewModel.loadGroupsIfNeeded()
                                 showGroupSheet = true
                             }
                         )
@@ -177,7 +180,7 @@ fun ProfileScreen(
                 }
 
                 // Секция 2: Уведомления
-                item {
+                item(key = "section_notifications", contentType = "section") {
                     val notifTotalCount = if (remindersEnabled) 4 else 3
                     SettingsContainer(title = "Уведомления") {
                         SettingsSwitchItem(
@@ -197,8 +200,10 @@ fun ProfileScreen(
 
                         AnimatedVisibility(
                             visible = remindersEnabled,
-                            enter = expandVertically() + fadeIn(),
-                            exit = shrinkVertically() + fadeOut()
+                            enter = expandVertically(com.mguuschedule.ui.theme.AppMotionScheme.defaultSpatialSpec()) +
+                                fadeIn(com.mguuschedule.ui.theme.AppMotionScheme.fastEffectsSpec()),
+                            exit = shrinkVertically(com.mguuschedule.ui.theme.AppMotionScheme.defaultSpatialSpec()) +
+                                fadeOut(com.mguuschedule.ui.theme.AppMotionScheme.fastEffectsSpec())
                         ) {
                             SettingsClickItem(
                                 title = "Время до начала",
@@ -242,7 +247,7 @@ fun ProfileScreen(
                 }
 
                 // Секция 3: Внешний вид
-                item {
+                item(key = "section_appearance", contentType = "section") {
                     val appearanceTotal = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) 3 else 2
                     val themeSubtitle = when (themeMode) {
                         1 -> "Светлая"
@@ -296,7 +301,7 @@ fun ProfileScreen(
                 }
 
                 // Секция 4: Данные и память
-                item {
+                item(key = "section_storage", contentType = "section") {
                     SettingsContainer(title = "Данные и память") {
                         SettingsClickItem(
                             title = "Расписание",
@@ -329,7 +334,7 @@ fun ProfileScreen(
                 }
 
                 // Секция 5: О приложении
-                item {
+                item(key = "section_about", contentType = "section") {
                     val updateState = viewModel.updateState
                     val context = LocalContext.current
                     var versionTapCount by remember { mutableIntStateOf(0) }
@@ -464,7 +469,7 @@ fun ProfileScreen(
 
                 // Секция 6: Для разработчиков
                 if (viewModel.isDeveloperMode) {
-                    item {
+                    item(key = "section_developer", contentType = "section") {
                         SettingsContainer(title = "Для разработчиков") {
                             SettingsClickItem(
                                 title = "Панель отладки",
@@ -602,30 +607,32 @@ fun ZachetkaSelectionSheet(
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("mguu_prefs", Context.MODE_PRIVATE) }
 
-    // Проверка мгновенного кэша зачеток из SharedPreferences
-    val cachedZachetkas = remember(groupName, uiState) {
-        if (uiState is ZachetkasUiState.Success) {
+    // Проверка мгновенного кэша зачеток из SharedPreferences вне Main Thread
+    val cachedZachetkas by produceState(initialValue = emptyList<String>(), groupName, uiState) {
+        value = if (uiState is ZachetkasUiState.Success) {
             uiState.zachetkas
         } else {
-            val groupId = prefs.getString("selected_group_id", null)
-            val json = if (!groupId.isNullOrEmpty()) prefs.getString("rating_latest_instant_cache_$groupId", null) else null
-            if (!json.isNullOrEmpty()) {
-                runCatching {
-                    val jsonObject = JSONObject(json)
-                    val studentsArray = jsonObject.optJSONArray("students")
-                    if (studentsArray != null) {
-                        val list = mutableListOf<String>()
-                        for (i in 0 until studentsArray.length()) {
-                            val st = studentsArray.optJSONObject(i)
-                            val z = st?.optString("zachetka")
-                            if (!z.isNullOrBlank()) {
-                                list.add(z)
+            withContext(Dispatchers.IO) {
+                val groupId = prefs.getString("selected_group_id", null)
+                val json = if (!groupId.isNullOrEmpty()) prefs.getString("rating_latest_instant_cache_$groupId", null) else null
+                if (!json.isNullOrEmpty()) {
+                    runCatching {
+                        val jsonObject = JSONObject(json)
+                        val studentsArray = jsonObject.optJSONArray("students")
+                        if (studentsArray != null) {
+                            val list = ArrayList<String>(studentsArray.length())
+                            for (i in 0 until studentsArray.length()) {
+                                val st = studentsArray.optJSONObject(i)
+                                val z = st?.optString("zachetka")
+                                if (!z.isNullOrBlank()) {
+                                    list.add(z)
+                                }
                             }
-                        }
-                        list
-                    } else emptyList()
-                }.getOrDefault(emptyList())
-            } else emptyList()
+                            list
+                        } else emptyList()
+                    }.getOrDefault(emptyList())
+                } else emptyList()
+            }
         }
     }
 
@@ -702,7 +709,11 @@ fun ZachetkaSelectionSheet(
                                 verticalArrangement = Arrangement.spacedBy(6.dp),
                                 contentPadding = PaddingValues(bottom = 16.dp)
                             ) {
-                                items(filtered, key = { it }) { zachetka ->
+                                items(
+                                    items = filtered,
+                                    key = { it },
+                                    contentType = { "zachetka" }
+                                ) { zachetka ->
                                     val isSelected = zachetka.equals(selectedZachetka, ignoreCase = true)
 
                                     Surface(
@@ -1226,7 +1237,7 @@ fun GroupSelectionSheet(
                                 groupedGroups.forEach { (course, groups) ->
                                     val isExpanded = expandedCourses[course] ?: (searchQuery.isNotEmpty())
 
-                                    item(key = course) {
+                                    item(key = "course_$course", contentType = "course_header") {
                                         Surface(
                                             onClick = {
                                                 haptic.lightTick()
@@ -1257,7 +1268,11 @@ fun GroupSelectionSheet(
                                     }
 
                                     if (isExpanded) {
-                                        items(groups, key = { it.id }) { group ->
+                                        items(
+                                            items = groups,
+                                            key = { it.id },
+                                            contentType = { "group" }
+                                        ) { group ->
                                             val isSelected = selectedGroup?.id == group.id
                                             Card(
                                                 modifier = Modifier

@@ -2,9 +2,7 @@ package com.mguuschedule.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -24,16 +22,21 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInParent
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.mguuschedule.ui.navigation.Screen
 import com.mguuschedule.ui.theme.AppMotionScheme
 import com.mguuschedule.util.rememberHapticFeedback
+import kotlin.math.roundToInt
+
+private val PillAnimationSpec = AppMotionScheme.expressiveSpatialSpec<Float>()
+
+private val TabScaleAnimationSpec = AppMotionScheme.fastSpatialSpec<Float>()
 
 /**
  * Компактный плавающий бар навигации (по принципу Google Photos).
@@ -48,27 +51,38 @@ fun AnimatedFloatingNavBar(
     modifier: Modifier = Modifier
 ) {
     val haptic = rememberHapticFeedback()
-    val density = LocalDensity.current
 
-    val itemWidths = remember { mutableStateListOf<Dp>().apply { repeat(items.size) { add(0.dp) } } }
-    val itemOffsets = remember { mutableStateListOf<Dp>().apply { repeat(items.size) { add(0.dp) } } }
-    
-    val selectedIndex = items.indexOfFirst { it.route == currentRoute }.coerceAtLeast(0)
-    
-    val pillAnimationSpec = spring<Dp>(
-        dampingRatio = 0.72f,
-        stiffness = 520f
-    )
+    val itemWidthsPx = remember(items.size) { FloatArray(items.size) }
+    val itemOffsetsPx = remember(items.size) { FloatArray(items.size) }
 
-    val pillOffset by animateDpAsState(
-        targetValue = itemOffsets.getOrElse(selectedIndex) { 0.dp },
-        animationSpec = pillAnimationSpec,
+    val selectedIndex = remember(items, currentRoute) {
+        items.indexOfFirst { it.route == currentRoute }.coerceAtLeast(0)
+    }
+
+    var targetOffsetPx by remember { mutableFloatStateOf(0f) }
+    var targetWidthPx by remember { mutableFloatStateOf(0f) }
+
+    // Обновляем целевую позицию индикатора при смене активной вкладки
+    SideEffect {
+        if (selectedIndex in itemOffsetsPx.indices) {
+            val cachedOffset = itemOffsetsPx[selectedIndex]
+            val cachedWidth = itemWidthsPx[selectedIndex]
+            if (cachedWidth > 0f) {
+                if (targetOffsetPx != cachedOffset) targetOffsetPx = cachedOffset
+                if (targetWidthPx != cachedWidth) targetWidthPx = cachedWidth
+            }
+        }
+    }
+
+    val pillOffsetPx by animateFloatAsState(
+        targetValue = targetOffsetPx,
+        animationSpec = PillAnimationSpec,
         label = "pillOffset"
     )
-    
-    val pillWidth by animateDpAsState(
-        targetValue = itemWidths.getOrElse(selectedIndex) { 0.dp },
-        animationSpec = pillAnimationSpec,
+
+    val pillWidthPx by animateFloatAsState(
+        targetValue = targetWidthPx,
+        animationSpec = PillAnimationSpec,
         label = "pillWidth"
     )
 
@@ -80,12 +94,20 @@ fun AnimatedFloatingNavBar(
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
     ) {
         Box(modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)) {
-            // Анимированный индикатор активного раздела
+            // Анимированный индикатор активного раздела (offset и width отложены в Layout-фазу)
             Box(
                 modifier = Modifier
-                    .offset(x = pillOffset)
                     .align(Alignment.CenterStart)
-                    .width(pillWidth)
+                    .offset { IntOffset(x = pillOffsetPx.roundToInt(), y = 0) }
+                    .layout { measurable, constraints ->
+                        val w = pillWidthPx.roundToInt().coerceAtLeast(0)
+                        val placeable = measurable.measure(
+                            constraints.copy(minWidth = w, maxWidth = w)
+                        )
+                        layout(placeable.width, placeable.height) {
+                            placeable.placeRelative(0, 0)
+                        }
+                    }
                     .fillMaxHeight()
                     .background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
             )
@@ -95,8 +117,8 @@ fun AnimatedFloatingNavBar(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 items.forEachIndexed { index, screen ->
-                    val isSelected = items.indexOfFirst { it.route == currentRoute } == index
-                    
+                    val isSelected = selectedIndex == index
+
                     val contentColor by animateColorAsState(
                         targetValue = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                         animationSpec = AppMotionScheme.fastEffectsSpec(),
@@ -107,20 +129,25 @@ fun AnimatedFloatingNavBar(
                     val isPressed by interactionSource.collectIsPressedAsState()
                     val tabScale by animateFloatAsState(
                         targetValue = if (isPressed) 0.93f else 1f,
-                        animationSpec = spring(dampingRatio = 0.65f, stiffness = 600f),
+                        animationSpec = TabScaleAnimationSpec,
                         label = "tabScale"
                     )
 
                     Row(
                         modifier = Modifier
                             .fillMaxHeight()
-                            .scale(tabScale)
-                            .onGloballyPositioned { coordinates ->
-                                with(density) {
-                                    val newWidth = coordinates.size.width.toDp()
-                                    val newOffset = coordinates.positionInParent().x.toDp()
-                                    if (itemWidths[index] != newWidth) itemWidths[index] = newWidth
-                                    if (itemOffsets[index] != newOffset) itemOffsets[index] = newOffset
+                            .graphicsLayer {
+                                scaleX = tabScale
+                                scaleY = tabScale
+                            }
+                            .onPlaced { coordinates ->
+                                val newWidth = coordinates.size.width.toFloat()
+                                val newOffset = coordinates.positionInParent().x
+                                itemWidthsPx[index] = newWidth
+                                itemOffsetsPx[index] = newOffset
+                                if (index == selectedIndex) {
+                                    if (targetWidthPx != newWidth) targetWidthPx = newWidth
+                                    if (targetOffsetPx != newOffset) targetOffsetPx = newOffset
                                 }
                             }
                             .clip(CircleShape)
@@ -163,7 +190,7 @@ fun AnimatedFloatingNavBar(
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                         )
                     }
-                    
+
                     if (index < items.size - 1) {
                         Spacer(modifier = Modifier.width(2.dp))
                     }

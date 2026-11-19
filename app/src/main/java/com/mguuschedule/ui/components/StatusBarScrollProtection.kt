@@ -22,20 +22,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeTint
-import dev.chrisbanes.haze.hazeEffect
-import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
-import dev.chrisbanes.haze.materials.HazeMaterials
 import com.mguuschedule.ui.theme.AppMotionScheme
 
 /**
@@ -46,9 +36,18 @@ fun BoxScope.StatusBarScrim(
     listState: LazyListState,
     modifier: Modifier = Modifier
 ) {
-    val isScrolled by remember { derivedStateOf { listState.canScrollBackward } }
+    val isScrolled by remember(listState) { derivedStateOf { listState.canScrollBackward } }
     val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val scrimColor = MaterialTheme.colorScheme.surface
+    val scrimBrush = remember(scrimColor) {
+        Brush.verticalGradient(
+            colors = listOf(
+                scrimColor.copy(alpha = 0.95f),
+                scrimColor.copy(alpha = 0.6f),
+                Color.Transparent
+            )
+        )
+    }
 
     AnimatedVisibility(
         visible = isScrolled,
@@ -60,15 +59,7 @@ fun BoxScope.StatusBarScrim(
             Modifier
                 .fillMaxWidth()
                 .height(statusBarHeight + 24.dp)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            scrimColor.copy(alpha = 0.95f),
-                            scrimColor.copy(alpha = 0.6f),
-                            Color.Transparent
-                        )
-                    )
-                )
+                .background(scrimBrush)
         )
     }
 }
@@ -81,22 +72,22 @@ fun TopScrimProtection(
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.background
 ) {
-    val density = LocalDensity.current
     val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val heightDp = statusBarHeight + 24.dp
+    val scrimBrush = remember(color) {
+        Brush.verticalGradient(
+            colors = listOf(
+                color.copy(alpha = 0.85f),
+                Color.Transparent
+            )
+        )
+    }
 
     Box(
         modifier = modifier
             .fillMaxWidth()
             .height(heightDp)
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        color.copy(alpha = 0.85f),
-                        Color.Transparent
-                    )
-                )
-            )
+            .background(brush = scrimBrush)
     )
 }
 

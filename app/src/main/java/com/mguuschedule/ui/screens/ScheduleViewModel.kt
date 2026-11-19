@@ -2,7 +2,6 @@ package com.mguuschedule.ui.screens
 
 import android.app.Application
 import android.content.Context
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -78,10 +77,18 @@ class ScheduleViewModel(
             initialValue = emptyList()
         )
 
+    @Volatile
+    private var lessonsByIdCache: Map<String, Lesson> = emptyMap()
+    @Volatile
+    private var lessonsByKeyCache: Map<String, Lesson> = emptyMap()
+
     val allLessonsFlow: StateFlow<List<Lesson>> = scheduleRepository.getAllLessonsFlow()
         .map { entities ->
             runCatching {
-                entities.mapNotNull { it.toLesson() }
+                val mapped = entities.mapNotNull { it.toLesson() }
+                lessonsByIdCache = mapped.associateBy { it.id }
+                lessonsByKeyCache = mapped.associateBy { "${it.date}_${it.number}_${it.startTime}" }
+                mapped
             }.getOrDefault(emptyList())
         }
         .flowOn(Dispatchers.Default)
@@ -170,24 +177,13 @@ class ScheduleViewModel(
             scheduleUpcomingRemindersFromDb()
         }
 
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             lessonsForSelectedDay.collect { lessons ->
                 if (_selectedDate.value.isEqual(LocalDate.now())) {
                     val currentGroupId = appPrefs.getString("selected_group_id", "") ?: ""
                     LiveUpdateManager.scheduleLiveUpdatesForDay(getApplication(), lessons, currentGroupId)
                 }
             }
-        }
-    }
-
-    val cacheMetadata by derivedStateOf {
-        val currentLessons = lessonsForSelectedDay.value
-        if (currentLessons.isEmpty()) {
-            Triple("Локальный кэш пуст", "0 КБ", "Данные не загружены")
-        } else {
-            val range = "${currentLessons.first().date.dayOfMonth} - ${currentLessons.last().date.dayOfMonth}"
-            val updateTime = appPrefs.getString("last_sync_time", "Данные не загружены") ?: "Данные не загружены"
-            Triple("Синхронизировано (${currentLessons.size} пар)", range, updateTime)
         }
     }
 
@@ -236,10 +232,12 @@ class ScheduleViewModel(
                 } else {
                     result.onSuccess { entities ->
                         try {
-                            val newLessons = entities.mapNotNull { it.toLesson() }
                             val currentDayStr = _selectedDate.value.toString()
                             val previousDayLessons = lessonsForSelectedDay.value
-                            val newDayLessons = newLessons.filter { it.date.toString() == currentDayStr }
+                            val (newLessons, newDayLessons) = withContext(Dispatchers.Default) {
+                                val mapped = entities.mapNotNull { it.toLesson() }
+                                mapped to mapped.filter { it.date.toString() == currentDayStr }
+                            }
                             
                             hasChangesInLastRefresh = if (previousDayLessons.isEmpty()) false else previousDayLessons != newDayLessons
                             
@@ -345,10 +343,10 @@ class ScheduleViewModel(
 
     fun getLessonById(id: String): Lesson? {
         if (id.contains("_")) {
-            return allLessonsFlow.value.find { "${it.date}_${it.number}_${it.startTime}" == id } 
+            return lessonsByKeyCache[id]
                 ?: lessonsForSelectedDay.value.find { "${it.date}_${it.number}_${it.startTime}" == id }
         }
-        return allLessonsFlow.value.find { it.id == id } ?: lessonsForSelectedDay.value.find { it.id == id }
+        return lessonsByIdCache[id] ?: lessonsForSelectedDay.value.find { it.id == id }
     }
 
     // Addons Extensions
@@ -403,14 +401,14 @@ class ScheduleViewModel(
 }
 
 class ScheduleViewModelFactory(
-    private val application: Application
+    private val application: Application,
+    private val repository: ScheduleRepository? = null
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(ScheduleViewModel::class.java)) {
-            val database = AppDatabase.getDatabase(application)
-            val repository = ScheduleRepository(application, database)
-            return ScheduleViewModel(repository, application) as T
+            val repo = repository ?: ScheduleRepository(application, AppDatabase.getDatabase(application))
+            return ScheduleViewModel(repo, application) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

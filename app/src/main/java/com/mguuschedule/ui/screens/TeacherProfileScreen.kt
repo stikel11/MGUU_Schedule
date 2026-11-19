@@ -7,7 +7,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -218,6 +218,8 @@ fun TeacherProfileContent(
     teacher: CampusTeacher,
     contentPadding: PaddingValues = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp)
 ) {
+    val context = LocalContext.current
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = contentPadding,
@@ -225,7 +227,7 @@ fun TeacherProfileContent(
     ) {
         // Учреждение
         if (teacher.department.isNotBlank() || teacher.university.isNotBlank()) {
-            item {
+            item(key = "workplace", contentType = "workplace") {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
@@ -258,7 +260,7 @@ fun TeacherProfileContent(
         }
 
         // Рейтинг
-        item {
+        item(key = "rating_summary", contentType = "rating_summary") {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
@@ -349,7 +351,7 @@ fun TeacherProfileContent(
 
         // Отзывы
         if (teacher.reviews.isNotEmpty()) {
-            item {
+            item(key = "reviews_header", contentType = "header") {
                 Text(
                     text = "Отзывы",
                     style = MaterialTheme.typography.titleMedium,
@@ -358,7 +360,11 @@ fun TeacherProfileContent(
                 )
             }
             
-            items(teacher.reviews) { review ->
+            itemsIndexed(
+                items = teacher.reviews,
+                key = { idx, r -> "${idx}_${r.author}_${r.date}" },
+                contentType = { _, _ -> "review" }
+            ) { _, review ->
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
@@ -412,7 +418,7 @@ fun TeacherProfileContent(
                 }
             }
         } else if (teacher.reviewCount > 0) {
-            item {
+            item(key = "reviews_hidden", contentType = "empty") {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -430,8 +436,7 @@ fun TeacherProfileContent(
         }
 
         // Кнопка перехода к написанию отзыва
-        item {
-            val context = LocalContext.current
+        item(key = "leave_review_cta", contentType = "cta") {
             val reviewUrl = "https://processes.dewish.ru/webhook/share-app-link-redirect?campaign=teacher_review_cta&tok=T0y6mqhCNUpn"
             
             Spacer(modifier = Modifier.height(8.dp))

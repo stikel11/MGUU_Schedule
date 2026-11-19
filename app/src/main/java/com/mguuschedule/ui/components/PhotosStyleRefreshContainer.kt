@@ -21,13 +21,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
@@ -39,6 +40,7 @@ import androidx.graphics.shapes.RoundedPolygon
 import androidx.graphics.shapes.circle
 import androidx.graphics.shapes.star
 import androidx.graphics.shapes.toPath
+import com.mguuschedule.ui.theme.AppMotionScheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -75,19 +77,19 @@ fun PhotosStyleRefreshContainer(
             phase = RefreshStatePhase.Refreshing
             offsetAnim.animateTo(
                 targetValue = activeHoldPx,
-                animationSpec = spring(dampingRatio = 0.85f, stiffness = 240f)
+                animationSpec = AppMotionScheme.defaultSpatialSpec()
             )
         } else if (wasRefreshing) {
             wasRefreshing = false
             phase = RefreshStatePhase.Done
             offsetAnim.animateTo(
                 targetValue = activeHoldPx,
-                animationSpec = spring(dampingRatio = 0.85f, stiffness = 260f)
+                animationSpec = AppMotionScheme.defaultSpatialSpec()
             )
             delay(if (isError) 1400L else 850L)
             offsetAnim.animateTo(
                 targetValue = 0f,
-                animationSpec = spring(dampingRatio = 0.88f, stiffness = 220f)
+                animationSpec = AppMotionScheme.defaultSpatialSpec()
             )
             phase = RefreshStatePhase.Idle
         }
@@ -128,7 +130,7 @@ fun PhotosStyleRefreshContainer(
                         scope.launch {
                             offsetAnim.animateTo(
                                 targetValue = activeHoldPx,
-                                animationSpec = spring(dampingRatio = 0.85f, stiffness = 240f)
+                                animationSpec = AppMotionScheme.defaultSpatialSpec()
                             )
                         }
                         currentOnRefresh()
@@ -136,7 +138,7 @@ fun PhotosStyleRefreshContainer(
                         scope.launch {
                             offsetAnim.animateTo(
                                 targetValue = 0f,
-                                animationSpec = spring(dampingRatio = 0.88f, stiffness = 240f)
+                                animationSpec = AppMotionScheme.defaultSpatialSpec()
                             )
                             phase = RefreshStatePhase.Idle
                         }
@@ -148,40 +150,49 @@ fun PhotosStyleRefreshContainer(
         }
     }
 
-    val currentOffset = offsetAnim.value
-    val pullProgress = (currentOffset / triggerPx).coerceIn(0f, 1f)
-    val contentTopCornerRadius = (28.dp * pullProgress).coerceIn(0.dp, 28.dp)
+    // Рекомпозиция контейнера срабатывает только при пересечении порога видимости (> 2px),
+    // а не на каждый пиксель свайпа или кадр пружинной анимации
+    val isPullVisible by remember { derivedStateOf { offsetAnim.value > 2f } }
 
-    val recessedWellColor = androidx.compose.ui.graphics.lerp(
-        MaterialTheme.colorScheme.background,
-        MaterialTheme.colorScheme.primary,
-        0.09f
-    )
+    val backgroundColor = MaterialTheme.colorScheme.background
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val recessedWellColor = remember(backgroundColor, primaryColor) {
+        androidx.compose.ui.graphics.lerp(backgroundColor, primaryColor, 0.09f)
+    }
 
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(
-                if (currentOffset > 2f) recessedWellColor
-                else MaterialTheme.colorScheme.background
-            )
+            .drawBehind {
+                drawRect(if (offsetAnim.value > 2f) recessedWellColor else backgroundColor)
+            }
             .nestedScroll(nestedScrollConnection)
     ) {
         // 1. Ниша под статус-баром с экспрессивным полигоном и капсулой статуса
-        if (currentOffset > 2f) {
-            val blockHeightDp = with(density) { currentOffset.toDp() }
+        if (isPullVisible) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(blockHeightDp)
-                    .padding(top = with(density) { (statusBarTopPx * pullProgress).toDp() }),
+                    .layout { measurable, constraints ->
+                        val currentOff = offsetAnim.value.coerceAtLeast(0f)
+                        val progress = (currentOff / triggerPx).coerceIn(0f, 1f)
+                        val topPadPx = (statusBarTopPx * progress).roundToInt()
+                        val heightPx = currentOff.roundToInt()
+                        val availableH = (heightPx - topPadPx).coerceAtLeast(0)
+                        val placeable = measurable.measure(
+                            constraints.copy(minHeight = availableH, maxHeight = availableH)
+                        )
+                        layout(constraints.maxWidth, heightPx) {
+                            placeable.placeRelative(0, topPadPx)
+                        }
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 AnimatedContent(
                     targetState = phase == RefreshStatePhase.Done,
                     transitionSpec = {
-                        (scaleIn(spring(0.82f, 300f)) + fadeIn(tween(180)))
-                            .togetherWith(scaleOut(spring(0.85f, 300f)) + fadeOut(tween(120)))
+                        (scaleIn(AppMotionScheme.expressiveSpatialSpec(), initialScale = 0.86f) + fadeIn(AppMotionScheme.fastEffectsSpec()))
+                            .togetherWith(scaleOut(AppMotionScheme.defaultSpatialSpec(), targetScale = 0.88f) + fadeOut(AppMotionScheme.fastEffectsSpec()))
                     },
                     label = "refresh_indicator_content"
                 ) { isDone ->
@@ -211,7 +222,7 @@ fun PhotosStyleRefreshContainer(
                         }
                     } else {
                         GoogleExpressivePolygonIndicator(
-                            pullProgress = pullProgress,
+                            pullProgressProvider = { (offsetAnim.value / triggerPx).coerceIn(0f, 1f) },
                             isSpinning = phase == RefreshStatePhase.Refreshing
                         )
                     }
@@ -220,17 +231,22 @@ fun PhotosStyleRefreshContainer(
         }
 
         // 2. Сдвигающийся вниз основной экран со скругленными верхними углами (/‾\)
+        // Смещение и скругление выполняются в Layout/Draw без рекомпозиции content()
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .offset { IntOffset(0, currentOffset.roundToInt()) }
-                .clip(
-                    RoundedCornerShape(
-                        topStart = contentTopCornerRadius,
-                        topEnd = contentTopCornerRadius
-                    )
-                )
-                .background(MaterialTheme.colorScheme.background)
+                .offset { IntOffset(0, offsetAnim.value.roundToInt()) }
+                .graphicsLayer {
+                    val progress = (offsetAnim.value / triggerPx).coerceIn(0f, 1f)
+                    if (progress > 0.01f) {
+                        val radius = (28.dp * progress)
+                        shape = RoundedCornerShape(topStart = radius, topEnd = radius)
+                        clip = true
+                    } else {
+                        clip = false
+                    }
+                }
+                .background(backgroundColor)
         ) {
             content()
         }
@@ -239,7 +255,7 @@ fun PhotosStyleRefreshContainer(
 
 @Composable
 private fun GoogleExpressivePolygonIndicator(
-    pullProgress: Float,
+    pullProgressProvider: () -> Float,
     isSpinning: Boolean
 ) {
     val shapes = remember {
@@ -257,45 +273,59 @@ private fun GoogleExpressivePolygonIndicator(
         }
     }
 
-    val infiniteTransition = rememberInfiniteTransition(label = "m3_expressive_morph")
-    val continuousPhase by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = morphs.size.toFloat(),
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2400, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "morph_phase"
-    )
-    val rotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 3000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "rotation_phase"
-    )
-
-    val activeMorphValue = if (isSpinning) continuousPhase else (pullProgress * 1.5f)
-    val morphIndex = activeMorphValue.toInt() % morphs.size
-    val morphFraction = activeMorphValue - activeMorphValue.toInt()
+    // Бесконечная анимация создается только во время активного обновления
+    val continuousPhaseState: State<Float>?
+    val rotationState: State<Float>?
+    if (isSpinning) {
+        val infiniteTransition = rememberInfiniteTransition(label = "m3_expressive_morph")
+        continuousPhaseState = infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = morphs.size.toFloat(),
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 2400, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "morph_phase"
+        )
+        rotationState = infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 3000, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "rotation_phase"
+        )
+    } else {
+        continuousPhaseState = null
+        rotationState = null
+    }
 
     val androidPath = remember { android.graphics.Path() }
+    val composePath = remember(androidPath) { androidPath.asComposePath() }
     val matrix = remember { android.graphics.Matrix() }
     val color = MaterialTheme.colorScheme.primary
-    val scale = (0.35f + 0.65f * pullProgress).coerceIn(0f, 1f)
 
     Canvas(
         modifier = Modifier
             .size(44.dp)
             .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-                rotationZ = if (isSpinning) rotation else pullProgress * 140f
+                val pullProgress = pullProgressProvider()
+                val s = (0.35f + 0.65f * pullProgress).coerceIn(0f, 1f)
+                scaleX = s
+                scaleY = s
+                rotationZ = if (isSpinning) (rotationState?.value ?: 0f) else pullProgress * 140f
                 alpha = (pullProgress * 1.4f).coerceIn(0f, 1f)
             }
     ) {
+        val activeMorphValue = if (isSpinning) {
+            continuousPhaseState?.value ?: 0f
+        } else {
+            pullProgressProvider() * 1.5f
+        }
+        val morphIndex = activeMorphValue.toInt() % morphs.size
+        val morphFraction = activeMorphValue - activeMorphValue.toInt()
+
         androidPath.rewind()
         morphs[morphIndex].toPath(progress = morphFraction, path = androidPath)
         matrix.reset()
@@ -305,7 +335,7 @@ private fun GoogleExpressivePolygonIndicator(
         androidPath.transform(matrix)
 
         drawPath(
-            path = androidPath.asComposePath(),
+            path = composePath,
             color = color
         )
     }

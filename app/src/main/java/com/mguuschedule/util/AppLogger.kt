@@ -9,7 +9,7 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
 data class SyncDiagnostics(
-    val lastScheduleSource: String = "Неизвестно", // "СЕТЬ (api.lk-upm.ru)" или "Кэш Room"
+    val lastScheduleSource: String = "Неизвестно", // "СЕТЬ (schedule.mguu.ru)" или "Кэш Room"
     val lastScheduleSyncTime: String = "—",
     val apiScheduleVersion: String = "—",
     val apiScheduleUpdatedAt: String = "—",

@@ -14,6 +14,9 @@ import com.mguuschedule.repository.RatingRepository
 import com.mguuschedule.util.AppLogger
 import com.mguuschedule.util.NotificationHelper
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import java.util.Locale
 
@@ -53,21 +56,28 @@ class RatingUpdateWorker(
 
             val newSubjects = repository.parseStudentSubjects(selectedStudent.detailUrl)
 
-            // Сбор детальных контрольных точек для каждого предмета
-            val newControlPointsMap = mutableMapOf<String, List<ControlPoint>>()
-            for (subject in newSubjects) {
-                if (subject.detailUrl.isNotBlank()) {
-                    runCatching {
-                        val points = repository.parseControlPoints(subject.detailUrl)
-                        if (points.isNotEmpty()) {
-                            newControlPointsMap[subject.detailUrl] = points
+            val activeYearId = ratingPage.availableYears.find { it.isSelected }?.id ?: ""
+            val activeSemId = ratingPage.availableSemesters.find { it.isSelected }?.id ?: ""
+
+            // Параллельный сбор детальных контрольных точек для каждого предмета
+            val newControlPointsMap: Map<String, List<ControlPoint>> = coroutineScope {
+                newSubjects
+                    .filter { it.detailUrl.isNotBlank() }
+                    .map { subject ->
+                        async {
+                            val points = runCatching { repository.parseControlPoints(subject.detailUrl) }
+                                .getOrDefault(emptyList())
+                            subject.detailUrl to points
                         }
                     }
-                }
+                    .awaitAll()
+                    .filter { it.second.isNotEmpty() }
+                    .toMap()
             }
 
-            // Получаем старый кэш из базы Room
-            val oldCache = ratingDao.getRatingCache(groupId, selectedStudent.zachetka, "", "")
+            // Получаем старый кэш из базы Room с учетом активного периода
+            val oldCache = ratingDao.getRatingCache(groupId, selectedStudent.zachetka, activeYearId, activeSemId)
+                ?: ratingDao.getLatestRatingCacheForStudent(groupId, selectedStudent.zachetka)
 
             val oldStudent = oldCache?.studentJson?.let {
                 runCatching { gson.fromJson(it, StudentRating::class.java) }.getOrNull()
@@ -137,7 +147,9 @@ class RatingUpdateWorker(
                         }
 
                         // 3. Детальная сверка контрольных точек (КТ)
-                        val oldPoints = oldControlPointsMap[subject.detailUrl] ?: emptyList()
+                        val oldPoints = oldControlPointsMap[subject.detailUrl]
+                            ?: oldControlPointsMap[oldSubject.detailUrl]
+                            ?: emptyList()
                         val newPoints = newControlPointsMap[subject.detailUrl] ?: emptyList()
 
                         for (newPoint in newPoints) {
@@ -176,10 +188,7 @@ class RatingUpdateWorker(
                 )
             }
 
-            val activeYearId = ratingPage.availableYears.find { it.isSelected }?.id ?: ""
-            val activeSemId = ratingPage.availableSemesters.find { it.isSelected }?.id ?: ""
-
-            // Сохраняем свежий кэш с контрольными точками в базу Room
+            // Сохраняем свежий кэш с контрольными точками и периодами в базу Room
             val newCache = RatingEntity(
                 groupId = groupId,
                 zachetka = selectedStudent.zachetka,
@@ -188,10 +197,15 @@ class RatingUpdateWorker(
                 studentJson = gson.toJson(selectedStudent),
                 subjectsJson = gson.toJson(newSubjects),
                 studentsListJson = gson.toJson(students),
+                availableYearsJson = gson.toJson(ratingPage.availableYears),
+                availableSemestersJson = gson.toJson(ratingPage.availableSemesters),
                 controlPointsJson = gson.toJson(newControlPointsMap),
                 updatedAt = System.currentTimeMillis()
             )
             ratingDao.saveRatingCache(newCache)
+            prefs.edit()
+                .putString("rating_latest_instant_cache_$groupId", gson.toJson(newCache))
+                .apply()
 
             AppLogger.d("RATING_WORKER", "Глубокая фоновая синхронизация БРС завершена")
             Result.success()

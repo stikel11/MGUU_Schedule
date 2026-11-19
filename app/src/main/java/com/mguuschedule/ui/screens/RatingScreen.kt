@@ -2,6 +2,7 @@ package com.mguuschedule.ui.screens
 
 import android.app.Application
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -20,6 +21,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -37,11 +39,6 @@ import com.mguuschedule.ui.components.StatusBarScrim
 import com.mguuschedule.ui.components.TopScrimProtection
 import com.mguuschedule.ui.theme.AppMotionScheme
 import com.mguuschedule.util.rememberHapticFeedback
-import dev.chrisbanes.haze.HazeDefaults
-import dev.chrisbanes.haze.HazeTint
-import dev.chrisbanes.haze.hazeEffect
-import dev.chrisbanes.haze.hazeSource
-import dev.chrisbanes.haze.rememberHazeState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,7 +54,6 @@ fun RatingScreen(
     val haptic = rememberHapticFeedback()
 
     val listState = rememberLazyListState()
-    val hazeState = rememberHazeState()
 
     val scrollToTopTrigger by viewModel.scrollToTopTrigger.collectAsState()
     LaunchedEffect(scrollToTopTrigger) {
@@ -68,15 +64,9 @@ fun RatingScreen(
 
     var expandedSubjectUrl by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(Unit) {
-        viewModel.loadRating()
-    }
-
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
-            modifier = Modifier
-                .fillMaxSize()
-                .hazeSource(hazeState),
+            modifier = Modifier.fillMaxSize(),
             containerColor = Color.Transparent
         ) { innerPadding ->
             PhotosStyleRefreshContainer(
@@ -101,13 +91,13 @@ fun RatingScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    item {
+                    item(key = "rating_title", contentType = "title") {
                         CollapsibleScreenTitle(title = "Рейтинг БРС")
                     }
 
                     when (uiState) {
                         is RatingUiState.Loading -> {
-                            item {
+                            item(key = "rating_loading", contentType = "loading") {
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -131,7 +121,7 @@ fun RatingScreen(
                         }
 
                         is RatingUiState.Error -> {
-                            item {
+                            item(key = "rating_error", contentType = "error") {
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -182,7 +172,7 @@ fun RatingScreen(
 
                             // 1. Academic Period Selectors (Years & Semesters)
                             if (uiState.availableYears.isNotEmpty() || uiState.availableSemesters.isNotEmpty()) {
-                                item {
+                                item(key = "rating_periods", contentType = "periods") {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -280,7 +270,7 @@ fun RatingScreen(
 
                             // 2. Hero Overall Score Card
                             if (student != null) {
-                                item {
+                                item(key = "rating_hero", contentType = "hero") {
                                     StudentHeroRatingCard(
                                         student = student,
                                         studentsList = studentsList,
@@ -293,7 +283,7 @@ fun RatingScreen(
 
                             // Section Title
                             if (subjects.isNotEmpty()) {
-                                item {
+                                item(key = "rating_subjects_header", contentType = "header") {
                                     Text(
                                         text = "Дисциплины (${subjects.size})",
                                         style = MaterialTheme.typography.titleMedium,
@@ -305,7 +295,7 @@ fun RatingScreen(
                             }
 
                             if (subjects.isEmpty()) {
-                                item {
+                                item(key = "rating_empty", contentType = "empty") {
                                     Surface(
                                         shape = RoundedCornerShape(24.dp),
                                         color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -338,7 +328,11 @@ fun RatingScreen(
                                     }
                                 }
                             } else {
-                                items(subjects, key = { it.title + it.detailUrl }) { subject ->
+                                items(
+                                    items = subjects,
+                                    key = { it.title + it.detailUrl },
+                                    contentType = { "subject" }
+                                ) { subject ->
                                     val isExpanded = expandedSubjectUrl == subject.detailUrl
                                     val points = controlPointsMap[subject.detailUrl]
                                     val isLoadingPoints = loadingPointsSet.contains(subject.detailUrl)
@@ -602,10 +596,16 @@ fun SubjectScoreCard(
                     ScoreLabelValue("Итого", totalScoreStr, isPrimary = true)
                 }
 
+                val chevronRotation by animateFloatAsState(
+                    targetValue = if (isExpanded) 180f else 0f,
+                    animationSpec = AppMotionScheme.fastSpatialSpec(),
+                    label = "subjectChevronRotation"
+                )
                 Icon(
-                    imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    imageVector = Icons.Default.ExpandMore,
                     contentDescription = if (isExpanded) "Свернуть" else "Подробности",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.graphicsLayer { rotationZ = chevronRotation }
                 )
             }
 

@@ -6,6 +6,7 @@ import com.mguuschedule.model.EduGroup
 import com.mguuschedule.model.GroupRatingPage
 import com.mguuschedule.model.StudentRating
 import com.mguuschedule.model.SubjectScore
+import com.mguuschedule.util.AppLogger
 import com.mguuschedule.util.SearchEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -16,6 +17,8 @@ import java.net.URLEncoder
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
@@ -25,12 +28,38 @@ class RatingRepository(
     private val ratingDao: RatingDao
 ) {
 
+    private data class CachedYearsData(
+        val years: List<AcademicPeriod>,
+        val defaultYearId: String,
+        val fetchedAtMs: Long
+    )
+
     companion object {
-        private const val API_BASE = "https://api.lk-upm.ru"
-        private const val USER_AGENT = "Mozilla/5.0 (Android 14; Mobile; rv:120.0) Gecko/120.0 Firefox/120.0"
+        const val RATING_API_BASE = "https://schedule.mguu.ru/api/v1/rating"
+        private const val RATING_ORIGIN = "https://schedule.mguu.ru"
+        private const val RATING_REFERER = "https://schedule.mguu.ru/rating"
+        private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 14; Pixel 9 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
         private const val TIMEOUT_MS = 12_000
         private const val DEFAULT_YEAR_ID = "000000033"
         private const val DEFAULT_SEM_ID = "0"
+        private const val YEARS_CACHE_TTL_MS = 10 * 60 * 1000L
+
+        private val WHITESPACE_REGEX = Regex("\\s+")
+        private val SYNC_TIME_FORMATTER = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss")
+
+        @Volatile
+        private var cachedYearsData: CachedYearsData? = null
+
+        private val TRUST_ALL_SSL_FACTORY by lazy {
+            val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
+                override fun checkClientTrusted(chain: Array<X509Certificate>?, authType: String?) {}
+                override fun checkServerTrusted(chain: Array<X509Certificate>?, authType: String?) {}
+                override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
+            })
+            SSLContext.getInstance("SSL").apply {
+                init(null, trustAllCerts, SecureRandom())
+            }.socketFactory
+        }
     }
 
     suspend fun getCachedRating(groupId: String, zachetka: String = "", yearId: String = "", semId: String = ""): RatingEntity? {
@@ -50,37 +79,100 @@ class RatingRepository(
     }
 
     /**
-     * Формирует внутренний URI запроса группы с сохранением groupId, yearId и semId.
+     * Формирует URL запроса рейтинга группы на schedule.mguu.ru с опциональными year и sem.
      */
-    fun buildGroupUrl(groupId: String, groupName: String, yearId: String? = null, semId: String? = null): String {
-        val cleanGroupId = groupId.trim()
-        val yearParam = if (!yearId.isNullOrBlank()) "&year=${yearId.trim()}" else ""
-        val semParam = if (!semId.isNullOrBlank()) "&sem=${semId.trim()}" else ""
-        return "$API_BASE/api/rating/students-by-group-id/$cleanGroupId?groupname=${URLEncoder.encode(groupName, "UTF-8")}$yearParam$semParam"
+    @Suppress("UNUSED_PARAMETER")
+    fun buildGroupUrl(groupId: String, groupName: String = "", yearId: String? = null, semId: String? = null): String {
+        val cleanGroupId = URLEncoder.encode(groupId.trim(), "UTF-8")
+        val params = mutableListOf<String>()
+        if (!yearId.isNullOrBlank()) {
+            params.add("year=${URLEncoder.encode(yearId.trim(), "UTF-8")}")
+        }
+        if (!semId.isNullOrBlank()) {
+            params.add("sem=${URLEncoder.encode(semId.trim(), "UTF-8")}")
+        }
+        val query = if (params.isNotEmpty()) "?${params.joinToString("&")}" else ""
+        return "$RATING_API_BASE/groups/$cleanGroupId/$query"
     }
 
     /**
-     * Загружает каталог групп из GET /api/groups
+     * Загружает доступные учебные годы из GET /api/v1/rating/years/ (с кэшированием в памяти).
+     */
+    private fun fetchYearsMetadata(): CachedYearsData {
+        val now = System.currentTimeMillis()
+        val cached = cachedYearsData
+        if (cached != null && (now - cached.fetchedAtMs) < YEARS_CACHE_TTL_MS) {
+            return cached
+        }
+
+        val fresh = runCatching {
+            val rawJson = fetchJson("$RATING_API_BASE/years/")
+            val root = JSONObject(rawJson)
+            val defaultCode = root.optCleanString("default").ifBlank { DEFAULT_YEAR_ID }
+            val yearsArr = root.optJSONArray("years")
+            val parsedYears = mutableListOf<AcademicPeriod>()
+            if (yearsArr != null) {
+                for (i in 0 until yearsArr.length()) {
+                    val item = yearsArr.optJSONObject(i) ?: continue
+                    val code = item.optCleanString("code")
+                    val title = normalizeText(item.optCleanString("title"))
+                    if (code.isNotEmpty() && title.isNotEmpty()) {
+                        parsedYears.add(
+                            AcademicPeriod(
+                                id = code,
+                                title = title,
+                                isSelected = code == defaultCode
+                            )
+                        )
+                    }
+                }
+            }
+            val sortedYears = parsedYears.sortedByDescending { it.title }
+            if (sortedYears.isNotEmpty()) {
+                CachedYearsData(sortedYears, defaultCode, now)
+            } else null
+        }.getOrNull()
+
+        if (fresh != null) {
+            cachedYearsData = fresh
+            return fresh
+        }
+
+        return cached ?: CachedYearsData(
+            years = listOf(
+                AcademicPeriod(id = "000000033", title = "2026/2027", isSelected = true),
+                AcademicPeriod(id = "000000015", title = "2025/2026", isSelected = false)
+            ),
+            defaultYearId = DEFAULT_YEAR_ID,
+            fetchedAtMs = now
+        )
+    }
+
+    /**
+     * Загружает каталог групп БРС из GET /api/v1/rating/groups/
      */
     suspend fun parseMasterGroupsCatalogue(url: String = ""): List<EduGroup> = withContext(Dispatchers.IO) {
         runCatching {
-            val rawJson = fetchJson("$API_BASE/api/groups")
+            val rawJson = fetchJson("$RATING_API_BASE/groups/")
             val root = JSONObject(rawJson)
-            if (!root.optBoolean("ok", false)) return@withContext emptyList()
+            val coursesArr = root.optJSONArray("courses") ?: return@withContext emptyList()
+            val result = mutableListOf<EduGroup>()
 
-            val groupsArr = root.optJSONArray("groups") ?: return@withContext emptyList()
-            val result = ArrayList<EduGroup>(groupsArr.length())
-            for (i in 0 until groupsArr.length()) {
-                val g = groupsArr.optJSONObject(i) ?: continue
-                val id = g.optString("id", "").trim()
-                val name = g.optString("name", "").trim()
-                if (id.isNotEmpty() && name.isNotEmpty()) {
-                    result.add(
-                        EduGroup(
-                            groupName = name,
-                            url = buildGroupUrl(groupId = id, groupName = name)
+            for (c in 0 until coursesArr.length()) {
+                val courseObj = coursesArr.optJSONObject(c) ?: continue
+                val groupsArr = courseObj.optJSONArray("groups") ?: continue
+                for (i in 0 until groupsArr.length()) {
+                    val g = groupsArr.optJSONObject(i) ?: continue
+                    val code = g.optCleanString("code")
+                    val name = normalizeText(g.optCleanString("name"))
+                    if (code.isNotEmpty() && name.isNotEmpty()) {
+                        result.add(
+                            EduGroup(
+                                groupName = name,
+                                url = buildGroupUrl(groupId = code, groupName = name)
+                            )
                         )
-                    )
+                    }
                 }
             }
             result
@@ -88,153 +180,178 @@ class RatingRepository(
     }
 
     /**
-     * Загружает список студентов (зачеток) группы через GET /api/rating/students-by-group-id/{groupId}
+     * Загружает список студентов (зачеток) и их сводные баллы группы через
+     * GET /api/v1/rating/groups/{groupCode}/?year=...&sem=...
      */
     suspend fun parseGroupList(url: String): GroupRatingPage = withContext(Dispatchers.IO) {
         val groupId = extractGroupIdFromUrl(url)
-        val requestedYear = extractQueryParam(url, "year")
+        val yearsMeta = fetchYearsMetadata()
+
+        val rawRequestedYear = extractQueryParam(url, "year")
+        // Совместимость со старым кодом 2025/2026 ("000000032" в api.lk-upm.ru -> "000000015" в schedule.mguu.ru)
+        val normalizedRequestedYear = when {
+            rawRequestedYear.isNullOrBlank() -> null
+            rawRequestedYear == "000000032" &&
+                yearsMeta.years.none { it.id == "000000032" } &&
+                yearsMeta.years.any { it.id == "000000015" } -> "000000015"
+            else -> rawRequestedYear
+        }
         val requestedSem = extractQueryParam(url, "sem")
 
-        val apiUrl = "$API_BASE/api/rating/students-by-group-id/$groupId"
+        val apiUrl = buildGroupUrl(
+            groupId = groupId,
+            groupName = "",
+            yearId = normalizedRequestedYear,
+            semId = requestedSem
+        )
+
         val rawJson = runCatching { fetchJson(apiUrl) }.getOrElse { e ->
-            com.mguuschedule.util.AppLogger.e("API_RATING", "Сетевая ошибка API рейтинга ($apiUrl): ${e.message}", e)
+            AppLogger.e("API_RATING", "Сетевая ошибка API рейтинга ($apiUrl): ${e.message}", e)
             throw e
         }
         val root = JSONObject(rawJson)
 
-        if (!root.optBoolean("ok", false)) {
-            val err = root.optString("details").ifBlank { root.optString("error", "Ошибка загрузки списка группы") }
-            com.mguuschedule.util.AppLogger.e("API_RATING", "Ошибка API рейтинга ($apiUrl): $err")
-            throw IllegalStateException(err)
+        val detailError = root.optCleanString("detail")
+        if (detailError.isNotEmpty() && !root.has("students")) {
+            AppLogger.e("API_RATING", "Ошибка API рейтинга ($apiUrl): $detailError")
+            throw IllegalStateException(detailError)
         }
 
-        val count = root.optInt("count", 0)
-        val version = root.optString("version", "—")
-        val updatedAt = root.optString("updatedAt", "—")
-        com.mguuschedule.util.AppLogger.d("API_RATING", "Список студентов: URL=$apiUrl, ok=true, count=$count, version=$version, updatedAt=$updatedAt")
-        com.mguuschedule.util.AppLogger.updateDiagnostics {
-            it.copy(
-                lastRatingSource = "СЕТЬ (api.lk-upm.ru)",
-                apiRatingVersion = version,
-                lastRatingSyncTime = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss"))
-            )
+        val activeYear = root.optCleanString("year")
+            .ifBlank { normalizedRequestedYear ?: yearsMeta.defaultYearId }
+        val activeSem = if (root.has("sem") && !root.isNull("sem")) {
+            root.optString("sem", DEFAULT_SEM_ID).trim().ifBlank { DEFAULT_SEM_ID }
+        } else {
+            requestedSem?.takeIf { it.isNotBlank() } ?: DEFAULT_SEM_ID
         }
 
         val studentsArr = root.optJSONArray("students")
-        val students = mutableListOf<StudentRating>()
-
-        var detectedYearFromPortal: String? = null
-        var detectedSemFromPortal: String? = null
+        val students = ArrayList<StudentRating>(studentsArr?.length() ?: 0)
 
         if (studentsArr != null) {
             for (i in 0 until studentsArr.length()) {
                 val item = studentsArr.optJSONObject(i) ?: continue
-                val studentId = item.optString("id", "").trim()
-                val zachetka = normalizeText(item.optString("name", ""))
-                val legacyUrl = item.optString("urlString", "").trim()
+                val studentCode = item.optCleanString("student_code")
+                val zachetka = normalizeText(item.optCleanString("student_number"))
+                if (zachetka.isBlank() || studentCode.isBlank()) continue
 
-                if (zachetka.isBlank() || studentId.isBlank()) continue
+                val module1 = parseNullableFloat(item.optCleanString("semester_points"))
+                val module2 = parseNullableFloat(item.optCleanString("answer_points"))
+                val totalScore = parseNullableFloat(item.optCleanString("rating"))
 
-                if (detectedYearFromPortal == null && legacyUrl.isNotEmpty()) {
-                    detectedYearFromPortal = extractQueryParam(legacyUrl, "year")
-                    detectedSemFromPortal = extractQueryParam(legacyUrl, "sem")
-                }
-
-                val effectiveYear = requestedYear?.takeIf { it.isNotBlank() }
-                    ?: detectedYearFromPortal?.takeIf { it.isNotBlank() }
-                    ?: DEFAULT_YEAR_ID
-                val effectiveSem = requestedSem?.takeIf { it.isNotBlank() }
-                    ?: detectedSemFromPortal?.takeIf { it.isNotBlank() }
-                    ?: DEFAULT_SEM_ID
-
-                val detailApiUrl = "$API_BASE/api/rating/detail/$studentId?year=$effectiveYear&sem=$effectiveSem"
+                val encodedStudentCode = URLEncoder.encode(studentCode, "UTF-8")
+                val detailApiUrl = "$RATING_API_BASE/students/$encodedStudentCode/?year=$activeYear&sem=$activeSem"
 
                 students.add(
                     StudentRating(
                         zachetka = zachetka,
-                        module1 = null,
-                        module2 = null,
-                        totalScore = null,
+                        module1 = module1,
+                        module2 = module2,
+                        totalScore = totalScore,
                         detailUrl = detailApiUrl
                     )
                 )
             }
         }
 
-        val activeYear = requestedYear?.takeIf { it.isNotBlank() }
-            ?: detectedYearFromPortal?.takeIf { it.isNotBlank() }
-            ?: DEFAULT_YEAR_ID
-        val activeSem = requestedSem?.takeIf { it.isNotBlank() }
-            ?: detectedSemFromPortal?.takeIf { it.isNotBlank() }
-            ?: DEFAULT_SEM_ID
-
-        val years = listOf(
-            AcademicPeriod(id = "000000033", title = "2026/2027", isSelected = activeYear == "000000033"),
-            AcademicPeriod(id = "000000032", title = "2025/2026", isSelected = activeYear == "000000032")
+        AppLogger.d(
+            "API_RATING",
+            "Список студентов: URL=$apiUrl, count=${students.size}, year=$activeYear, sem=$activeSem"
         )
+        AppLogger.updateDiagnostics {
+            it.copy(
+                lastRatingSource = "СЕТЬ (schedule.mguu.ru)",
+                apiRatingVersion = "v1 ($activeYear / сем.$activeSem)",
+                lastRatingSyncTime = LocalDateTime.now().format(SYNC_TIME_FORMATTER)
+            )
+        }
+
+        val yearsList = yearsMeta.years.map { it.copy(isSelected = it.id == activeYear) }.let { list ->
+            if (list.any { it.id == activeYear }) list
+            else list + AcademicPeriod(id = activeYear, title = activeYear, isSelected = true)
+        }
+
         val semesters = listOf(
-            AcademicPeriod(id = "0", title = "1 полугодие", isSelected = activeSem == "0"),
-            AcademicPeriod(id = "1", title = "2 полугодие", isSelected = activeSem == "1")
+            AcademicPeriod(id = "0", title = "Осенний семестр", isSelected = activeSem == "0"),
+            AcademicPeriod(id = "1", title = "Весенний семестр", isSelected = activeSem == "1")
         )
 
         GroupRatingPage(
             students = students,
-            availableYears = years,
+            availableYears = yearsList,
             availableSemesters = semesters
         )
     }
 
     /**
-     * Загружает дисциплины студента через GET /api/rating/detail/{studentId}?year=...&sem=...
-     * Поддерживает автоматическую конвертацию старых ссылок portal.mguu.ru из кэша!
+     * Загружает дисциплины студента через GET /api/v1/rating/students/{studentCode}/?year=...&sem=...
+     * Поддерживает автоматическую конвертацию старых ссылок api.lk-upm.ru и portal.mguu.ru из кэша.
      */
     suspend fun parseStudentSubjects(url: String): List<SubjectScore> = withContext(Dispatchers.IO) {
         val resolvedApiUrl = normalizeToDetailApiUrl(url)
+        val studentCode = extractStudentCodeFromUrl(resolvedApiUrl)
+
         val rawJson = runCatching { fetchJson(resolvedApiUrl) }.getOrElse { e ->
-            com.mguuschedule.util.AppLogger.e("API_RATING", "Сетевая ошибка API рейтинга ($resolvedApiUrl): ${e.message}", e)
+            AppLogger.e("API_RATING", "Сетевая ошибка API рейтинга ($resolvedApiUrl): ${e.message}", e)
             throw e
         }
         val root = JSONObject(rawJson)
 
-        if (!root.optBoolean("ok", false)) {
-            val err = root.optString("details").ifBlank { root.optString("error", "Не удалось загрузить ведомость студента") }
-            com.mguuschedule.util.AppLogger.e("API_RATING", "Ошибка API рейтинга ($resolvedApiUrl): $err")
-            throw IllegalStateException(err)
+        val detailError = root.optCleanString("detail")
+        if (detailError.isNotEmpty() && !root.has("disciplines")) {
+            AppLogger.e("API_RATING", "Ошибка API рейтинга ($resolvedApiUrl): $detailError")
+            throw IllegalStateException(detailError)
         }
 
-        val count = root.optInt("count", 0)
-        val version = root.optString("version", "—")
-        val studentId = root.optString("studentID", "—")
-        com.mguuschedule.util.AppLogger.d("API_RATING", "Дисциплины студента: URL=$resolvedApiUrl, ok=true, studentId=$studentId, count=$count, version=$version")
+        val effectiveYear = root.optCleanString("year_code")
+            .ifBlank { extractQueryParam(resolvedApiUrl, "year") ?: DEFAULT_YEAR_ID }
+        val effectiveSem = if (root.has("sem") && !root.isNull("sem")) {
+            root.optString("sem", DEFAULT_SEM_ID).trim().ifBlank { DEFAULT_SEM_ID }
+        } else {
+            extractQueryParam(resolvedApiUrl, "sem") ?: DEFAULT_SEM_ID
+        }
 
-        val rowsArr = root.optJSONArray("rows") ?: return@withContext emptyList()
-        val subjects = ArrayList<SubjectScore>(rowsArr.length())
+        val disciplinesArr = root.optJSONArray("disciplines") ?: return@withContext emptyList()
+        AppLogger.d(
+            "API_RATING",
+            "Дисциплины студента: URL=$resolvedApiUrl, student=$studentCode, count=${disciplinesArr.length()}"
+        )
 
-        for (i in 0 until rowsArr.length()) {
-            val row = rowsArr.optJSONObject(i) ?: continue
-            val rawSubject = normalizeText(row.optString("subject", ""))
-            if (rawSubject.isBlank() || isHeaderOrSummaryRow(rawSubject)) continue
+        val subjects = ArrayList<SubjectScore>(disciplinesArr.length())
 
-            val explicitControlType = normalizeText(row.optString("controlType", ""))
-            val (parsedTitle, fallbackControlType) = splitSubjectAndControlType(rawSubject)
-            val finalTitle = parsedTitle.ifBlank { rawSubject }
-            val finalControlType = explicitControlType.ifBlank { fallbackControlType }
+        for (i in 0 until disciplinesArr.length()) {
+            val row = disciplinesArr.optJSONObject(i) ?: continue
+            val rawDiscipline = normalizeText(row.optCleanString("discipline"))
+            if (rawDiscipline.isBlank() || isHeaderOrSummaryRow(rawDiscipline)) continue
 
-            // ВАЖНО: пустая строка "" в JSON означает отсутствие оценки (null), а НЕ 0!
-            val semesterPoints = parseNullableFloat(row.optString("semesterPoints", ""))
-            val controlPoints = parseNullableFloat(row.optString("controlPoints", ""))
-            val explicitTotal = parseNullableFloat(row.optString("total", ""))
+            val (parsedTitle, parsedControlType) = splitSubjectAndControlType(rawDiscipline)
+            val finalTitle = parsedTitle.ifBlank { rawDiscipline }
 
-            val subjectUrl = row.optString("subjectURL", "").trim()
+            val disciplineCode = row.optCleanString("discipline_code")
+            val controlCode = row.optCleanString("control_code")
+
+            // Пустая строка "" в JSON означает отсутствие оценки (null), а НЕ 0
+            val semesterPoints = parseNullableFloat(row.optCleanString("semester_points"))
+            val answerPoints = parseNullableFloat(row.optCleanString("answer_points"))
+            val explicitTotal = parseNullableFloat(row.optCleanString("total"))
+
+            val checkpointUrl = if (studentCode.isNotBlank() && disciplineCode.isNotBlank()) {
+                val encStudent = URLEncoder.encode(studentCode, "UTF-8")
+                val encDisc = URLEncoder.encode(disciplineCode, "UTF-8")
+                val controlParam = if (controlCode.isNotBlank()) {
+                    "&control=${URLEncoder.encode(controlCode, "UTF-8")}"
+                } else ""
+                "$RATING_API_BASE/students/$encStudent/disciplines/$encDisc/?year=$effectiveYear&sem=$effectiveSem$controlParam"
+            } else ""
 
             subjects.add(
                 SubjectScore(
                     title = finalTitle,
-                    controlType = finalControlType,
+                    controlType = parsedControlType,
                     module1 = semesterPoints,
-                    module2 = controlPoints,
+                    module2 = answerPoints,
                     totalScore = explicitTotal ?: semesterPoints,
-                    detailUrl = subjectUrl
+                    detailUrl = checkpointUrl
                 )
             )
         }
@@ -243,45 +360,37 @@ class RatingRepository(
     }
 
     /**
-     * Загружает контрольные точки дисциплины через GET /api/rating/subject?url={encodedSubjectURL}
+     * Загружает контрольные точки дисциплины через
+     * GET /api/v1/rating/students/{studentCode}/disciplines/{disciplineCode}/?year=...&sem=...&control=...
      */
     suspend fun parseControlPoints(url: String): List<ControlPoint> = withContext(Dispatchers.IO) {
         runCatching {
-            if (url.isBlank()) return@withContext emptyList()
-
-            val apiUrl = if (url.startsWith("$API_BASE/api/rating/subject")) {
-                url
-            } else {
-                val encodedTarget = URLEncoder.encode(url.trim(), "UTF-8")
-                "$API_BASE/api/rating/subject?url=$encodedTarget"
-            }
-
-            val rawJson = fetchJson(apiUrl)
-            val root = JSONObject(rawJson)
-            if (!root.optBoolean("ok", false)) {
-                com.mguuschedule.util.AppLogger.e("API_RATING", "Ошибка API рейтинга ($apiUrl): ok=false")
+            val cleanUrl = url.trim()
+            if (cleanUrl.isBlank() || !cleanUrl.startsWith(RATING_API_BASE)) {
                 return@withContext emptyList()
             }
 
-            val pointsArr = root.optJSONArray("points") ?: return@withContext emptyList()
-            com.mguuschedule.util.AppLogger.d("API_RATING", "КТ дисциплины: URL=$apiUrl, ok=true, count=${pointsArr.length()}")
-            
-            val points = ArrayList<ControlPoint>(pointsArr.length())
+            val rawJson = fetchJson(cleanUrl)
+            val root = JSONObject(rawJson)
+            val checkpointsArr = root.optJSONArray("checkpoints") ?: return@withContext emptyList()
 
-            for (i in 0 until pointsArr.length()) {
-                val item = pointsArr.optJSONObject(i) ?: continue
-                val pointNameText = normalizeText(item.optString("title", ""))
-                val dateText = normalizeText(item.optString("date", ""))
-                val scoreText = item.optString("points", "")
+            AppLogger.d("API_RATING", "КТ дисциплины: URL=$cleanUrl, count=${checkpointsArr.length()}")
+
+            val points = ArrayList<ControlPoint>(checkpointsArr.length())
+
+            for (i in 0 until checkpointsArr.length()) {
+                val item = checkpointsArr.optJSONObject(i) ?: continue
+                val number = item.optInt("number", points.size + 1)
+                val dateText = normalizeText(item.optCleanString("date"))
+                val scoreText = item.optCleanString("points")
 
                 if (dateText.isBlank() || dateText == "—") continue
-                if (isHeaderOrSummaryRow(pointNameText) || isHeaderOrSummaryRow(dateText)) continue
+                if (isHeaderOrSummaryRow(dateText)) continue
 
-                // Пустая строка "" -> null (оценка еще не выставлена)
                 val score = parseNullableInt(scoreText)
                 points.add(
                     ControlPoint(
-                        pointName = pointNameText.ifBlank { "КТ ${points.size + 1}" },
+                        pointName = "КТ $number",
                         date = dateText,
                         score = score
                     )
@@ -296,22 +405,53 @@ class RatingRepository(
     }
 
     private fun extractGroupIdFromUrl(url: String): String {
-        if (url.contains("/students-by-group-id/")) {
-            return url.substringAfter("/students-by-group-id/").substringBefore("?").substringBefore("#").trim()
+        val clean = url.trim()
+        if (clean.contains("/rating/groups/")) {
+            return clean.substringAfter("/rating/groups/")
+                .substringBefore("/")
+                .substringBefore("?")
+                .substringBefore("#")
+                .let { runCatching { URLDecoder.decode(it, "UTF-8") }.getOrDefault(it) }
+                .trim()
         }
-        return extractQueryParam(url, "groupid")
-            ?: extractQueryParam(url, "group")
-            ?: url.trim()
+        if (clean.contains("/students-by-group-id/")) {
+            return clean.substringAfter("/students-by-group-id/")
+                .substringBefore("?")
+                .substringBefore("#")
+                .trim()
+        }
+        return extractQueryParam(clean, "groupid")
+            ?: extractQueryParam(clean, "group")
+            ?: clean
+    }
+
+    private fun extractStudentCodeFromUrl(url: String): String {
+        val clean = url.trim()
+        if (clean.contains("/rating/students/")) {
+            return clean.substringAfter("/rating/students/")
+                .substringBefore("/")
+                .substringBefore("?")
+                .let { runCatching { URLDecoder.decode(it, "UTF-8") }.getOrDefault(it) }
+                .trim()
+        }
+        if (clean.contains("/rating/detail/")) {
+            return clean.substringAfter("/rating/detail/")
+                .substringBefore("/")
+                .substringBefore("?")
+                .trim()
+        }
+        return extractQueryParam(clean, "userid") ?: extractQueryParam(clean, "id") ?: ""
     }
 
     private fun normalizeToDetailApiUrl(url: String): String {
         val clean = url.trim()
-        if (clean.startsWith("$API_BASE/api/rating/detail/")) return clean
+        if (clean.startsWith("$RATING_API_BASE/students/")) return clean
 
-        val userId = extractQueryParam(clean, "userid") ?: extractQueryParam(clean, "id") ?: clean
-        val year = extractQueryParam(clean, "year") ?: DEFAULT_YEAR_ID
+        val studentCode = extractStudentCodeFromUrl(clean).ifBlank { clean }
+        val rawYear = extractQueryParam(clean, "year") ?: DEFAULT_YEAR_ID
+        val year = if (rawYear == "000000032") "000000015" else rawYear
         val sem = extractQueryParam(clean, "sem") ?: DEFAULT_SEM_ID
-        return "$API_BASE/api/rating/detail/$userId?year=$year&sem=$sem"
+        return "$RATING_API_BASE/students/${URLEncoder.encode(studentCode, "UTF-8")}/?year=$year&sem=$sem"
     }
 
     private fun extractQueryParam(url: String, param: String): String? {
@@ -346,7 +486,7 @@ class RatingRepository(
     }
 
     private fun normalizeText(text: String): String {
-        return text.replace("\u00A0", " ").replace(Regex("\\s+"), " ").trim()
+        return text.replace("\u00A0", " ").replace(WHITESPACE_REGEX, " ").trim()
     }
 
     private fun parseNullableFloat(text: String?): Float? {
@@ -363,33 +503,32 @@ class RatingRepository(
         return clean.toIntOrNull() ?: clean.toFloatOrNull()?.roundToInt()
     }
 
+    private fun JSONObject.optCleanString(key: String): String {
+        if (isNull(key)) return ""
+        return optString(key, "").trim()
+    }
+
     private fun fetchJson(url: String): String {
         val start = System.currentTimeMillis()
-        com.mguuschedule.util.AppLogger.d("API_REQ", "GET $url")
+        AppLogger.d("API_REQ", "GET $url")
 
         val connection = Jsoup.connect(url)
             .ignoreContentType(true)
             .userAgent(USER_AGENT)
-            .referrer("https://lk-upm.ru/")
-            .header("Origin", "https://lk-upm.ru")
+            .referrer(RATING_REFERER)
+            .header("Origin", RATING_ORIGIN)
             .header("Accept", "application/json")
             .header("Accept-Language", "ru-RU,ru;q=0.9")
             .timeout(TIMEOUT_MS)
             .followRedirects(true)
 
-        try {
-            val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
-                override fun checkClientTrusted(chain: Array<X509Certificate>?, authType: String?) {}
-                override fun checkServerTrusted(chain: Array<X509Certificate>?, authType: String?) {}
-                override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
-            })
-            val sslContext = SSLContext.getInstance("SSL").apply { init(null, trustAllCerts, SecureRandom()) }
-            connection.sslSocketFactory(sslContext.socketFactory)
-        } catch (e: Exception) { }
+        runCatching {
+            connection.sslSocketFactory(TRUST_ALL_SSL_FACTORY)
+        }
 
         val body = connection.execute().body()
         val duration = System.currentTimeMillis() - start
-        com.mguuschedule.util.AppLogger.d("API_RES", "GET $url -> ${duration}мс (${body.length} символов)")
+        AppLogger.d("API_RES", "GET $url -> ${duration}мс (${body.length} символов)")
         return body
     }
 }

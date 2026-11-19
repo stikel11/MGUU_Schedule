@@ -44,8 +44,6 @@ import com.mguuschedule.ui.components.TopScrimProtection
 import com.mguuschedule.ui.components.WeekCalendar
 import com.mguuschedule.ui.theme.AppMotionScheme
 import com.mguuschedule.util.ScheduleImageRenderer
-import dev.chrisbanes.haze.hazeSource
-import dev.chrisbanes.haze.rememberHazeState
 import com.mguuschedule.util.formatClassroom
 import com.mguuschedule.util.rememberHapticFeedback
 import kotlinx.coroutines.delay
@@ -70,13 +68,13 @@ fun ScheduleScreen(
     val isRefreshing = viewModel.isRefreshing
     val isOnline by viewModel.isOnline.collectAsState()
     val activeAddonLessonKeys by viewModel.activeAddonLessonKeys.collectAsState()
+    val addonsMap by viewModel.lessonAddonSummaries.collectAsState()
     val lessonControlPointsMap by viewModel.lessonControlPointsFlow.collectAsState()
     val haptic = rememberHapticFeedback()
     val context = LocalContext.current
     val isDarkTheme = isSystemInDarkTheme()
     
     val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
     
     val currentDate = remember { LocalDate.now() }
     
@@ -87,9 +85,8 @@ fun ScheduleScreen(
         }
     }
 
-            val listState = rememberLazyListState()
+    val listState = rememberLazyListState()
     val lessons by viewModel.lessonsForSelectedDay.collectAsState()
-    val hazeState = rememberHazeState()
 
     val scrollToTopTrigger by viewModel.scrollToTopTrigger.collectAsState()
     LaunchedEffect(scrollToTopTrigger) {
@@ -100,9 +97,7 @@ fun ScheduleScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
-            modifier = Modifier
-                .fillMaxSize()
-                .hazeSource(hazeState),
+            modifier = Modifier.fillMaxSize(),
             snackbarHost = { SnackbarHost(snackbarHostState) },
             containerColor = Color.Transparent
         ) { innerPadding ->
@@ -127,7 +122,7 @@ fun ScheduleScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     // Item 0: Uniform CollapsibleScreenTitle ("Расписание")
-                    item {
+                    item(key = "schedule_title", contentType = "title") {
                         CollapsibleScreenTitle(
                             title = "Расписание",
                             modifier = Modifier.padding(horizontal = 16.dp)
@@ -135,7 +130,7 @@ fun ScheduleScreen(
                     }
 
                     // Item 1: WeekCalendar
-                    item {
+                    item(key = "week_calendar", contentType = "calendar") {
                         WeekCalendar(
                             selectedDate = selectedDate,
                             onDateSelected = { viewModel.onDateSelected(it) },
@@ -158,17 +153,21 @@ fun ScheduleScreen(
 
                     // Item 2: Offline banner if offline
                     if (!isOnline) {
-                        item {
+                        item(key = "offline_banner", contentType = "banner") {
                             OfflineBanner()
                         }
                     }
 
                     // Items 3..N: Schedule lessons or loading/error/empty states wrapped in AnimatedContent
-                    item {
+                    item(key = "schedule_content", contentType = "day_content") {
+                        val daySnapshot = remember(selectedDate, lessons) {
+                            selectedDate to lessons
+                        }
                         AnimatedContent(
-                            targetState = selectedDate,
+                            targetState = daySnapshot,
+                            contentKey = { it.first },
                             transitionSpec = {
-                                val isForward = targetState.isAfter(initialState)
+                                val isForward = targetState.first.isAfter(initialState.first)
                                 val slideDir = if (isForward) 1 else -1
                                 (slideInHorizontally(
                                     animationSpec = AppMotionScheme.defaultSpatialSpec(),
@@ -183,8 +182,7 @@ fun ScheduleScreen(
                                     .using(SizeTransform(clip = false))
                             },
                             label = "day_spatial_transition"
-                        ) { targetDate ->
-                            val lessonsForTargetDate = if (targetDate == selectedDate) lessons else emptyList()
+                        ) { (_, lessonsForTargetDate) ->
                             
                             Column(
                                 modifier = Modifier.fillMaxWidth(),
@@ -239,7 +237,6 @@ fun ScheduleScreen(
                                 } else if (lessonsForTargetDate.isEmpty()) {
                                     EmptySchedule()
                                 } else {
-                                    val addonsMap by viewModel.lessonAddonSummaries.collectAsState()
                                     lessonsForTargetDate.forEachIndexed { index, lesson ->
                                         val lessonKey = "${lesson.date}_${lesson.number}_${lesson.startTime}"
                                         val linkedCps = lessonControlPointsMap[lessonKey] ?: emptyList()
@@ -418,11 +415,12 @@ fun LessonRow(
     controlPoints: List<ControlPoint> = emptyList(),
     onClick: () -> Unit
 ) {
-    val currentTime = currentTimeProvider()
+    // Читаем currentTimeProvider() ТОЛЬКО для сегодняшних пар, чтобы пары других дней не подписывались на минутный тикер
+    val currentTime = if (lesson.date == currentDate) currentTimeProvider() else null
     val status = when {
         currentDate.isAfter(lesson.date) -> LessonStatus.PAST
         currentDate.isBefore(lesson.date) -> LessonStatus.UPCOMING
-        currentTime.isAfter(lesson.endTime) -> LessonStatus.PAST
+        currentTime!!.isAfter(lesson.endTime) -> LessonStatus.PAST
         currentTime.isBefore(lesson.startTime) -> LessonStatus.UPCOMING
         else -> LessonStatus.CURRENT
     }
@@ -496,7 +494,7 @@ fun LessonRow(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .animateContentSize(animationSpec = spring(dampingRatio = 0.82f, stiffness = 260f)),
+                .animateContentSize(animationSpec = AppMotionScheme.defaultSpatialSpec()),
             shape = RoundedCornerShape(24.dp),
             color = containerColor,
             contentColor = contentColor,
@@ -676,8 +674,8 @@ fun LessonRow(
                 // --- BENTO ADDONS FOOTER: BLOCK 1 (Tasks & Notes) ---
                 AnimatedVisibility(
                     visible = revealStep >= 1 && (hasFirstBlock || hasSecondBlock),
-                    enter = expandVertically(spring(0.82f, 260f)) + fadeIn(),
-                    exit = shrinkVertically(spring(0.85f, 260f)) + fadeOut()
+                    enter = expandVertically(AppMotionScheme.defaultSpatialSpec()) + fadeIn(AppMotionScheme.fastEffectsSpec()),
+                    exit = shrinkVertically(AppMotionScheme.defaultSpatialSpec()) + fadeOut(AppMotionScheme.fastEffectsSpec())
                 ) {
                     val bentoCardBg = MaterialTheme.colorScheme.surfaceContainerHighest
 
@@ -771,8 +769,8 @@ fun LessonRow(
                 // --- BENTO ADDONS FOOTER: BLOCK 2 (Materials) ---
                 AnimatedVisibility(
                     visible = revealStep >= 2 && hasSecondBlock,
-                    enter = expandVertically(spring(0.82f, 260f)) + fadeIn(),
-                    exit = shrinkVertically(spring(0.85f, 260f)) + fadeOut()
+                    enter = expandVertically(AppMotionScheme.defaultSpatialSpec()) + fadeIn(AppMotionScheme.fastEffectsSpec()),
+                    exit = shrinkVertically(AppMotionScheme.defaultSpatialSpec()) + fadeOut(AppMotionScheme.fastEffectsSpec())
                 ) {
                     val materials = addonSummary?.materials ?: emptyList()
 

@@ -31,13 +31,17 @@ import com.mguuschedule.model.SubjectScore
 import com.mguuschedule.model.toLesson
 import com.mguuschedule.repository.LessonAddonSummary
 import com.mguuschedule.repository.LessonMaterialEntity
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.roundToInt
+
+private val ROOM_API_DATE_FORMATTER = DateTimeFormatter.ofPattern("dd.MM.yyyy")
 
 /**
  * 1. ГЛАВНЫЙ ХАБ «РАЗДЕЛЫ»
@@ -51,10 +55,13 @@ fun SectionsScreen(
     onOpenMaterials: () -> Unit,
     onOpenAttendance: () -> Unit,
     onOpenFreeRooms: () -> Unit,
+    onOpenMoodle: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
     val context = LocalContext.current
-    var showMoodleSheet by remember { mutableStateOf(false) }
+    val isMoodleConnected = remember {
+        com.mguuschedule.repository.MoodleRepository.hasSavedSession(context)
+    }
 
     val totalMaterialsCount = remember(addonSummaries) {
         addonSummaries.values.sumOf { it.materials.size }
@@ -181,67 +188,13 @@ fun SectionsScreen(
             item {
                 SectionHubCard(
                     title = "СДО Moodle",
-                    subtitle = "Быстрый доступ к учебному порталу и курсам университета",
-                    badgeText = "Скоро",
-                    icon = Icons.Rounded.Language,
-                    iconContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                    iconTint = MaterialTheme.colorScheme.primary,
-                    onClick = { showMoodleSheet = true }
+                    subtitle = "Курсы, задания, оценки и веб-портал online.mguu.ru",
+                    badgeText = if (isMoodleConnected) "Онлайн" else "Вход",
+                    icon = Icons.Rounded.School,
+                    iconContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                    iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    onClick = onOpenMoodle
                 )
-            }
-        }
-    }
-
-    if (showMoodleSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showMoodleSheet = false },
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 16.dp)
-                    .navigationBarsPadding(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(22.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    modifier = Modifier.size(60.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Rounded.School,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(30.dp)
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "СДО Moodle",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "В ближайших обновлениях здесь появится встроенный клиент СДО МГУУ с сохранением сессии и быстрым прикреплением файлов к парам.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(20.dp))
-                Button(
-                    onClick = { showMoodleSheet = false },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
-                    shape = RoundedCornerShape(26.dp)
-                ) {
-                    Text("Понятно", fontWeight = FontWeight.SemiBold)
-                }
             }
         }
     }
@@ -513,7 +466,11 @@ fun CurriculumScreen(
                 )
             }
 
-            items(filteredDisciplines, key = { it.title }) { item ->
+            items(
+                items = filteredDisciplines,
+                key = { it.title },
+                contentType = { "discipline" }
+            ) { item ->
                 val isExam = item.controlType.contains("экз", ignoreCase = true)
 
                 Surface(
@@ -827,7 +784,7 @@ fun MaterialsHubScreen(
                 }
             } else {
                 groupedBySubject.forEach { (subjectTitle, itemsForSubject) ->
-                    item(key = "subject_$subjectTitle") {
+                    item(key = "subject_$subjectTitle", contentType = "subject_materials") {
                         Surface(
                             shape = RoundedCornerShape(24.dp),
                             color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -1233,7 +1190,11 @@ fun AttendanceScreen(
             }
 
             // Карточки дисциплин
-            items(subjectStats, key = { it.first }) { (subjectTitle, counts, percent) ->
+            items(
+                items = subjectStats,
+                key = { it.first },
+                contentType = { "subject_stat" }
+            ) { (subjectTitle, counts, percent) ->
                 val isLow = percent < 50
                 val badgeBg = if (isLow) MaterialTheme.colorScheme.errorContainer
                 else MaterialTheme.colorScheme.primaryContainer
@@ -1328,7 +1289,11 @@ fun AttendanceScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(bottom = 20.dp)
                 ) {
-                    items(subjectLessons, key = { "${it.date}_${it.number}_${it.startTime}" }) { lesson ->
+                    items(
+                        items = subjectLessons,
+                        key = { "${it.date}_${it.number}_${it.startTime}" },
+                        contentType = { "attendance_lesson" }
+                    ) { lesson ->
                         val attended = isLessonAttended(lesson)
                         val pillBg = if (attended) MaterialTheme.colorScheme.primaryContainer
                         else MaterialTheme.colorScheme.errorContainer
@@ -1401,29 +1366,36 @@ fun FreeRoomsScreen(onBack: () -> Unit) {
     val haptic = com.mguuschedule.util.rememberHapticFeedback()
 
     fun loadRooms() {
-        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+        val campus = selectedCampus
+        scope.launch {
             isLoading = true
             errorMsg = null
             try {
-                val url = "https://api.lk-upm.ru/api/rooms/free?campus=$selectedCampus"
-                val response = org.jsoup.Jsoup.connect(url).ignoreContentType(true).execute().body()
-                val root = org.json.JSONObject(response)
-                
-                if (root.has("ok") && !root.optBoolean("ok")) {
-                    errorMsg = "Ошибка API"
-                    return@launch
+                val result = withContext(Dispatchers.IO) {
+                    val url = "https://api.lk-upm.ru/api/rooms/free?campus=$campus"
+                    val response = org.jsoup.Jsoup.connect(url).ignoreContentType(true).execute().body()
+                    val root = org.json.JSONObject(response)
+
+                    if (root.has("ok") && !root.optBoolean("ok")) {
+                        return@withContext null
+                    }
+
+                    val array = root.optJSONArray("rooms") ?: root.optJSONArray("freeRooms") ?: root.optJSONArray("items") ?: root.optJSONArray("data")
+                    if (array != null) {
+                        val list = ArrayList<org.json.JSONObject>(array.length())
+                        for (i in 0 until array.length()) {
+                            array.optJSONObject(i)?.let { list.add(it) }
+                        }
+                        list
+                    } else {
+                        emptyList()
+                    }
                 }
 
-                // Пытаемся найти массив в корне
-                val array = root.optJSONArray("rooms") ?: root.optJSONArray("freeRooms") ?: root.optJSONArray("items") ?: root.optJSONArray("data")
-                if (array != null) {
-                    val list = mutableListOf<org.json.JSONObject>()
-                    for (i in 0 until array.length()) {
-                        array.optJSONObject(i)?.let { list.add(it) }
-                    }
-                    rooms = list
+                if (result == null) {
+                    errorMsg = "Ошибка API"
                 } else {
-                    rooms = emptyList()
+                    rooms = result
                 }
             } catch (e: Exception) {
                 errorMsg = e.message
@@ -1604,7 +1576,11 @@ fun FreeRoomsScreen(onBack: () -> Unit) {
                     Text("Аудитории не найдены", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp))
                 }
             } else {
-                items(filteredRooms, key = { it.optString("room") }) { roomObj ->
+                items(
+                    items = filteredRooms,
+                    key = { it.optString("room") },
+                    contentType = { "room" }
+                ) { roomObj ->
                     val roomName = roomObj.optString("room", "")
                     val freeUntil = roomObj.optString("freeUntil", "")
                     val lessonsToday = roomObj.optInt("lessonsToday", 0)
@@ -1693,19 +1669,20 @@ fun FreeRoomsScreen(onBack: () -> Unit) {
         LaunchedEffect(roomName) {
             roomLoading = true
             try {
-                val todayStr = LocalDate.now().format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
-                val weekLaterStr = LocalDate.now().plusDays(7).format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
-                val encodedRoom = java.net.URLEncoder.encode(roomName, "UTF-8")
-                
-                val url = "https://api.lk-upm.ru/api/room?name=$encodedRoom&from=$todayStr&to=$weekLaterStr"
-                val response = org.jsoup.Jsoup.connect(url).ignoreContentType(true).execute().body()
-                
-                val entities = com.mguuschedule.util.ScheduleParser.parse(response)
-                roomLessons = entities.mapNotNull {
-                    // Reflection fallback to bypass unresolved import temporarily
-                    val toLessonMethod = Class.forName("com.mguuschedule.model.LessonMappersKt").getMethod("toLesson", com.mguuschedule.model.LessonEntity::class.java)
-                    toLessonMethod.invoke(null, it) as? Lesson
-                }.sortedWith(compareBy<Lesson> { it.date }.thenBy { it.startTime })
+                val loaded = withContext(Dispatchers.IO) {
+                    val today = LocalDate.now()
+                    val todayStr = today.format(ROOM_API_DATE_FORMATTER)
+                    val weekLaterStr = today.plusDays(7).format(ROOM_API_DATE_FORMATTER)
+                    val encodedRoom = java.net.URLEncoder.encode(roomName, "UTF-8")
+
+                    val url = "https://api.lk-upm.ru/api/room?name=$encodedRoom&from=$todayStr&to=$weekLaterStr"
+                    val response = org.jsoup.Jsoup.connect(url).ignoreContentType(true).execute().body()
+
+                    com.mguuschedule.util.ScheduleParser.parse(response)
+                        .mapNotNull { it.toLesson() }
+                        .sortedWith(compareBy<Lesson> { it.date }.thenBy { it.startTime })
+                }
+                roomLessons = loaded
             } catch (e: Exception) {
                 roomLessons = emptyList()
             } finally {
@@ -1744,7 +1721,11 @@ fun FreeRoomsScreen(onBack: () -> Unit) {
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         contentPadding = PaddingValues(bottom = 20.dp)
                     ) {
-                        items(roomLessons!!) { lesson ->
+                        items(
+                            items = roomLessons!!,
+                            key = { "${it.date}_${it.number}_${it.startTime}_${it.title}" },
+                            contentType = { "room_lesson" }
+                        ) { lesson ->
                             Surface(
                                 shape = RoundedCornerShape(18.dp),
                                 color = MaterialTheme.colorScheme.surfaceContainerHighest,

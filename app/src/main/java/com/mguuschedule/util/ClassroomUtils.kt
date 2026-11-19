@@ -1,7 +1,9 @@
 package com.mguuschedule.util
 
+private val ROOM_PREFIX_REGEX = Regex("^(?i)(ауд\\.?\\s*)+")
+
 fun formatRoomBadge(rawRoom: String, compact: Boolean = true): String {
-    val clean = rawRoom.replace(Regex("^(?i)(ауд\\.?\\s*)+"), "").trim()
+    val clean = rawRoom.replace(ROOM_PREFIX_REGEX, "").trim()
     
     if (clean.contains("выезд", ignoreCase = true)) {
         return if (compact) "Выезд" else "Выездное занятие"

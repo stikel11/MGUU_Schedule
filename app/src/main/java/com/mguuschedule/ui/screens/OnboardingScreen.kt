@@ -212,7 +212,7 @@ fun OnboardingContent(
                         groupedGroups.forEach { (course, groups) ->
                             val isExpanded = expandedCourses[course] ?: (searchQuery.isNotEmpty())
                             
-                            item(key = course) {
+                            item(key = "course_$course", contentType = "course_header") {
                                 Surface(
                                     onClick = {
                                         haptic.lightTick()
@@ -243,7 +243,11 @@ fun OnboardingContent(
                             }
 
                             if (isExpanded) {
-                                items(groups, key = { it.id }) { group ->
+                                items(
+                                    items = groups,
+                                    key = { it.id },
+                                    contentType = { "group" }
+                                ) { group ->
                                     Card(
                                         modifier = Modifier
                                             .fillMaxWidth()

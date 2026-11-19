@@ -28,7 +28,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import java.time.LocalDate
 
@@ -52,14 +52,22 @@ class SearchViewModel(
     private val _selectedFilter = MutableStateFlow("Все")
     val selectedFilter = _selectedFilter.asStateFlow()
 
-    private val gson = Gson()
+    companion object {
+        private val gson = Gson()
+        private val FLOOR_DIGIT_REGEX = Regex("([1-5])\\d{2}")
+        private val CONTROL_POINTS_MAP_TYPE = object : TypeToken<Map<String, List<ControlPoint>>>() {}.type
+    }
+
+    // Преобразование и дедупликация уроков выполняются один раз при изменении БД, а не на каждый символ поиска
+    private val deduplicatedLessonsFlow = scheduleRepository.getAllLessonsFlow()
+        .map { entities -> SearchEngine.deduplicateLessons(entities.mapNotNull { it.toLesson() }) }
+        .flowOn(Dispatchers.Default)
 
     val uiState: StateFlow<SearchUiState> = combine(
         _query.debounce(250).distinctUntilChanged(),
         _selectedFilter,
-        scheduleRepository.getAllLessonsFlow()
-    ) { rawQuery, filter, lessonEntities ->
-        val lessons = SearchEngine.deduplicateLessons(lessonEntities.mapNotNull { it.toLesson() })
+        deduplicatedLessonsFlow
+    ) { rawQuery, filter, lessons ->
 
         if (rawQuery.isBlank()) {
             return@combine SearchUiState(query = rawQuery, selectedFilter = filter, results = emptyList())
@@ -109,7 +117,8 @@ class SearchViewModel(
                     val cachedProfile = teacherRepository.getCachedTeacherProfile(teacherName)
                     results.add(SearchResultItem.TeacherCard(teacherName, cachedProfile))
 
-                    val teacherLessons = lessons.filter { SearchEngine.normalize(it.teacher) == SearchEngine.normalize(teacherName) }
+                    val normTargetTeacher = SearchEngine.normalize(teacherName)
+                    val teacherLessons = lessons.filter { SearchEngine.normalize(it.teacher) == normTargetTeacher }
                     val sorted = SearchEngine.sortLessonsByRelevanceAndDate(teacherLessons, initialTokens)
                     if (sorted.isNotEmpty()) {
                         results.add(SearchResultItem.SectionHeader("Занятия преподавателя"))
@@ -125,11 +134,12 @@ class SearchViewModel(
                 }?.room
 
                 if (room != null) {
-                    val floorDigitStr = Regex("([1-5])\\d{2}").find(room)?.groupValues?.get(1) ?: ""
+                    val floorDigitStr = FLOOR_DIGIT_REGEX.find(room)?.groupValues?.get(1) ?: ""
                     val floorResId = getFloorImageResId(room)
                     results.add(SearchResultItem.RoomCard(room, floorDigitStr, floorResId))
 
-                    val roomLessons = lessons.filter { SearchEngine.normalize(it.room).contains(SearchEngine.normalize(room)) }
+                    val normTargetRoom = SearchEngine.normalize(room)
+                    val roomLessons = lessons.filter { SearchEngine.normalize(it.room).contains(normTargetRoom) }
                     val sorted = SearchEngine.sortLessonsByRelevanceAndDate(roomLessons, initialTokens)
                     if (sorted.isNotEmpty()) {
                         results.add(SearchResultItem.SectionHeader("Занятия в аудитории $room"))
@@ -145,7 +155,8 @@ class SearchViewModel(
                     val cachedProfile = teacherRepository.getCachedTeacherProfile(matchedTeacherName)
                     results.add(SearchResultItem.TeacherCard(matchedTeacherName, cachedProfile))
 
-                    var teacherLessons = lessons.filter { SearchEngine.normalize(it.teacher) == SearchEngine.normalize(matchedTeacherName) }
+                    val normMatchedTeacher = SearchEngine.normalize(matchedTeacherName)
+                    var teacherLessons = lessons.filter { SearchEngine.normalize(it.teacher) == normMatchedTeacher }
                     if (parsedDate != null) {
                         teacherLessons = teacherLessons.filter { it.date.isEqual(parsedDate) }
                     }
@@ -157,11 +168,12 @@ class SearchViewModel(
                 }
                 // Б. Аудитория
                 else if (parsedRoom != null && !isCpIntent) {
-                    val floorDigitStr = Regex("([1-5])\\d{2}").find(parsedRoom)?.groupValues?.get(1) ?: ""
+                    val floorDigitStr = FLOOR_DIGIT_REGEX.find(parsedRoom)?.groupValues?.get(1) ?: ""
                     val floorResId = getFloorImageResId(parsedRoom)
                     results.add(SearchResultItem.RoomCard(parsedRoom, floorDigitStr, floorResId))
 
-                    var roomLessons = lessons.filter { SearchEngine.normalize(it.room).contains(SearchEngine.normalize(parsedRoom)) }
+                    val normParsedRoom = SearchEngine.normalize(parsedRoom)
+                    var roomLessons = lessons.filter { SearchEngine.normalize(it.room).contains(normParsedRoom) }
                     if (parsedDate != null) {
                         roomLessons = roomLessons.filter { it.date.isEqual(parsedDate) }
                     }
@@ -180,9 +192,8 @@ class SearchViewModel(
                     }
                     
                     if (cacheEntity != null) {
-                        val cpType = object : TypeToken<Map<String, List<ControlPoint>>>() {}.type
                         val pointsMap: Map<String, List<ControlPoint>> = runCatching {
-                            gson.fromJson<Map<String, List<ControlPoint>>>(cacheEntity.controlPointsJson, cpType)
+                            gson.fromJson<Map<String, List<ControlPoint>>>(cacheEntity.controlPointsJson, CONTROL_POINTS_MAP_TYPE)
                         }.getOrDefault(emptyMap())
 
                         val matchedCps = mutableListOf<SearchResultItem.ControlPointCard>()

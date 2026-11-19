@@ -212,7 +212,11 @@ class TeacherRepository(private val context: Context) {
 
     private fun normalizeName(name: String): String {
         return name.replace("\u00A0", " ")
-            .replace(Regex("\\s+"), " ")
+            .replace(WHITESPACE_REGEX, " ")
             .trim()
+    }
+
+    companion object {
+        private val WHITESPACE_REGEX = Regex("\\s+")
     }
 }

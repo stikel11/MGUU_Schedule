@@ -56,10 +56,33 @@ sealed class SearchResultItem {
 object SearchEngine {
 
     private val localeRu = Locale("ru")
+    private val gson = Gson()
+    private val SUBJECTS_LIST_TYPE = object : TypeToken<List<SubjectScore>>() {}.type
+    private val CONTROL_POINTS_MAP_TYPE = object : TypeToken<Map<String, List<ControlPoint>>>() {}.type
     private val NORMALIZE_CHAR_REGEX = Regex("[^a-zа-я0-9\\s./\\-]")
     private val WHITESPACE_REGEX = Regex("\\s+")
     private val SUBJECT_TYPE_SUFFIX_REGEX = Regex(",\\s*(лекция|семинар|практика|лаб|лабораторная|экзамен|зачет).*$", RegexOption.IGNORE_CASE)
     private val SUBJECT_CHAR_REGEX = Regex("[^a-zа-я0-9\\s]")
+    private val BASE_YEAR_REGEX = Regex("^(\\d{4})")
+    private val DATE_REGEX = Regex("^(\\d{1,2})[./\\-](\\d{1,2})(?:[./\\-](\\d{2,4}))?$")
+    private val ROOM_REGEX = Regex("^(?:ауд|аудитория)?\\.?\\s*([1-5]\\d{2}[а-я]?)$", RegexOption.IGNORE_CASE)
+    private val SIMPLE_NUM_REGEX = Regex("^([1-5]\\d{2}[а-я]?)$")
+    private val ROOM_KEYWORDS = setOf("ауд", "аудитория", "кабинет")
+    private val CP_KEYWORDS = setOf("кт", "контрольная", "точка", "контрольные", "модуль")
+    private val MONTH_MAP = mapOf(
+        "января" to 1, "январь" to 1,
+        "февраля" to 2, "февраль" to 2,
+        "марта" to 3, "март" to 3,
+        "апреля" to 4, "апрель" to 4,
+        "мая" to 5, "май" to 5,
+        "июня" to 6, "июнь" to 6,
+        "июля" to 7, "июль" to 7,
+        "августа" to 8, "август" to 8,
+        "сентября" to 9, "сентябрь" to 9,
+        "октября" to 10, "октябрь" to 10,
+        "ноября" to 11, "ноябрь" to 11,
+        "декабря" to 12, "декабрь" to 12
+    )
 
     fun normalize(text: String): String {
         return text.lowercase(Locale.ROOT)
@@ -100,15 +123,12 @@ object SearchEngine {
         lessons: List<Lesson>,
         ratingEntity: RatingEntity
     ): Map<String, List<ControlPoint>> {
-        val gson = Gson()
-        val subjectsType = object : TypeToken<List<SubjectScore>>() {}.type
         val subjects: List<SubjectScore> = runCatching {
-            gson.fromJson<List<SubjectScore>>(ratingEntity.subjectsJson, subjectsType)
+            gson.fromJson<List<SubjectScore>>(ratingEntity.subjectsJson, SUBJECTS_LIST_TYPE)
         }.getOrDefault(emptyList())
 
-        val pointsMapType = object : TypeToken<Map<String, List<ControlPoint>>>() {}.type
         val controlPointsMap: Map<String, List<ControlPoint>> = runCatching {
-            gson.fromJson<Map<String, List<ControlPoint>>>(ratingEntity.controlPointsJson, pointsMapType)
+            gson.fromJson<Map<String, List<ControlPoint>>>(ratingEntity.controlPointsJson, CONTROL_POINTS_MAP_TYPE)
         }.getOrDefault(emptyMap())
 
         if (subjects.isEmpty() || controlPointsMap.isEmpty()) return emptyMap()
@@ -123,7 +143,7 @@ object SearchEngine {
         val allParsedCPs = mutableListOf<ParsedCP>()
         
         // Определяем базовый год из yearId (например "2026_2027")
-        val baseYear = Regex("^(\\d{4})").find(ratingEntity.yearId)?.groupValues?.get(1)?.toIntOrNull() ?: LocalDate.now().year
+        val baseYear = BASE_YEAR_REGEX.find(ratingEntity.yearId)?.groupValues?.get(1)?.toIntOrNull() ?: LocalDate.now().year
 
         subjects.forEach { subject ->
             val points = controlPointsMap[subject.detailUrl] ?: emptyList()
@@ -244,9 +264,8 @@ object SearchEngine {
             }
         }
 
-        val dateRegex = Regex("^(\\d{1,2})[./\\-](\\d{1,2})(?:[./\\-](\\d{2,4}))?$")
         for (token in tokens) {
-            val match = dateRegex.find(token)
+            val match = DATE_REGEX.find(token)
             if (match != null) {
                 val day = match.groupValues[1].toIntOrNull() ?: continue
                 val month = match.groupValues[2].toIntOrNull() ?: continue
@@ -265,24 +284,9 @@ object SearchEngine {
             }
         }
 
-        val monthMap = mapOf(
-            "января" to 1, "январь" to 1,
-            "февраля" to 2, "февраль" to 2,
-            "марта" to 3, "март" to 3,
-            "апреля" to 4, "апрель" to 4,
-            "мая" to 5, "май" to 5,
-            "июня" to 6, "июнь" to 6,
-            "июля" to 7, "июль" to 7,
-            "августа" to 8, "август" to 8,
-            "сентября" to 9, "сентябрь" to 9,
-            "октября" to 10, "октябрь" to 10,
-            "ноября" to 11, "ноябрь" to 11,
-            "декабря" to 12, "декабрь" to 12
-        )
-
         for (i in 0 until tokens.size - 1) {
             val day = tokens[i].toIntOrNull()
-            val month = monthMap[tokens[i + 1]]
+            val month = MONTH_MAP[tokens[i + 1]]
             if (day != null && month != null && day in 1..31) {
                 var year = today.year
                 var tokensToRemove = listOf(tokens[i], tokens[i + 1])
@@ -305,22 +309,19 @@ object SearchEngine {
     }
 
     fun parseRoomFromQuery(tokens: List<String>): Pair<String?, List<String>> {
-        val roomRegex = Regex("^(?:ауд|аудитория)?\\.?\\s*([1-5]\\d{2}[а-я]?)$", RegexOption.IGNORE_CASE)
-        val simpleNumRegex = Regex("^([1-5]\\d{2}[а-я]?)$")
-
         val remaining = tokens.toMutableList()
         for (i in tokens.indices) {
             val token = tokens[i]
-            if (token in listOf("ауд", "аудитория", "кабинет") && i + 1 < tokens.size) {
+            if (token in ROOM_KEYWORDS && i + 1 < tokens.size) {
                 val nextToken = tokens[i + 1]
-                val match = simpleNumRegex.find(nextToken)
+                val match = SIMPLE_NUM_REGEX.find(nextToken)
                 if (match != null) {
                     remaining.removeAt(i + 1)
                     remaining.removeAt(i)
                     return Pair(match.groupValues[1], remaining)
                 }
             }
-            val match = roomRegex.find(token)
+            val match = ROOM_REGEX.find(token)
             if (match != null) {
                 remaining.remove(token)
                 return Pair(match.groupValues[1], remaining)
@@ -330,11 +331,10 @@ object SearchEngine {
     }
 
     fun parseControlPointIntent(tokens: List<String>): Pair<Boolean, List<String>> {
-        val cpKeywords = setOf("кт", "контрольная", "точка", "контрольные", "модуль")
         val remaining = tokens.toMutableList()
         var isCp = false
         for (token in tokens) {
-            if (token in cpKeywords) {
+            if (token in CP_KEYWORDS) {
                 isCp = true
                 remaining.remove(token)
             }
@@ -371,12 +371,17 @@ object SearchEngine {
         lessons: List<Lesson>,
         queryTokens: List<String>
     ): List<Lesson> {
+        if (lessons.size <= 1) return lessons
         val today = LocalDate.now()
         val currentTime = LocalTime.now()
 
-        return lessons.sortedWith(
-            compareByDescending<Lesson> { lesson ->
-                var score = 0
+        // Предвычисляем скор и приоритет даты один раз за O(N) вместо O(N log N) внутри компаратора
+        class ScoredLesson(val lesson: Lesson, val score: Int, val dateRank: Long)
+
+        val scored = ArrayList<ScoredLesson>(lessons.size)
+        for (lesson in lessons) {
+            var score = 0
+            if (queryTokens.isNotEmpty()) {
                 val normTitle = normalize(lesson.title)
                 val normTeacher = normalize(lesson.teacher)
                 val normRoom = normalize(lesson.room)
@@ -393,15 +398,21 @@ object SearchEngine {
                         isFuzzyMatch(token, normTitle) -> score += 20
                     }
                 }
-                score
-            }.thenBy { lesson ->
-                when {
-                    lesson.date.isEqual(today) && lesson.endTime.isAfter(currentTime) -> 0L
-                    lesson.date.isAfter(today) -> ChronoUnit.DAYS.between(today, lesson.date)
-                    else -> 10000L + ChronoUnit.DAYS.between(lesson.date, today)
-                }
-            }.thenBy { it.startTime }
+            }
+            val dateRank = when {
+                lesson.date.isEqual(today) && lesson.endTime.isAfter(currentTime) -> 0L
+                lesson.date.isAfter(today) -> ChronoUnit.DAYS.between(today, lesson.date)
+                else -> 10000L + ChronoUnit.DAYS.between(lesson.date, today)
+            }
+            scored.add(ScoredLesson(lesson, score, dateRank))
+        }
+
+        scored.sortWith(
+            compareByDescending<ScoredLesson> { it.score }
+                .thenBy { it.dateRank }
+                .thenBy { it.lesson.startTime }
         )
+        return scored.map { it.lesson }
     }
 
     fun formatDateHeader(date: LocalDate): Pair<String, String> {

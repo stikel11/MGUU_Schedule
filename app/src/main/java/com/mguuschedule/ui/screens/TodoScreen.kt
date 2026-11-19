@@ -36,6 +36,11 @@ fun TodoScreen(
     var newTaskText by remember { mutableStateOf("") }
     var filterCompleted by remember { mutableStateOf(false) }
 
+    val (activeCount, completedCount) = remember(allTasks) {
+        val completed = allTasks.count { it.isCompleted }
+        (allTasks.size - completed) to completed
+    }
+
     val filteredTasks = remember(allTasks, filterCompleted) {
         if (filterCompleted) {
             allTasks.filter { it.isCompleted }
@@ -133,7 +138,7 @@ fun TodoScreen(
                         haptic.selection()
                         filterCompleted = false
                     },
-                    label = { Text("Активные (${allTasks.count { !it.isCompleted }})") }
+                    label = { Text("Активные ($activeCount)") }
                 )
                 FilterChip(
                     selected = filterCompleted,
@@ -141,7 +146,7 @@ fun TodoScreen(
                         haptic.selection()
                         filterCompleted = true
                     },
-                    label = { Text("Завершенные (${allTasks.count { it.isCompleted }})") }
+                    label = { Text("Завершенные ($completedCount)") }
                 )
             }
 
@@ -164,7 +169,11 @@ fun TodoScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(bottom = padding.calculateBottomPadding() + 32.dp)
                 ) {
-                    items(filteredTasks, key = { it.id }) { task ->
+                    items(
+                        items = filteredTasks,
+                        key = { it.id },
+                        contentType = { "task" }
+                    ) { task ->
                         TodoItemRow(
                             task = task,
                             onToggle = {

@@ -48,9 +48,9 @@ fun WeekCalendar(
     val sheetState = rememberModalBottomSheetState()
     val locale = remember { Locale("ru") }
     
-    val baseMonday = remember {
-        val now = LocalDate.now()
-        now.minusDays(now.dayOfWeek.value.toLong() - 1)
+    val today = remember { LocalDate.now() }
+    val baseMonday = remember(today) {
+        today.minusDays(today.dayOfWeek.value.toLong() - 1)
     }
     
     val totalWeeks = 10000
@@ -68,20 +68,20 @@ fun WeekCalendar(
     )
     val haptic = rememberHapticFeedback()
 
-    val visibleMonday = remember(pagerState.currentPage) {
-        baseMonday.plusWeeks((pagerState.currentPage - centerPage).toLong())
-    }
-    
     val selectedMondayOfDate = remember(selectedDate) {
         selectedDate.minusDays(selectedDate.dayOfWeek.value.toLong() - 1)
     }
-    
-    val displayDate = remember(visibleMonday, selectedMondayOfDate, selectedDate) {
-        if (visibleMonday.isEqual(selectedMondayOfDate)) selectedDate else visibleMonday
+
+    val displayMonth by remember(selectedMondayOfDate, selectedDate) {
+        derivedStateOf {
+            val visibleMonday = baseMonday.plusWeeks((pagerState.currentPage - centerPage).toLong())
+            val displayDate = if (visibleMonday.isEqual(selectedMondayOfDate)) selectedDate else visibleMonday
+            displayDate.month
+        }
     }
 
-    val displayMonthName = remember(displayDate, locale) {
-        displayDate.month.getDisplayName(TextStyle.FULL_STANDALONE, locale)
+    val displayMonthName = remember(displayMonth, locale) {
+        displayMonth.getDisplayName(TextStyle.FULL_STANDALONE, locale)
             .replaceFirstChar { it.uppercase() }
     }
 
@@ -234,8 +234,12 @@ fun WeekCalendar(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        items(months, key = { it.first.name }) { (month, name) ->
-                            val isSelected = displayDate.month == month
+                        items(
+                            items = months,
+                            key = { it.first.name },
+                            contentType = { "month" }
+                        ) { (month, name) ->
+                            val isSelected = displayMonth == month
                             Surface(
                                 onClick = {
                                     haptic.selection()
@@ -280,10 +284,11 @@ fun WeekCalendar(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 days.forEach { date ->
-                    val isSameMonth = date.month == displayDate.month
+                    val isSameMonth = date.month == displayMonth
                     DayItem(
                         date = date,
                         isSelected = date.isEqual(selectedDate),
+                        isToday = date.isEqual(today),
                         isSameMonth = isSameMonth,
                         onClick = { 
                             haptic.selection()
@@ -327,7 +332,8 @@ fun DayItem(
     isSameMonth: Boolean = true,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    locale: Locale = Locale("ru")
+    locale: Locale = Locale("ru"),
+    isToday: Boolean = remember(date) { date.isEqual(LocalDate.now()) }
 ) {
     val dayName = remember(date, locale) {
         date.dayOfWeek.getDisplayName(TextStyle.SHORT, locale)
@@ -336,8 +342,6 @@ fun DayItem(
     val dayNumber = remember(date) { date.dayOfMonth.toString() }
 
     val isWeekend = date.dayOfWeek == DayOfWeek.SATURDAY || date.dayOfWeek == DayOfWeek.SUNDAY
-    
-    val isToday = remember(date) { date.isEqual(LocalDate.now()) }
 
     val targetTextColor = when {
         isSelected -> MaterialTheme.colorScheme.onPrimary

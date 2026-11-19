@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -50,9 +51,7 @@ import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.OpenableColumns
-import androidx.activity.compose.BackHandler
-import androidx.activity.compose.PredictiveBackHandler
-import kotlin.coroutines.cancellation.CancellationException
+import com.mguuschedule.ui.components.PredictiveBackContainer
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -159,6 +158,9 @@ class LessonDetailViewModelFactory(
     }
 }
 
+private val FLOOR_DIGIT_REGEX = Regex("([1-5])\\d{2}")
+private val VOYKOVSKAYA_REGEX = Regex("[1-5]\\d{2}[\\s\\-]*[кКkK]?[\\s\\-]*[ВвBb](?![а-яА-Яa-zA-Z])")
+
 /**
  * Определение ресурса схемы этажа по номеру аудитории.
  * Поддерживаются 3-значные аудитории (101-599). Первая цифра определяет этаж (1-5).
@@ -168,11 +170,10 @@ fun getFloorImageResId(room: String): Int? {
     if (room.contains("онлайн", ignoreCase = true) || room.contains("дистант", ignoreCase = true)) return null
     if (room.contains("спорт", ignoreCase = true)) return null
 
-    val regex = Regex("([1-5])\\d{2}")
-    val match = regex.find(room) ?: return null
+    val match = FLOOR_DIGIT_REGEX.find(room) ?: return null
     val floorDigit = match.groupValues[1].toIntOrNull() ?: return null
 
-    val isVoykovskaya = Regex("[1-5]\\d{2}[\\s\\-]*[кКkK]?[\\s\\-]*[ВвBb](?![а-яА-Яa-zA-Z])").containsMatchIn(room)
+    val isVoykovskaya = VOYKOVSKAYA_REGEX.containsMatchIn(room)
 
     return if (isVoykovskaya) {
         when (floorDigit) {
@@ -245,12 +246,12 @@ fun InteractiveFloorMap(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(6.dp)
-                .graphicsLayer(
-                    scaleX = scale,
-                    scaleY = scale,
-                    translationX = offset.x,
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                    translationX = offset.x
                     translationY = offset.y
-                )
+                }
         )
     }
 }
@@ -268,33 +269,18 @@ fun FullscreenFloorMapDialog(
             decorFitsSystemWindows = false
         )
     ) {
-        var backProgress by remember { mutableFloatStateOf(0f) }
-        var swipeEdge by remember { mutableIntStateOf(0) }
-        PredictiveBackHandler { progressFlow ->
-            try {
-                progressFlow.collect { event ->
-                    backProgress = event.progress
-                    swipeEdge = event.swipeEdge
-                }
-                backProgress = 0f
-                onDismiss()
-            } catch (_: CancellationException) {
-                backProgress = 0f
-            }
-        }
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    val scale = 1f - (backProgress * 0.18f)
-                    scaleX = scale
-                    scaleY = scale
-                    translationX = (if (swipeEdge == 0) 1f else -1f) * backProgress * 48f
-                }
-                .background(Color.Black.copy(alpha = 0.95f * (1f - backProgress)))
-                .systemBarsPadding()
+        PredictiveBackContainer(
+            onBack = onDismiss,
+            backdropColor = Color.Black.copy(alpha = 0.95f),
+            maxScaleReduction = 0.16f,
+            maxHorizontalShift = 28.dp,
+            maxCornerRadius = 28.dp
         ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .systemBarsPadding()
+            ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -327,6 +313,7 @@ fun FullscreenFloorMapDialog(
                     .fillMaxSize()
                     .padding(top = 60.dp, bottom = 16.dp, start = 16.dp, end = 16.dp)
             )
+            }
         }
     }
 }
@@ -400,33 +387,18 @@ fun FullscreenImagePreviewDialog(
             decorFitsSystemWindows = false
         )
     ) {
-        var backProgress by remember { mutableFloatStateOf(0f) }
-        var swipeEdge by remember { mutableIntStateOf(0) }
-        PredictiveBackHandler { progressFlow ->
-            try {
-                progressFlow.collect { event ->
-                    backProgress = event.progress
-                    swipeEdge = event.swipeEdge
-                }
-                backProgress = 0f
-                onDismiss()
-            } catch (_: CancellationException) {
-                backProgress = 0f
-            }
-        }
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    val scale = 1f - (backProgress * 0.18f)
-                    scaleX = scale
-                    scaleY = scale
-                    translationX = (if (swipeEdge == 0) 1f else -1f) * backProgress * 48f
-                }
-                .background(Color.Black.copy(alpha = 0.95f * (1f - backProgress)))
-                .systemBarsPadding()
+        PredictiveBackContainer(
+            onBack = onDismiss,
+            backdropColor = Color.Black.copy(alpha = 0.95f),
+            maxScaleReduction = 0.16f,
+            maxHorizontalShift = 28.dp,
+            maxCornerRadius = 28.dp
         ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .systemBarsPadding()
+            ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -494,12 +466,12 @@ fun FullscreenImagePreviewDialog(
                         contentScale = ContentScale.Fit,
                         modifier = Modifier
                             .fillMaxSize()
-                            .graphicsLayer(
-                                scaleX = scale,
-                                scaleY = scale,
-                                translationX = offset.x,
+                            .graphicsLayer {
+                                scaleX = scale
+                                scaleY = scale
+                                translationX = offset.x
                                 translationY = offset.y
-                            )
+                            }
                     )
                 }
             } else {
@@ -507,6 +479,7 @@ fun FullscreenImagePreviewDialog(
                     color = Color.White,
                     modifier = Modifier.align(Alignment.Center)
                 )
+            }
             }
         }
     }
@@ -720,6 +693,7 @@ fun LessonDetailScreen(
     val taskList by viewModel.tasksFlow.collectAsState(initial = emptyList())
     val materialList by viewModel.materialsFlow.collectAsState(initial = emptyList())
     val haptic = rememberHapticFeedback()
+    val scope = rememberCoroutineScope()
 
     var showUrlDialog by remember { mutableStateOf(false) }
     var previewImageItem by remember { mutableStateOf<LessonMaterialEntity?>(null) }
@@ -728,36 +702,38 @@ fun LessonDetailScreen(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) {
-            runCatching {
-                context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-                    val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                    val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
-                    cursor.moveToFirst()
-                    val fileName = if (nameIndex != -1) cursor.getString(nameIndex) else "file"
-                    val size = if (sizeIndex != -1) cursor.getLong(sizeIndex) else 0L
-                    val mimeType = context.contentResolver.getType(uri) ?: "application/octet-stream"
+            scope.launch(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                        val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                        cursor.moveToFirst()
+                        val fileName = if (nameIndex != -1) cursor.getString(nameIndex) else "file"
+                        val size = if (sizeIndex != -1) cursor.getLong(sizeIndex) else 0L
+                        val mimeType = context.contentResolver.getType(uri) ?: "application/octet-stream"
 
-                    val destFile = File(context.filesDir, "mat_${System.currentTimeMillis()}_$fileName")
-                    context.contentResolver.openInputStream(uri)?.use { input ->
-                        destFile.outputStream().use { output ->
-                            input.copyTo(output)
+                        val destFile = File(context.filesDir, "mat_${System.currentTimeMillis()}_$fileName")
+                        context.contentResolver.openInputStream(uri)?.use { input ->
+                            destFile.outputStream().use { output ->
+                                input.copyTo(output)
+                            }
                         }
-                    }
 
-                    val typeStr = when {
-                        mimeType.contains("pdf", ignoreCase = true) || fileName.endsWith(".pdf", ignoreCase = true) -> "PDF"
-                        mimeType.contains("presentation", ignoreCase = true) || fileName.endsWith(".pptx", ignoreCase = true) -> "PPTX"
-                        else -> "FILE"
-                    }
+                        val typeStr = when {
+                            mimeType.contains("pdf", ignoreCase = true) || fileName.endsWith(".pdf", ignoreCase = true) -> "PDF"
+                            mimeType.contains("presentation", ignoreCase = true) || fileName.endsWith(".pptx", ignoreCase = true) -> "PPTX"
+                            else -> "FILE"
+                        }
 
-                    viewModel.addMaterial(
-                        title = fileName,
-                        type = typeStr,
-                        uriOrUrl = destFile.absolutePath,
-                        fileName = fileName,
-                        mimeType = mimeType,
-                        sizeBytes = size
-                    )
+                        viewModel.addMaterial(
+                            title = fileName,
+                            type = typeStr,
+                            uriOrUrl = destFile.absolutePath,
+                            fileName = fileName,
+                            mimeType = mimeType,
+                            sizeBytes = size
+                        )
+                    }
                 }
             }
         }
@@ -766,13 +742,16 @@ fun LessonDetailScreen(
     val database = remember { AppDatabase.getDatabase(context) }
     val ratingEntity by database.ratingDao().getLatestRatingCacheFlow().collectAsState(initial = null)
 
-    val linkedControlPoints = remember(lesson, ratingEntity) {
+    val linkedControlPoints by produceState(initialValue = emptyList<ControlPoint>(), lesson, ratingEntity) {
         val entity = ratingEntity
-        if (entity == null) emptyList()
-        else {
-            val map = SearchEngine.computeLessonControlPointsMap(listOf(lesson), entity)
-            val lessonKey = "${lesson.date}_${lesson.number}_${lesson.startTime}"
-            map[lessonKey] ?: emptyList()
+        value = if (entity == null) {
+            emptyList()
+        } else {
+            withContext(Dispatchers.Default) {
+                val map = SearchEngine.computeLessonControlPointsMap(listOf(lesson), entity)
+                val lessonKey = "${lesson.date}_${lesson.number}_${lesson.startTime}"
+                map[lessonKey] ?: emptyList()
+            }
         }
     }
 
@@ -1330,7 +1309,7 @@ fun LessonDetailScreen(
             // Floor Plan Section
             val floorImageResId = remember(lesson.room) { getFloorImageResId(lesson.room) }
             val floorNumber = remember(lesson.room) {
-                Regex("([1-5])\\d{2}").find(lesson.room)?.groupValues?.get(1) ?: ""
+                FLOOR_DIGIT_REGEX.find(lesson.room)?.groupValues?.get(1) ?: ""
             }
             var showFloorMapDialog by remember { mutableStateOf(false) }
 
@@ -1751,323 +1730,6 @@ fun LessonDetailScreen(
             title = previewItem.title,
             onDismiss = { previewImageItem = null }
         )
-    }
-}
-
-fun isImageMaterial(item: LessonMaterialEntity): Boolean {
-    val mime = item.mimeType?.lowercase().orEmpty()
-    if (mime.startsWith("image/")) return true
-
-    val name = (item.fileName ?: item.uriOrUrl).lowercase()
-    return name.endsWith(".jpg") || name.endsWith(".jpeg") ||
-           name.endsWith(".png") || name.endsWith(".webp") ||
-           name.endsWith(".gif") || name.endsWith(".bmp")
-}
-
-fun formatFileSize(sizeBytes: Long?): String {
-    if (sizeBytes == null || sizeBytes <= 0) return ""
-    val kb = sizeBytes / 1024.0
-    if (kb < 1024) {
-        return String.format(Locale.US, "%.1f КБ", kb)
-    }
-    val mb = kb / 1024.0
-    return String.format(Locale.US, "%.1f МБ", mb)
-}
-
-@Composable
-fun rememberImageThumbnail(filePath: String, targetSizePx: Int = 200): ImageBitmap? {
-    return produceState<ImageBitmap?>(initialValue = null, key1 = filePath) {
-        value = withContext(Dispatchers.IO) {
-            runCatching {
-                val file = File(filePath)
-                if (!file.exists()) return@runCatching null
-
-                val options = BitmapFactory.Options().apply {
-                    inJustDecodeBounds = true
-                }
-                BitmapFactory.decodeFile(file.absolutePath, options)
-
-                var sampleSize = 1
-                val height = options.outHeight
-                val width = options.outWidth
-                if (height > targetSizePx || width > targetSizePx) {
-                    val halfHeight = height / 2
-                    val halfWidth = width / 2
-                    while (halfHeight / sampleSize >= targetSizePx && halfWidth / sampleSize >= targetSizePx) {
-                        sampleSize *= 2
-                    }
-                }
-
-                val decodeOptions = BitmapFactory.Options().apply {
-                    inSampleSize = sampleSize
-                }
-                val bitmap = BitmapFactory.decodeFile(file.absolutePath, decodeOptions)
-                bitmap?.asImageBitmap()
-            }.getOrNull()
-        }
-    }.value
-}
-
-@Composable
-fun FullscreenImagePreviewDialog(
-    filePath: String,
-    title: String,
-    onDismiss: () -> Unit
-) {
-    val bitmap = rememberImageThumbnail(filePath, targetSizePx = 2048)
-
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false
-        )
-    ) {
-        BackHandler(onBack = onDismiss)
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.95f))
-                .systemBarsPadding()
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-                IconButton(onClick = onDismiss) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Закрыть",
-                        tint = Color.White
-                    )
-                }
-            }
-
-            if (bitmap != null) {
-                var scale by remember { mutableFloatStateOf(1f) }
-                var offset by remember { mutableStateOf(Offset.Zero) }
-
-                val state = rememberTransformableState { zoomChange, offsetChange, _ ->
-                    scale = (scale * zoomChange).coerceIn(1f, 4f)
-                    if (scale <= 1.05f) {
-                        scale = 1f
-                        offset = Offset.Zero
-                    } else {
-                        val newX = offset.x + offsetChange.x
-                        val newY = offset.y + offsetChange.y
-                        offset = Offset(newX, newY)
-                    }
-                }
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(top = 60.dp)
-                        .clipToBounds()
-                        .pointerInput(Unit) {
-                            detectTapGestures(
-                                onDoubleTap = {
-                                    if (scale > 1.2f) {
-                                        scale = 1f
-                                        offset = Offset.Zero
-                                    } else {
-                                        scale = 2.5f
-                                    }
-                                }
-                            )
-                        }
-                        .transformable(state = state),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Image(
-                        bitmap = bitmap,
-                        contentDescription = title,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .graphicsLayer(
-                                scaleX = scale,
-                                scaleY = scale,
-                                translationX = offset.x,
-                                translationY = offset.y
-                            )
-                    )
-                }
-            } else {
-                CircularProgressIndicator(
-                    color = Color.White,
-                    modifier = Modifier.align(Alignment.Center)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun MaterialItemRow(
-    item: LessonMaterialEntity,
-    onClick: () -> Unit,
-    onDelete: () -> Unit
-) {
-    val isImage = remember(item) { isImageMaterial(item) }
-    val thumbnailBitmap = if (isImage) rememberImageThumbnail(item.uriOrUrl, targetSizePx = 160) else null
-
-    val metaText = remember(item) {
-        if (item.type == "URL") {
-            item.uriOrUrl
-        } else {
-            val ext = (item.fileName ?: item.uriOrUrl).substringAfterLast('.', "").uppercase()
-            val size = formatFileSize(item.sizeBytes)
-            listOf(ext, size).filter { it.isNotBlank() }.joinToString(" · ")
-        }
-    }
-
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (isImage && thumbnailBitmap != null) {
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.size(44.dp)
-                ) {
-                    Image(
-                        bitmap = thumbnailBitmap,
-                        contentDescription = item.title,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-            } else {
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = if (isImage) "IMG" else item.type,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = item.title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = metaText,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
-                Icon(
-                    Icons.Default.Delete,
-                    contentDescription = "Удалить материал",
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun TaskItemRow(
-    task: LessonTaskEntity,
-    onToggle: (Boolean) -> Unit,
-    onDelete: () -> Unit
-) {
-    val deadlineFormatted = remember(task.deadlineEpoch) {
-        task.deadlineEpoch?.let {
-            val date = Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
-            DateTimeFormatter.ofPattern("dd.MM.yyyy").format(date)
-        }
-    }
-
-    val isOverdue = remember(task.deadlineEpoch, task.isCompleted) {
-        if (task.isCompleted || task.deadlineEpoch == null) false
-        else task.deadlineEpoch < System.currentTimeMillis()
-    }
-
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = if (isOverdue) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f) else MaterialTheme.colorScheme.surfaceContainerHigh,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                Checkbox(
-                    checked = task.isCompleted,
-                    onCheckedChange = onToggle
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Column {
-                    Text(
-                        text = task.title,
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium,
-                        color = if (task.isCompleted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
-                    )
-                    if (deadlineFormatted != null) {
-                        Text(
-                            text = "Дедлайн: $deadlineFormatted",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (isOverdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-
-            IconButton(onClick = onDelete) {
-                Icon(
-                    Icons.Default.DeleteOutline,
-                    contentDescription = "Удалить задачу",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
     }
 }
 }

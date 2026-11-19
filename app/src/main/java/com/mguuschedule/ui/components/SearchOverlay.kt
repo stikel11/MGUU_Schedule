@@ -1,14 +1,19 @@
 package com.mguuschedule.ui.components
 
 import android.app.Application
-import androidx.activity.compose.BackHandler
+import androidx.activity.BackEventCompat
+import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.animation.core.Animatable
+import androidx.compose.ui.graphics.graphicsLayer
+import com.mguuschedule.ui.theme.AppMotionScheme
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -45,6 +50,7 @@ import java.time.format.TextStyle
 import java.util.Locale
 
 private val localeRu = Locale("ru")
+private val SEARCH_FILTERS = listOf("Все", "Предмет", "Преподаватель", "Аудитория")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,8 +69,6 @@ fun SearchOverlay(
     
     val selectedFilter = uiState.selectedFilter
     val results = uiState.results
-
-    val filters = listOf("Все", "Предмет", "Преподаватель", "Аудитория")
     
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
@@ -81,8 +85,23 @@ fun SearchOverlay(
         onDismiss()
     }
 
-    BackHandler(enabled = query.isNotEmpty()) {
-        viewModel.onQueryChanged("")
+    val scope = rememberCoroutineScope()
+    val clearBackProgress = remember { Animatable(0f) }
+    var clearSwipeEdge by remember { mutableIntStateOf(BackEventCompat.EDGE_LEFT) }
+
+    PredictiveBackHandler(enabled = query.isNotEmpty()) { progressFlow ->
+        try {
+            progressFlow.collect { event ->
+                clearSwipeEdge = event.swipeEdge
+                clearBackProgress.snapTo(event.progress.coerceIn(0f, 1f))
+            }
+            viewModel.onQueryChanged("")
+            clearBackProgress.animateTo(0f, AppMotionScheme.fastSpatialSpec())
+        } catch (_: CancellationException) {
+            scope.launch {
+                clearBackProgress.animateTo(0f, AppMotionScheme.defaultSpatialSpec())
+            }
+        }
     }
 
     Scaffold(
@@ -100,7 +119,15 @@ fun SearchOverlay(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = 16.dp)
+                    .graphicsLayer {
+                        val p = AppMotionScheme.StandardEasing.transform(clearBackProgress.value)
+                        val dir = if (clearSwipeEdge == BackEventCompat.EDGE_LEFT) 1f else -1f
+                        translationX = dir * 16.dp.toPx() * p
+                        val s = 1f - (p * 0.03f)
+                        scaleX = s
+                        scaleY = s
+                    },
                 shape = CircleShape,
                 color = MaterialTheme.colorScheme.surfaceContainerHigh
             ) {
@@ -152,7 +179,7 @@ fun SearchOverlay(
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                filters.forEach { tag ->
+                SEARCH_FILTERS.forEach { tag ->
                     val selected = (selectedFilter == tag)
                     val label = when (tag) {
                         "Преподаватель" -> "Препод"
@@ -188,7 +215,7 @@ fun SearchOverlay(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 if (query.isEmpty()) {
-                    item(key = "empty_state") {
+                    item(key = "empty_state", contentType = "empty") {
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -232,7 +259,7 @@ fun SearchOverlay(
                         }
                     }
                 } else if (results.isEmpty()) {
-                    item(key = "no_results_state") {
+                    item(key = "no_results_state", contentType = "no_results") {
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -280,7 +307,8 @@ fun SearchOverlay(
                                 is SearchResultItem.SectionHeader -> "section_${item.title}"
                                 is SearchResultItem.LessonCard -> "lesson_${item.lesson.id}_${item.lesson.date}"
                             }
-                        }
+                        },
+                        contentType = { it::class.java }
                     ) { item ->
                         when (item) {
                             is SearchResultItem.TeacherCard -> {
@@ -288,7 +316,10 @@ fun SearchOverlay(
                                     teacherName = item.teacherName,
                                     rating = item.campusProfile?.rating,
                                     reviewCount = item.campusProfile?.reviewCount,
-                                    onClick = { onTeacherClick(item.teacherName) }
+                                    onClick = {
+                                        haptic.click()
+                                        onTeacherClick(item.teacherName)
+                                    }
                                 )
                             }
                             is SearchResultItem.RoomCard -> {
@@ -314,7 +345,13 @@ fun SearchOverlay(
                                 SearchSectionTitle(title = item.title)
                             }
                             is SearchResultItem.LessonCard -> {
-                                SearchItemCard(lesson = item.lesson, onClick = { onLessonClick(item.lesson) })
+                                SearchItemCard(
+                                    lesson = item.lesson,
+                                    onClick = {
+                                        haptic.click()
+                                        onLessonClick(item.lesson)
+                                    }
+                                )
                             }
                         }
                     }
@@ -331,15 +368,11 @@ fun SearchTeacherCard(
     reviewCount: Int?,
     onClick: () -> Unit
 ) {
-    val haptic = rememberHapticFeedback()
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .clickable(onClick = {
-                haptic.click()
-                onClick()
-            }),
+            .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
     ) {
         Row(
@@ -531,7 +564,6 @@ fun SearchControlPointCard(item: SearchResultItem.ControlPointCard) {
 
 @Composable
 fun SearchItemCard(lesson: Lesson, onClick: () -> Unit) {
-    val haptic = rememberHapticFeedback()
     val dateText = remember(lesson.date) {
         val dayName = lesson.date.dayOfWeek.getDisplayName(TextStyle.SHORT, localeRu)
             .replaceFirstChar { it.uppercase() }
@@ -545,10 +577,7 @@ fun SearchItemCard(lesson: Lesson, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = {
-                haptic.click()
-                onClick()
-            }),
+            .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         )

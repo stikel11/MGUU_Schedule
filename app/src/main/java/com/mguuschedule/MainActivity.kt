@@ -11,52 +11,43 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.animation.*
-import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.FastOutLinearInEasing
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.LinearOutSlowInEasing
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.*
-import kotlinx.coroutines.delay
-import com.mguuschedule.ui.screens.NotificationHistoryViewModel
-import com.mguuschedule.ui.screens.NotificationHistoryViewModelFactory
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.animation.core.animate
-import androidx.compose.ui.graphics.graphicsLayer
-import kotlinx.coroutines.launch
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import android.Manifest
-import android.content.pm.PackageManager
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
-import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.mguuschedule.ui.screens.NotificationHistoryViewModel
+import com.mguuschedule.ui.screens.NotificationHistoryViewModelFactory
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -85,6 +76,9 @@ import java.net.URLEncoder
 import java.time.LocalDate
 
 private data class MainScreenState(val group: Group?, val isFeatureTourCompleted: Boolean)
+
+private val BottomNavItems = listOf(Screen.Schedule, Screen.Rating, Screen.Sections)
+private val BottomTabRoutes = listOf(Screen.Schedule.route, Screen.Rating.route, Screen.Sections.route)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -118,14 +112,14 @@ class MainActivity : ComponentActivity() {
         
         setContent {
             val app = LocalContext.current.applicationContext as Application
-            val database = AppDatabase.getDatabase(app)
-            val repository = ScheduleRepository(app, database)
+            val database = remember(app) { AppDatabase.getDatabase(app) }
+            val repository = remember(app, database) { ScheduleRepository(app, database) }
             
             val profileViewModel: ProfileViewModel = viewModel(
                 factory = ProfileViewModelFactory(repository, app)
             )
             val scheduleViewModel: ScheduleViewModel = viewModel(
-                factory = ScheduleViewModelFactory(app)
+                factory = ScheduleViewModelFactory(app, repository)
             )
             val selectedGroup = profileViewModel.selectedGroup
 
@@ -166,11 +160,9 @@ class MainActivity : ComponentActivity() {
                 onDispose {}
             }
 
-            LaunchedEffect(startAction) {
-                when(startAction) {
-                    "com.mguuschedule.ACTION_TOMORROW" -> {
-                        scheduleViewModel.onDateSelected(LocalDate.now().plusDays(1))
-                    }
+            if (startAction == "com.mguuschedule.ACTION_TOMORROW") {
+                LaunchedEffect(startAction) {
+                    scheduleViewModel.onDateSelected(LocalDate.now().plusDays(1))
                 }
             }
 
@@ -277,9 +269,9 @@ class MainActivity : ComponentActivity() {
                     val updateState = profileViewModel.updateState
                     if (updateState is UpdateUiState.UpdateAvailable) {
                         val release = updateState.release
-                        val skippedTag = prefs.getString("skipped_update_tag", null)
+                        val skippedTag = remember(release.tagName) { prefs.getString("skipped_update_tag", null) }
                         if (release.tagName != skippedTag) {
-                            var showSheet by remember { mutableStateOf(true) }
+                            var showSheet by remember(release.tagName) { mutableStateOf(true) }
                             if (showSheet) {
                                 @OptIn(ExperimentalMaterial3Api::class)
                                 ModalBottomSheet(
@@ -338,24 +330,26 @@ class MainActivity : ComponentActivity() {
                                                 .fillMaxWidth()
                                                 .heightIn(min = 80.dp, max = 280.dp)
                                         ) {
-                                            val cleanChangelog = release.changelog
-                                                .replace("###", "")
-                                                .replace("##", "")
-                                                .replace("#", "")
-                                                .replace("**", "")
-                                                .trim()
+                                            val cleanChangelog = remember(release.changelog) {
+                                                release.changelog
+                                                    .replace("###", "")
+                                                    .replace("##", "")
+                                                    .replace("#", "")
+                                                    .replace("**", "")
+                                                    .trim()
+                                            }
                                             
-                                            androidx.compose.foundation.lazy.LazyColumn(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                contentPadding = PaddingValues(16.dp)
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .verticalScroll(rememberScrollState())
+                                                    .padding(16.dp)
                                             ) {
-                                                item {
-                                                    Text(
-                                                        text = "Что нового:\n$cleanChangelog",
-                                                        style = MaterialTheme.typography.bodyMedium,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                    )
-                                                }
+                                                Text(
+                                                    text = "Что нового:\n$cleanChangelog",
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
                                             }
                                         }
 
@@ -402,7 +396,6 @@ fun MainAppScaffold(
     ratingViewModel: RatingViewModel
 ) {
     val navController = rememberNavController()
-    val items = listOf(Screen.Schedule, Screen.Rating, Screen.Sections)
     val selectedGroup = profileViewModel.selectedGroup
     val haptic = rememberHapticFeedback()
 
@@ -414,26 +407,24 @@ fun MainAppScaffold(
     val unreadCount by notificationViewModel.unreadCount.collectAsState()
 
     val activity = remember(currentContext) { currentContext as? ComponentActivity }
-    val lessonIdExtra = remember { activity?.intent?.getStringExtra("navigate_to_lesson_id") }
-    val routeExtra = remember { activity?.intent?.getStringExtra("navigate_to_route") }
+    val lessonIdExtra = remember(activity) { activity?.intent?.getStringExtra("navigate_to_lesson_id") }
+    val routeExtra = remember(activity) { activity?.intent?.getStringExtra("navigate_to_route") }
 
     LaunchedEffect(selectedGroup) {
         selectedGroup?.let { scheduleViewModel.loadSchedule(it.id) }
     }
 
-    LaunchedEffect(lessonIdExtra) {
-        lessonIdExtra?.let { lessonId ->
-            navController.navigate("lesson/$lessonId")
+    if (lessonIdExtra != null) {
+        LaunchedEffect(lessonIdExtra) {
+            navController.navigate("lesson/$lessonIdExtra")
         }
     }
 
-    LaunchedEffect(routeExtra) {
-        routeExtra?.let { route ->
-            navController.navigate(route)
+    if (routeExtra != null) {
+        LaunchedEffect(routeExtra) {
+            navController.navigate(routeExtra)
         }
     }
-
-    val bottomTabRoutes = remember { listOf(Screen.Schedule.route, Screen.Rating.route, Screen.Sections.route) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         NavHost(
@@ -443,22 +434,22 @@ fun MainAppScaffold(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background),
             enterTransition = {
-                val isTabSwitch = initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes
+                val isTabSwitch = initialState.destination.route in BottomTabRoutes && targetState.destination.route in BottomTabRoutes
                 if (isTabSwitch) com.mguuschedule.ui.theme.AppMotionScheme.tabEnterTransition()
                 else com.mguuschedule.ui.theme.AppMotionScheme.detailEnterTransition()
             },
             exitTransition = {
-                val isTabSwitch = initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes
+                val isTabSwitch = initialState.destination.route in BottomTabRoutes && targetState.destination.route in BottomTabRoutes
                 if (isTabSwitch) com.mguuschedule.ui.theme.AppMotionScheme.tabExitTransition()
                 else com.mguuschedule.ui.theme.AppMotionScheme.detailBackgroundExitTransition()
             },
             popEnterTransition = {
-                val isTabSwitch = initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes
+                val isTabSwitch = initialState.destination.route in BottomTabRoutes && targetState.destination.route in BottomTabRoutes
                 if (isTabSwitch) com.mguuschedule.ui.theme.AppMotionScheme.tabEnterTransition()
                 else com.mguuschedule.ui.theme.AppMotionScheme.detailBackgroundPopEnterTransition()
             },
             popExitTransition = {
-                val isTabSwitch = initialState.destination.route in bottomTabRoutes && targetState.destination.route in bottomTabRoutes
+                val isTabSwitch = initialState.destination.route in BottomTabRoutes && targetState.destination.route in BottomTabRoutes
                 if (isTabSwitch) com.mguuschedule.ui.theme.AppMotionScheme.tabExitTransition()
                 else com.mguuschedule.ui.theme.AppMotionScheme.detailPopExitTransition()
             }
@@ -493,13 +484,23 @@ fun MainAppScaffold(
                         onOpenMaterials = { navController.navigate("materials_hub") },
                         onOpenAttendance = { navController.navigate("attendance") },
                         onOpenFreeRooms = { navController.navigate("free_rooms") },
+                        onOpenMoodle = { navController.navigate("moodle") },
                         onOpenSettings = { navController.navigate(Screen.Settings.route) }
+                    )
+                }
+            }
+            composable("moodle") {
+                val allLessons by scheduleViewModel.allLessonsFlow.collectAsState()
+                DetailDestinationContainer {
+                    MoodleScreen(
+                        allLessons = allLessons,
+                        onBack = { navController.popBackStack() }
                     )
                 }
             }
             composable("curriculum") {
                 val allLessons by scheduleViewModel.allLessonsFlow.collectAsState()
-                ExpressiveDetailScreenContainer(onBack = { navController.popBackStack() }) {
+                DetailDestinationContainer {
                     com.mguuschedule.ui.screens.CurriculumScreen(
                         allLessons = allLessons,
                         subjectsFromRating = emptyList(),
@@ -511,7 +512,7 @@ fun MainAppScaffold(
             composable("materials_hub") {
                 val allLessons by scheduleViewModel.allLessonsFlow.collectAsState()
                 val addonSummaries by scheduleViewModel.lessonAddonSummaries.collectAsState()
-                ExpressiveDetailScreenContainer(onBack = { navController.popBackStack() }) {
+                DetailDestinationContainer {
                     com.mguuschedule.ui.screens.MaterialsHubScreen(
                         allLessons = allLessons,
                         addonSummaries = addonSummaries,
@@ -521,7 +522,7 @@ fun MainAppScaffold(
             }
             composable("attendance") {
                 val allLessons by scheduleViewModel.allLessonsFlow.collectAsState()
-                ExpressiveDetailScreenContainer(onBack = { navController.popBackStack() }) {
+                DetailDestinationContainer {
                     com.mguuschedule.ui.screens.AttendanceScreen(
                         groupName = profileViewModel.selectedGroup?.name ?: "",
                         allLessons = allLessons,
@@ -530,21 +531,21 @@ fun MainAppScaffold(
                 }
             }
             composable("free_rooms") {
-                ExpressiveDetailScreenContainer(onBack = { navController.popBackStack() }) {
+                DetailDestinationContainer {
                     com.mguuschedule.ui.screens.FreeRoomsScreen(
                         onBack = { navController.popBackStack() }
                     )
                 }
             }
             composable("notification_history") {
-                ExpressiveDetailScreenContainer(onBack = { navController.popBackStack() }) {
+                DetailDestinationContainer {
                     NotificationHistoryScreen(
                         onBack = { navController.popBackStack() }
                     )
                 }
             }
             composable(Screen.Settings.route) {
-                ExpressiveDetailScreenContainer(onBack = { navController.popBackStack() }) {
+                DetailDestinationContainer {
                     ProfileScreen(
                         viewModel = profileViewModel,
                         scheduleViewModel = scheduleViewModel,
@@ -554,14 +555,14 @@ fun MainAppScaffold(
                 }
             }
             composable("feature_tour") {
-                ExpressiveDetailScreenContainer(onBack = { navController.popBackStack() }) {
+                DetailDestinationContainer {
                     FeatureTourScreen(
                         onFinish = { navController.popBackStack() }
                     )
                 }
             }
             composable(Screen.Debug.route) {
-                ExpressiveDetailScreenContainer(onBack = { navController.popBackStack() }) {
+                DetailDestinationContainer {
                     DebugScreen(
                         viewModel = profileViewModel,
                         onBack = { navController.popBackStack() }
@@ -572,9 +573,11 @@ fun MainAppScaffold(
                 route = Screen.LessonDetail.route,
                 arguments = listOf(navArgument("lessonId") { type = NavType.StringType })
             ) { backStackEntry ->
-                ExpressiveDetailScreenContainer(onBack = { navController.popBackStack() }) {
+                DetailDestinationContainer {
                     val lessonId = backStackEntry.arguments?.getString("lessonId")
-                    val lesson = lessonId?.let { scheduleViewModel.getLessonById(it) }
+                    val lesson = remember(lessonId) {
+                        lessonId?.let { scheduleViewModel.getLessonById(it) }
+                    }
                     LessonDetailScreen(
                         lesson = lesson,
                         onBack = { navController.popBackStack() },
@@ -590,7 +593,7 @@ fun MainAppScaffold(
                 route = Screen.TeacherProfile.route,
                 arguments = listOf(navArgument("teacherName") { type = NavType.StringType })
             ) { backStackEntry ->
-                ExpressiveDetailScreenContainer(onBack = { navController.popBackStack() }) {
+                DetailDestinationContainer {
                     val teacherName = backStackEntry.arguments?.getString("teacherName")?.let {
                         URLDecoder.decode(it, "UTF-8")
                     } ?: "Неизвестный преподаватель"
@@ -603,7 +606,7 @@ fun MainAppScaffold(
             }
 
             composable(Screen.Todo.route) {
-                ExpressiveDetailScreenContainer(onBack = { navController.popBackStack() }) {
+                DetailDestinationContainer {
                     TodoScreen(
                         scheduleViewModel = scheduleViewModel,
                         onBack = { navController.popBackStack() }
@@ -612,7 +615,7 @@ fun MainAppScaffold(
             }
 
             composable(Screen.Search.route) {
-                ExpressiveDetailScreenContainer(onBack = { navController.popBackStack() }) {
+                DetailDestinationContainer {
                     SearchOverlay(
                         onDismiss = { navController.popBackStack() },
                         allLessons = scheduleViewModel.lessons,
@@ -628,170 +631,130 @@ fun MainAppScaffold(
             }
         }
 
-            val navBackStackEntry by navController.currentBackStackEntryAsState()
-            val currentDestination = navBackStackEntry?.destination
-            val isMainScreen = currentDestination?.route in bottomTabRoutes
+        val navBackStackEntry by navController.currentBackStackEntryAsState()
+        val currentDestination = navBackStackEntry?.destination
+        val isMainScreen = currentDestination?.route in BottomTabRoutes
 
-            if (isMainScreen) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    MaterialTheme.colorScheme.background.copy(alpha = 0.4f),
-                                    MaterialTheme.colorScheme.background.copy(alpha = 0.85f)
-                                )
-                            )
-                        )
-                        .navigationBarsPadding()
-                        .padding(top = 32.dp, bottom = 16.dp),
-                    contentAlignment = Alignment.Center
+        val bgColor = MaterialTheme.colorScheme.background
+        val bottomScrimBrush = remember(bgColor) {
+            Brush.verticalGradient(
+                colors = listOf(
+                    Color.Transparent,
+                    bgColor.copy(alpha = 0.4f),
+                    bgColor.copy(alpha = 0.85f)
+                )
+            )
+        }
+
+        AnimatedVisibility(
+            visible = isMainScreen,
+            enter = slideInVertically(
+                animationSpec = AppMotionScheme.defaultSpatialSpec(),
+                initialOffsetY = { it / 2 }
+            ) + fadeIn(animationSpec = AppMotionScheme.defaultEffectsSpec()),
+            exit = slideOutVertically(
+                animationSpec = AppMotionScheme.fastSpatialSpec(),
+                targetOffsetY = { it / 2 }
+            ) + fadeOut(animationSpec = AppMotionScheme.fastEffectsSpec()),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(bottomScrimBrush)
+                    .navigationBarsPadding()
+                    .padding(top = 32.dp, bottom = 16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        AnimatedFloatingNavBar(
-                            items = items,
-                            currentRoute = currentDestination?.route,
-                            onItemClick = { screen ->
-                                val isSelected = currentDestination?.hierarchy?.any { it.route == screen.route } == true
-                                if (isSelected) {
-                                    when (screen) {
-                                        Screen.Schedule -> {
-                                            scheduleViewModel.resetToToday()
-                                            scheduleViewModel.scrollToTop()
-                                        }
-                                        Screen.Rating -> {
-                                            ratingViewModel.scrollToTop()
-                                        }
-                                        Screen.Sections -> {
-                                            // Handle sections specific reset if needed
-                                        }
-                                        else -> {}
+                    AnimatedFloatingNavBar(
+                        items = BottomNavItems,
+                        currentRoute = currentDestination?.route,
+                        onItemClick = { screen ->
+                            val isSelected = currentDestination?.hierarchy?.any { it.route == screen.route } == true
+                            if (isSelected) {
+                                when (screen) {
+                                    Screen.Schedule -> {
+                                        scheduleViewModel.resetToToday()
+                                        scheduleViewModel.scrollToTop()
                                     }
-                                } else {
-                                    navController.navigate(screen.route) {
-                                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                        launchSingleTop = true
-                                        restoreState = true
+                                    Screen.Rating -> {
+                                        ratingViewModel.scrollToTop()
                                     }
+                                    Screen.Sections -> {
+                                        // Handle sections specific reset if needed
+                                    }
+                                    else -> {}
+                                }
+                            } else {
+                                navController.navigate(screen.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
                                 }
                             }
-                        )
+                        }
+                    )
 
-                        Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
 
-                        val searchInteractionSource = remember { MutableInteractionSource() }
-                        val isSearchPressed by searchInteractionSource.collectIsPressedAsState()
-                        val searchScale by animateFloatAsState(
-                            targetValue = if (isSearchPressed) 0.93f else 1f,
-                            animationSpec = spring(dampingRatio = 0.65f, stiffness = 600f),
-                            label = "searchScale"
-                        )
+                    val searchInteractionSource = remember { MutableInteractionSource() }
+                    val isSearchPressed by searchInteractionSource.collectIsPressedAsState()
+                    val searchScale by animateFloatAsState(
+                        targetValue = if (isSearchPressed) 0.92f else 1f,
+                        animationSpec = AppMotionScheme.fastSpatialSpec(),
+                        label = "searchScale"
+                    )
 
-                        Surface(
-                            onClick = {
-                                haptic.lightTick()
-                                navController.navigate(Screen.Search.route)
-                            },
-                            interactionSource = searchInteractionSource,
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            shadowElevation = 3.dp,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)),
-                            modifier = Modifier
-                                .size(56.dp)
-                                .scale(searchScale)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Default.Search,
-                                    contentDescription = "Поиск",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(24.dp)
-                                )
+                    Surface(
+                        onClick = {
+                            haptic.lightTick()
+                            navController.navigate(Screen.Search.route)
+                        },
+                        interactionSource = searchInteractionSource,
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        shadowElevation = 3.dp,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)),
+                        modifier = Modifier
+                            .size(56.dp)
+                            .graphicsLayer {
+                                scaleX = searchScale
+                                scaleY = searchScale
                             }
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Поиск",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
                         }
                     }
                 }
             }
         }
     }
+}
 
+/**
+ * Непрозрачный контейнер для детальных экранов внутри NavHost.
+ * Не перехватывает жест «Назад» вручную, позволяя встроенному SeekableTransitionState
+ * в Navigation Compose 2.8+ выполнять настоящий меэкранный Predictive Back в стиле Pixel.
+ */
 @Composable
-fun ExpressiveDetailScreenContainer(
-    onBack: () -> Unit,
+private fun DetailDestinationContainer(
     content: @Composable () -> Unit
 ) {
-    val scope = rememberCoroutineScope()
-    var backProgress by remember { mutableFloatStateOf(0f) }
-    var swipeEdge by remember { mutableIntStateOf(androidx.activity.BackEventCompat.EDGE_LEFT) }
-    var touchOffsetY by remember { mutableFloatStateOf(0f) }
-    var startTouchY by remember { mutableFloatStateOf(0f) }
-
-    androidx.activity.compose.PredictiveBackHandler(enabled = true) { progressFlow ->
-        try {
-            var isFirstEvent = true
-            progressFlow.collect { backEvent ->
-                if (isFirstEvent) {
-                    startTouchY = backEvent.touchY
-                    isFirstEvent = false
-                }
-                backProgress = backEvent.progress
-                swipeEdge = backEvent.swipeEdge
-                touchOffsetY = (backEvent.touchY - startTouchY) * 0.08f
-            }
-            // Пользователь завершил жест "Назад" — плавно доводим прогресс и вызываем onBack()
-            animate(
-                initialValue = backProgress,
-                targetValue = 1f,
-                animationSpec = tween(durationMillis = 190, easing = FastOutSlowInEasing)
-            ) { value, _ ->
-                backProgress = value
-            }
-            onBack()
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            // Пользователь отменил жест — возвращаем экран обратно на пружине MD3 Expressive
-            scope.launch {
-                animate(
-                    initialValue = backProgress,
-                    targetValue = 0f,
-                    animationSpec = spring(dampingRatio = 0.8f, stiffness = 260f)
-                ) { value, _ ->
-                    backProgress = value
-                }
-                touchOffsetY = 0f
-            }
-        }
-    }
-
-    // Нелинейное сглаживание прогресса по гайдлайнам Android 15/16 Predictive Back
-    val easedProgress = FastOutSlowInEasing.transform(backProgress.coerceIn(0f, 1f))
-    val scale = 1f - (easedProgress * 0.11f) // Сжатие до 89%
-    val horizontalShiftDp = if (swipeEdge == androidx.activity.BackEventCompat.EDGE_LEFT) {
-        22f * easedProgress
-    } else {
-        -22f * easedProgress
-    }
-    val cornerRadius = (28f * easedProgress).dp
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-                translationX = horizontalShiftDp.dp.toPx()
-                translationY = touchOffsetY * easedProgress
-                alpha = 1f - (easedProgress * 0.15f).coerceAtMost(0.15f)
-                shape = RoundedCornerShape(cornerRadius)
-                clip = easedProgress > 0.005f
-            }
-            .background(MaterialTheme.colorScheme.background)
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
     ) {
         content()
     }
@@ -811,8 +774,8 @@ private fun ComponentActivity.processFCMIntent(intent: android.content.Intent?) 
         val body = extras.getString("gcm.notification.body") ?: extras.getString("body") ?: extras.getString("message")
 
         if (!body.isNullOrBlank()) {
-            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-                val db = AppDatabase.getDatabase(this@processFCMIntent)
+            lifecycleScope.launch(Dispatchers.IO) {
+                val db = AppDatabase.getDatabase(applicationContext)
                 db.notificationDao().insertNotification(
                     com.mguuschedule.repository.NotificationEntity(
                         title = title,

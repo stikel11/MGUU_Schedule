@@ -44,16 +44,19 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+private val RU_LOCALE = Locale.forLanguageTag("ru")
+private val HEADER_DATE_FORMATTER = DateTimeFormatter.ofPattern("d MMMM", RU_LOCALE)
+private val TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm", RU_LOCALE)
+private val DUPLICATE_ROOM_REGEX = Regex("(?i)(ауд\\.?\\s*){2,}")
+private val NOTIFICATION_FILTERS = listOf("Все", "Напоминания", "Изменения")
+
 fun formatNotificationGroupHeader(epochMillis: Long): String {
     val date = Instant.ofEpochMilli(epochMillis).atZone(ZoneId.systemDefault()).toLocalDate()
     val today = LocalDate.now()
     return when {
         date.isEqual(today) -> "Сегодня"
         date.isEqual(today.minusDays(1)) -> "Вчера"
-        else -> {
-            val formatter = DateTimeFormatter.ofPattern("d MMMM", Locale.forLanguageTag("ru"))
-            date.format(formatter)
-        }
+        else -> date.format(HEADER_DATE_FORMATTER)
     }
 }
 
@@ -112,7 +115,6 @@ fun NotificationHistoryScreen(
     var showClearDialog by remember { mutableStateOf(false) }
 
     var selectedFilterIndex by remember { mutableIntStateOf(0) }
-    val filters = listOf("Все", "Напоминания", "Изменения")
 
     val filteredNotifications = remember(notifications, selectedFilterIndex) {
         when (selectedFilterIndex) {
@@ -144,7 +146,7 @@ fun NotificationHistoryScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                item {
+                item(key = "history_top_bar", contentType = "top_bar") {
                     Spacer(modifier = Modifier.height(WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp))
                     
                     Row(
@@ -178,7 +180,7 @@ fun NotificationHistoryScreen(
                 }
 
                 if (notifications.isNotEmpty()) {
-                    item(key = "filter_row") {
+                    item(key = "filter_row", contentType = "filter_row") {
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -187,14 +189,16 @@ fun NotificationHistoryScreen(
                             color = MaterialTheme.colorScheme.surfaceContainerLow
                         ) {
                             Row(modifier = Modifier.padding(4.dp)) {
-                                filters.forEachIndexed { index, title ->
+                                NOTIFICATION_FILTERS.forEachIndexed { index, title ->
                                     val isSelected = selectedFilterIndex == index
                                     val bgColor by androidx.compose.animation.animateColorAsState(
                                         targetValue = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                                        animationSpec = com.mguuschedule.ui.theme.AppMotionScheme.fastEffectsSpec(),
                                         label = "filter_bg"
                                     )
                                     val textColor by androidx.compose.animation.animateColorAsState(
                                         targetValue = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        animationSpec = com.mguuschedule.ui.theme.AppMotionScheme.fastEffectsSpec(),
                                         label = "filter_text"
                                     )
                                     
@@ -223,7 +227,7 @@ fun NotificationHistoryScreen(
                 }
 
                 if (filteredNotifications.isEmpty()) {
-                    item(key = "empty_state") {
+                    item(key = "empty_state", contentType = "empty") {
                         val emptyMessage = when (selectedFilterIndex) {
                             1 -> "Напоминаний пока нет"
                             2 -> "Изменений пока нет"
@@ -277,7 +281,7 @@ fun NotificationHistoryScreen(
                     }
                 } else {
                     groupedNotifications.forEach { (header, items) ->
-                        item(key = "header_$header") {
+                        item(key = "header_$header", contentType = "date_header") {
                             Text(
                                 text = header,
                                 style = MaterialTheme.typography.titleSmall,
@@ -287,7 +291,11 @@ fun NotificationHistoryScreen(
                             )
                         }
 
-                        items(items, key = { it.id }) { item ->
+                        items(
+                            items = items,
+                            key = { it.id },
+                            contentType = { "notification" }
+                        ) { item ->
                             NotificationItemCard(item = item)
                         }
                     }
@@ -321,8 +329,7 @@ fun NotificationHistoryScreen(
 fun NotificationItemCard(item: NotificationEntity) {
     val timeStr = remember(item.timestamp) {
         val dt = LocalDateTime.ofInstant(Instant.ofEpochMilli(item.timestamp), ZoneId.systemDefault())
-        val timeFormatter = DateTimeFormatter.ofPattern("HH:mm", Locale.forLanguageTag("ru"))
-        dt.format(timeFormatter)
+        dt.format(TIME_FORMATTER)
     }
 
     val titleClean = remember(item.title) {
@@ -330,7 +337,7 @@ fun NotificationItemCard(item: NotificationEntity) {
     }
     
     val bodyClean = remember(item.message) {
-        item.message.replace(Regex("(?i)(ауд\\.?\\s*){2,}"), "Ауд. ")
+        item.message.replace(DUPLICATE_ROOM_REGEX, "Ауд. ")
     }
 
     val isRating = titleClean.contains("БРС", ignoreCase = true) || 

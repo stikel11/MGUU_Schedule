@@ -19,7 +19,6 @@ import com.mguuschedule.model.Group
 import com.mguuschedule.model.Lesson
 import com.mguuschedule.repository.RatingRepository
 import com.mguuschedule.util.LiveUpdateManager
-import com.mguuschedule.util.ScheduleParser
 import com.mguuschedule.worker.RatingUpdateWorker
 import com.mguuschedule.worker.ScheduleUpdateWorker
 import kotlinx.coroutines.Dispatchers
@@ -28,11 +27,11 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.jsoup.Jsoup
 import java.io.File
 import java.time.LocalDate
 import java.time.LocalTime
@@ -105,7 +104,7 @@ class ProfileViewModel(
                 lastUpdated = lastUpdateText
             )
         }
-    }.stateIn(
+    }.flowOn(Dispatchers.IO).stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = StorageUiState()
@@ -157,10 +156,18 @@ class ProfileViewModel(
         private set
 
     init {
-        loadGroups()
-        refreshStorageStatus()
+        // Не дергаем сеть на каждый холодный старт, если группа уже выбрана
+        if (selectedGroup == null) {
+            loadGroups()
+        }
         if (changesEnabled) {
             startScheduleWorker()
+        }
+    }
+
+    fun loadGroupsIfNeeded() {
+        if (groupsUiState !is GroupsUiState.Success) {
+            loadGroups()
         }
     }
 
@@ -169,10 +176,6 @@ class ProfileViewModel(
         val journalFile = File(dbFile.path + "-wal")
         return (if (dbFile.exists()) dbFile.length() else 0L) +
                (if (journalFile.exists()) journalFile.length() else 0L)
-    }
-
-    private fun refreshStorageStatus() {
-        // Обновляется автоматически через Flow
     }
 
     private fun loadSavedGroup(): Group? {
@@ -190,27 +193,7 @@ class ProfileViewModel(
         viewModelScope.launch {
             groupsUiState = GroupsUiState.Loading
             try {
-                val allGroups = withContext(Dispatchers.IO) {
-                    val userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                    val apiUrl = "https://api.lk-upm.ru/api/groups"
-
-                    val start = System.currentTimeMillis()
-                    com.mguuschedule.util.AppLogger.d("API_REQ", "GET $apiUrl")
-
-                    val jsonBody = runCatching { 
-                        Jsoup.connect(apiUrl)
-                            .ignoreContentType(true)
-                            .userAgent(userAgent)
-                            .timeout(10000)
-                            .execute()
-                            .body()
-                    }.getOrNull()
-
-                    val duration = System.currentTimeMillis() - start
-                    com.mguuschedule.util.AppLogger.d("API_RES", "GET $apiUrl -> ${duration}мс (${jsonBody?.length ?: 0} символов)")
-
-                    jsonBody?.let { ScheduleParser.parseGroupsJson(it) } ?: emptyList()
-                }
+                val allGroups = repository.fetchAllGroups()
 
                 if (allGroups.isNotEmpty()) {
                     groupsUiState = GroupsUiState.Success(allGroups)
@@ -264,15 +247,16 @@ class ProfileViewModel(
             putString("selected_group_course", group.course)
             putString("selected_group_level", group.level.name)
             putString("selected_zachetka", "")
-            commit()
+            apply()
         }
         com.mguuschedule.util.NotificationHelper.cancelAllAlarms(getApplication())
         startScheduleWorker()
     }
 
     fun updateSelectedZachetka(zachetka: String) {
-        selectedZachetka = zachetka.trim()
-        prefs.edit().putString("selected_zachetka", zachetka.trim()).commit()
+        val trimmed = zachetka.trim()
+        selectedZachetka = trimmed
+        prefs.edit().putString("selected_zachetka", trimmed).apply()
     }
 
     fun updateRemindersEnabled(enabled: Boolean) {

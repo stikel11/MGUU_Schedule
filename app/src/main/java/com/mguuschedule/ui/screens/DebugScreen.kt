@@ -5,7 +5,7 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -39,6 +39,8 @@ import org.jsoup.Jsoup
 import java.net.URLEncoder
 
 data class ApiTestResult(val title: String, val result: String?, val isError: Boolean, val timeMs: Long?)
+
+private val DEBUG_LOG_FILTERS = listOf("Все", "API / Сеть", "Парсер / Кэш", "Ошибки / Warn")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -77,52 +79,102 @@ fun DebugScreen(
         if (isTestingApi) return
         isTestingApi = true
         apiTestResults = emptyList()
-        scope.launch(Dispatchers.IO) {
+        scope.launch {
             try {
-                // Test 1: Groups
-                val t1Start = System.currentTimeMillis()
-                val groupsRes = Jsoup.connect("https://api.lk-upm.ru/api/groups").ignoreContentType(true).execute().body()
-                val t1End = System.currentTimeMillis()
-                val groupsObj = JSONObject(groupsRes)
-                val groupsCount = groupsObj.optInt("count", 0)
-                val groupFound = groupsObj.optJSONArray("groups")?.let { arr ->
-                    (0 until arr.length()).any { arr.optJSONObject(it)?.optString("id") == selectedGroupId }
-                } ?: false
-                apiTestResults = apiTestResults + ApiTestResult("GET /api/groups", "OK • $groupsCount групп • Найдена=$groupFound", !groupsObj.optBoolean("ok", false), t1End - t1Start)
+                // Test 1: Groups (schedule.mguu.ru)
+                val t1Res = withContext(Dispatchers.IO) {
+                    val t1Start = System.currentTimeMillis()
+                    val groupsRes = Jsoup.connect("${com.mguuschedule.repository.ScheduleRepository.SCHEDULE_API_BASE}/levels/bak/groups/")
+                        .ignoreContentType(true)
+                        .header("Accept", "application/json")
+                        .execute()
+                        .body()
+                    val t1End = System.currentTimeMillis()
+                    val parsedGroups = com.mguuschedule.util.ScheduleParser.parseGroupsForLevel(groupsRes)
+                    val groupFound = parsedGroups.any { it.id == selectedGroupId }
+                    ApiTestResult("GET schedule.mguu.ru/levels/bak/groups/", "OK • ${parsedGroups.size} групп (бак.) • Найдена=$groupFound", parsedGroups.isEmpty(), t1End - t1Start)
+                }
+                apiTestResults = apiTestResults + t1Res
 
-                // Test 2: Schedule
-                val t2Start = System.currentTimeMillis()
-                val schedRes = Jsoup.connect("https://api.lk-upm.ru/api/schedule-by-id/$selectedGroupId").ignoreContentType(true).execute().body()
-                val t2End = System.currentTimeMillis()
-                val schedObj = JSONObject(schedRes)
-                apiTestResults = apiTestResults + ApiTestResult("GET /api/schedule-by-id/{id}", "OK • ${schedObj.optInt("count", 0)} пар • stale=${schedObj.optBoolean("stale")} • ver=${schedObj.optString("version", "—")}", !schedObj.optBoolean("ok", false), t2End - t2Start)
+                // Test 2: Schedule (schedule.mguu.ru)
+                val t2Res = withContext(Dispatchers.IO) {
+                    val t2Start = System.currentTimeMillis()
+                    val (startStr, endStr) = com.mguuschedule.util.ScheduleParser.buildAcademicYearDateRange()
+                    val encodedGroup = URLEncoder.encode(selectedGroupId ?: "", "UTF-8")
+                    val schedUrl = "${com.mguuschedule.repository.ScheduleRepository.SCHEDULE_API_BASE}/groups/$encodedGroup/lessons/?start_date=$startStr&end_date=$endStr"
+                    val schedRes = Jsoup.connect(schedUrl)
+                        .ignoreContentType(true)
+                        .header("Accept", "application/json")
+                        .execute()
+                        .body()
+                    val t2End = System.currentTimeMillis()
+                    val parsedLessons = com.mguuschedule.util.ScheduleParser.parse(schedRes)
+                    ApiTestResult("GET schedule.mguu.ru/groups/{id}/lessons/", "OK • ${parsedLessons.size} пар • период=$startStr–$endStr", false, t2End - t2Start)
+                }
+                apiTestResults = apiTestResults + t2Res
 
-                // Test 3: Rating Students
-                val t3Start = System.currentTimeMillis()
-                val studRes = Jsoup.connect("https://api.lk-upm.ru/api/rating/students-by-group-id/$selectedGroupId").ignoreContentType(true).execute().body()
-                val t3End = System.currentTimeMillis()
-                val studObj = JSONObject(studRes)
-                val studArr = studObj.optJSONArray("students")
-                var studentIdStr = ""
-                val zachetkaFound = studArr?.let { arr ->
-                    for (i in 0 until arr.length()) {
-                        val it = arr.optJSONObject(i)
-                        if (it?.optString("name") == selectedZachetka) {
-                            studentIdStr = it.optString("id", "")
-                            return@let true
+                // Test 3: Rating Students (schedule.mguu.ru)
+                val (t3Res, zachetkaFound, studentDetailPair) = withContext(Dispatchers.IO) {
+                    val t3Start = System.currentTimeMillis()
+                    val encodedGroup = URLEncoder.encode(selectedGroupId ?: "", "UTF-8")
+                    val studRes = Jsoup.connect("${com.mguuschedule.repository.RatingRepository.RATING_API_BASE}/groups/$encodedGroup/")
+                        .ignoreContentType(true)
+                        .header("Accept", "application/json")
+                        .execute()
+                        .body()
+                    val t3End = System.currentTimeMillis()
+                    val studObj = JSONObject(studRes)
+                    val studArr = studObj.optJSONArray("students")
+                    val yearCode = studObj.optString("year", "000000033")
+                    val semCode = studObj.optString("sem", "0")
+                    var sid = ""
+                    val found = studArr?.let { arr ->
+                        for (i in 0 until arr.length()) {
+                            val it = arr.optJSONObject(i)
+                            if (it?.optString("student_number") == selectedZachetka) {
+                                sid = it.optString("student_code", "")
+                                return@let true
+                            }
                         }
-                    }
-                    false
-                } ?: false
-                apiTestResults = apiTestResults + ApiTestResult("GET /api/rating/students...", "OK • ${studObj.optInt("count", 0)} студ. • Зачетка ${if (zachetkaFound) "найдена ($studentIdStr)" else "не найдена"}", !studObj.optBoolean("ok", false), t3End - t3Start)
+                        false
+                    } ?: false
+                    val count = studArr?.length() ?: 0
+                    Triple(
+                        ApiTestResult(
+                            "GET schedule.mguu.ru/rating/groups/{id}/",
+                            "OK • $count студ. • Зачетка ${if (found) "найдена ($sid)" else "не найдена"}",
+                            studArr == null,
+                            t3End - t3Start
+                        ),
+                        found,
+                        Triple(sid, yearCode, semCode)
+                    )
+                }
+                apiTestResults = apiTestResults + t3Res
 
-                // Test 4: Detail (if student found)
+                // Test 4: Student Disciplines (schedule.mguu.ru)
+                val (studentIdStr, yearCode, semCode) = studentDetailPair
                 if (zachetkaFound && studentIdStr.isNotBlank()) {
-                    val t4Start = System.currentTimeMillis()
-                    val detRes = Jsoup.connect("https://api.lk-upm.ru/api/rating/detail/$studentIdStr?year=000000033&sem=0").ignoreContentType(true).execute().body()
-                    val t4End = System.currentTimeMillis()
-                    val detObj = JSONObject(detRes)
-                    apiTestResults = apiTestResults + ApiTestResult("GET /api/rating/detail...", "OK • ${detObj.optInt("count", 0)} дисц. • ver=${detObj.optString("version", "—")}", !detObj.optBoolean("ok", false), t4End - t4Start)
+                    val t4Res = withContext(Dispatchers.IO) {
+                        val t4Start = System.currentTimeMillis()
+                        val encStudent = URLEncoder.encode(studentIdStr, "UTF-8")
+                        val detRes = Jsoup.connect("${com.mguuschedule.repository.RatingRepository.RATING_API_BASE}/students/$encStudent/?year=$yearCode&sem=$semCode")
+                            .ignoreContentType(true)
+                            .header("Accept", "application/json")
+                            .execute()
+                            .body()
+                        val t4End = System.currentTimeMillis()
+                        val detObj = JSONObject(detRes)
+                        val discArr = detObj.optJSONArray("disciplines")
+                        val ratingStr = detObj.optString("rating", "—")
+                        ApiTestResult(
+                            "GET schedule.mguu.ru/rating/students/{id}/",
+                            "OK • ${discArr?.length() ?: 0} дисц. • рейтинг=$ratingStr",
+                            discArr == null,
+                            t4End - t4Start
+                        )
+                    }
+                    apiTestResults = apiTestResults + t4Res
                 }
             } catch (e: Exception) {
                 AppLogger.e("TESTER", "Ошибка при выполнении тестов", e)
@@ -277,7 +329,7 @@ fun DebugScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text("Прямая проверка эндпоинтов api.lk-upm.ru", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text("Прямая проверка эндпоинтов schedule.mguu.ru и БРС", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                             Spacer(modifier = Modifier.height(12.dp))
                             Button(
                                 onClick = { runApiTests() },
@@ -328,14 +380,14 @@ fun DebugScreen(
                     Text("Консоль приложения", style = MaterialTheme.typography.titleMedium)
                 }
 
-                item {
+                item(key = "console_filters", contentType = "filters") {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        listOf("Все", "API / Сеть", "Парсер / Кэш", "Ошибки / Warn").forEach { label ->
+                        DEBUG_LOG_FILTERS.forEach { label ->
                             val selected = activeFilter == label
                             Surface(
                                 onClick = { activeFilter = label },
@@ -354,7 +406,7 @@ fun DebugScreen(
                     }
                 }
 
-                item {
+                item(key = "console_actions", contentType = "actions") {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.End
@@ -371,7 +423,7 @@ fun DebugScreen(
                     }
                 }
 
-                item {
+                item(key = "console_box", contentType = "console") {
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -385,11 +437,21 @@ fun DebugScreen(
                             contentPadding = PaddingValues(8.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            items(filteredLogs) { entry ->
-                                LogItem(entry)
+                            itemsIndexed(
+                                items = filteredLogs,
+                                key = { idx, e -> "${idx}_${e.time}_${e.tag}_${e.message.hashCode()}" },
+                                contentType = { _, _ -> "log" }
+                            ) { _, entry ->
+                                LogItem(
+                                    entry = entry,
+                                    onCopy = { text ->
+                                        haptic.lightTick()
+                                        clipboardManager.setText(AnnotatedString(text))
+                                    }
+                                )
                             }
                             if (filteredLogs.isEmpty()) {
-                                item {
+                                item(key = "empty_logs", contentType = "empty") {
                                     Box(Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
                                         Text("Логи пусты", color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
@@ -406,9 +468,10 @@ fun DebugScreen(
 }
 
 @Composable
-fun LogItem(entry: AppLogger.LogEntry) {
-    val clipboardManager = LocalClipboardManager.current
-    val haptic = rememberHapticFeedback()
+fun LogItem(
+    entry: AppLogger.LogEntry,
+    onCopy: (String) -> Unit
+) {
     var isExpanded by remember { mutableStateOf(false) }
 
     val containerColor = when {
@@ -430,8 +493,7 @@ fun LogItem(entry: AppLogger.LogEntry) {
             .fillMaxWidth()
             .background(containerColor, RoundedCornerShape(4.dp))
             .clickable {
-                haptic.lightTick()
-                clipboardManager.setText(AnnotatedString("[${entry.time}] ${entry.tag} ${entry.level}: ${entry.message}"))
+                onCopy("[${entry.time}] ${entry.tag} ${entry.level}: ${entry.message}")
                 isExpanded = !isExpanded
             }
             .padding(4.dp)

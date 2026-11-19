@@ -20,87 +20,76 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.cos
 import kotlin.math.sin
 
-/**
- * Четырехкомпонентный кортеж параметров геометрии фигуры для морфинга.
- */
-private data class MorphGeometry(
-    val corners1: Float,
-    val amp1: Float,
-    val corners2: Float,
-    val amp2: Float
-)
+private const val TWO_PI = (2.0 * Math.PI).toFloat()
 
 /**
  * Самостоятельная геометрическая фигура Material 3 Expressive (Expressive Morphing Shape).
- * Является единственным и неделимым визуальным объектом индикатора обновления.
- * Не содержит никаких круглых контейнеров, круговых дуг, спиннеров или икон внутри круга.
+ * Принимает провайдеры лямбдами, чтобы чтение анимационных состояний происходило в Draw-фазе
+ * без рекомпозиций на каждый кадр, и переиспользует Path через rewind().
  */
 @Composable
 fun ExpressiveMorphingShape(
-    morphProgress: Float,
-    rotationDegrees: Float,
+    morphProgressProvider: () -> Float,
+    rotationDegreesProvider: () -> Float,
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
     fillColor: Color = MaterialTheme.colorScheme.primaryContainer
 ) {
+    val path = remember { Path() }
+
     Canvas(
-        modifier = modifier.graphicsLayer { rotationZ = rotationDegrees }
+        modifier = modifier.graphicsLayer { rotationZ = rotationDegreesProvider() }
     ) {
         val sizePx = size.minDimension
         val center = Offset(sizePx / 2f, sizePx / 2f)
         val baseRadius = sizePx * 0.36f
 
-        // Непрерывный геометрический морфинг между формами Material 3 Expressive:
-        // Фаза 0..1: 4-pointed Soft Burst -> Squircle -> 8-pointed Flower -> Pill/Oval -> 4-pointed Soft Burst
-        val phase = (morphProgress * 3f) % 3f
-        val geom = when {
+        val phase = (morphProgressProvider() * 3f) % 3f
+        val corners1: Float
+        val amp1: Float
+        val corners2: Float
+        val amp2: Float
+        when {
             phase < 1f -> {
                 val t = phase
-                MorphGeometry(
-                    corners1 = 4f,
-                    amp1 = 0.28f * (1f - t) + 0.08f * t,
-                    corners2 = 8f,
-                    amp2 = 0.0f
-                )
+                corners1 = 4f
+                amp1 = 0.28f * (1f - t) + 0.08f * t
+                corners2 = 8f
+                amp2 = 0.0f
             }
             phase < 2f -> {
                 val t = phase - 1f
-                MorphGeometry(
-                    corners1 = 4f * (1f - t) + 8f * t,
-                    amp1 = 0.08f * (1f - t) + 0.22f * t,
-                    corners2 = 4f,
-                    amp2 = 0.0f
-                )
+                corners1 = 4f * (1f - t) + 8f * t
+                amp1 = 0.08f * (1f - t) + 0.22f * t
+                corners2 = 4f
+                amp2 = 0.0f
             }
             else -> {
                 val t = phase - 2f
-                MorphGeometry(
-                    corners1 = 8f * (1f - t) + 2f * t,
-                    amp1 = 0.22f * (1f - t) + 0.30f * t,
-                    corners2 = 4f,
-                    amp2 = 0.12f * t
-                )
+                corners1 = 8f * (1f - t) + 2f * t
+                amp1 = 0.22f * (1f - t) + 0.30f * t
+                corners2 = 4f
+                amp2 = 0.12f * t
             }
         }
 
-        val path = Path()
+        path.rewind()
         val numSteps = 120
+        val stepAngle = TWO_PI / numSteps
         for (i in 0..numSteps) {
-            val theta = (i.toFloat() / numSteps) * 2f * Math.PI.toFloat()
-            val r = baseRadius * (1f + geom.amp1 * cos(geom.corners1 * theta) + geom.amp2 * cos(geom.corners2 * theta))
+            val theta = i * stepAngle
+            val r = baseRadius * (1f + amp1 * cos(corners1 * theta) + amp2 * cos(corners2 * theta))
             val x = center.x + r * cos(theta)
             val y = center.y + r * sin(theta)
             if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
         path.close()
 
-        // 1. Отрисовка заливки анимированнойExpressive фигуры
         drawPath(
             path = path,
             color = fillColor
         )
 
-        // 2. Отрисовка контура фигуры
         drawPath(
             path = path,
             color = color,
@@ -119,7 +108,7 @@ fun ExpressiveLoadingIndicator(
     color: Color = MaterialTheme.colorScheme.primary
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "expressiveLoadingLoop")
-    val morphProgress by infiniteTransition.animateFloat(
+    val morphProgressState = infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
@@ -128,7 +117,7 @@ fun ExpressiveLoadingIndicator(
         ),
         label = "loadingMorph"
     )
-    val rotation by infiniteTransition.animateFloat(
+    val rotationState = infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
@@ -139,8 +128,8 @@ fun ExpressiveLoadingIndicator(
     )
 
     ExpressiveMorphingShape(
-        morphProgress = morphProgress,
-        rotationDegrees = rotation,
+        morphProgressProvider = { morphProgressState.value },
+        rotationDegreesProvider = { rotationState.value },
         modifier = modifier,
         color = color,
         fillColor = color.copy(alpha = 0.2f)
@@ -149,14 +138,6 @@ fun ExpressiveLoadingIndicator(
 
 /**
  * Индикатор Pull-to-Refresh на основе самостоятельной фигуры Material 3 Expressive Morphing Shape.
- * Полностью исключает устаревшую визуальную модель (круглые контейнеры, дуги progress ring, галки).
- *
- * Семантика состояний:
- * 1. IDLE: Скрыт (alpha = 0, scale = 0).
- * 2. DRAG (оттягивание): Фигура появляется, пропорционально меняет геометрию и поворот от distanceFraction.
- *    Сетевой запрос НЕ вызывается.
- * 3. THRESHOLD: Забоксирована готовность к отпусканию. Сетевой запрос НЕ вызывается.
- * 4. REFRESHING: Бесконечная анимированная морфинг-фигура в динамическом вращении.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -165,65 +146,49 @@ fun ExpressiveRefreshIndicator(
     isRefreshing: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val fraction = state.distanceFraction.coerceIn(0f, 1.5f)
-    val isVisible = fraction > 0.05f || isRefreshing
+    val isVisible by remember(state, isRefreshing) {
+        derivedStateOf { isRefreshing || state.distanceFraction > 0.05f }
+    }
 
     if (isVisible) {
-        val infiniteTransition = rememberInfiniteTransition(label = "expressiveLoop")
-
-        // Бесконечный морфинг геометрической фигуры во время обновления
-        val refreshingMorphProgress by infiniteTransition.animateFloat(
-            initialValue = 0f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 2400, easing = LinearEasing),
-                repeatMode = RepeatMode.Restart
-            ),
-            label = "refreshingMorph"
-        )
-
-        // Бесконечное вращение фигуры во время обновления
-        val refreshingRotation by infiniteTransition.animateFloat(
-            initialValue = 0f,
-            targetValue = 360f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 1600, easing = LinearEasing),
-                repeatMode = RepeatMode.Restart
-            ),
-            label = "refreshingRotation"
-        )
-
-        val alpha by animateFloatAsState(
-            targetValue = if (isRefreshing) 1f else (fraction * 1.5f).coerceIn(0f, 1f),
-            animationSpec = tween(durationMillis = 180),
-            label = "indicatorAlpha"
-        )
-
-        val scale by animateFloatAsState(
-            targetValue = if (isRefreshing) 1f else (0.4f + fraction * 0.6f).coerceIn(0.4f, 1.1f),
-            animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-            label = "indicatorScale"
-        )
-
-        val morphProgress = if (isRefreshing) {
-            refreshingMorphProgress
-        } else {
-            (fraction * 0.5f) % 1f
+        val isThresholdReached by remember(state, isRefreshing) {
+            derivedStateOf { isRefreshing || state.distanceFraction >= 1.0f }
         }
 
-        val rotation = if (isRefreshing) {
-            refreshingRotation
+        val refreshingMorphState: State<Float>?
+        val refreshingRotationState: State<Float>?
+        if (isRefreshing) {
+            val infiniteTransition = rememberInfiniteTransition(label = "expressiveLoop")
+            refreshingMorphState = infiniteTransition.animateFloat(
+                initialValue = 0f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 2400, easing = LinearEasing),
+                    repeatMode = RepeatMode.Restart
+                ),
+                label = "refreshingMorph"
+            )
+            refreshingRotationState = infiniteTransition.animateFloat(
+                initialValue = 0f,
+                targetValue = 360f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 1600, easing = LinearEasing),
+                    repeatMode = RepeatMode.Restart
+                ),
+                label = "refreshingRotation"
+            )
         } else {
-            fraction * 180f
+            refreshingMorphState = null
+            refreshingRotationState = null
         }
 
-        val color = if (fraction >= 1.0f || isRefreshing) {
+        val color = if (isThresholdReached) {
             MaterialTheme.colorScheme.primary
         } else {
             MaterialTheme.colorScheme.onSurfaceVariant
         }
 
-        val fillColor = if (fraction >= 1.0f || isRefreshing) {
+        val fillColor = if (isThresholdReached) {
             MaterialTheme.colorScheme.primaryContainer
         } else {
             MaterialTheme.colorScheme.surfaceContainerHigh
@@ -233,15 +198,29 @@ fun ExpressiveRefreshIndicator(
             modifier = modifier
                 .padding(top = 12.dp)
                 .graphicsLayer {
-                    this.alpha = alpha
-                    this.scaleX = scale
-                    this.scaleY = scale
+                    val fraction = state.distanceFraction.coerceIn(0f, 1.5f)
+                    alpha = if (isRefreshing) 1f else (fraction * 1.5f).coerceIn(0f, 1f)
+                    val s = if (isRefreshing) 1f else (0.4f + fraction * 0.6f).coerceIn(0.4f, 1.1f)
+                    scaleX = s
+                    scaleY = s
                 },
             contentAlignment = Alignment.Center
         ) {
             ExpressiveMorphingShape(
-                morphProgress = morphProgress,
-                rotationDegrees = rotation,
+                morphProgressProvider = {
+                    if (isRefreshing) {
+                        refreshingMorphState?.value ?: 0f
+                    } else {
+                        (state.distanceFraction.coerceIn(0f, 1.5f) * 0.5f) % 1f
+                    }
+                },
+                rotationDegreesProvider = {
+                    if (isRefreshing) {
+                        refreshingRotationState?.value ?: 0f
+                    } else {
+                        state.distanceFraction.coerceIn(0f, 1.5f) * 180f
+                    }
+                },
                 modifier = Modifier.size(44.dp),
                 color = color,
                 fillColor = fillColor
