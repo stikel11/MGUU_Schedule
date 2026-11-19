@@ -87,11 +87,11 @@ fun AnimatedFloatingNavBar(
     )
 
     Surface(
-        modifier = modifier.height(52.dp),
+        modifier = modifier.height(56.dp),
         shape = CircleShape,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         shadowElevation = 3.dp,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
     ) {
         Box(modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)) {
             // Анимированный индикатор активного раздела (offset и width отложены в Layout-фазу)

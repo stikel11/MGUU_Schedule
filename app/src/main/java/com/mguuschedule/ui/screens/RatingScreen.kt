@@ -15,12 +15,13 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
@@ -38,6 +39,7 @@ import com.mguuschedule.ui.components.StatusBarBlurOverlay
 import com.mguuschedule.ui.components.StatusBarScrim
 import com.mguuschedule.ui.components.TopScrimProtection
 import com.mguuschedule.ui.theme.AppMotionScheme
+import com.mguuschedule.ui.theme.ExpressiveShapes
 import com.mguuschedule.util.rememberHapticFeedback
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -133,7 +135,7 @@ fun RatingScreen(
                                         modifier = Modifier.padding(24.dp)
                                     ) {
                                         Icon(
-                                            Icons.Default.CloudOff,
+                                            Icons.Rounded.CloudOff,
                                             contentDescription = null,
                                             modifier = Modifier.size(56.dp),
                                             tint = MaterialTheme.colorScheme.error
@@ -196,7 +198,7 @@ fun RatingScreen(
                                                         }
                                                     },
                                                     label = { Text(currentYear?.title ?: "Учебный год") },
-                                                    trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) },
+                                                    trailingIcon = { Icon(Icons.Rounded.ArrowDropDown, contentDescription = null) },
                                                     shape = CircleShape
                                                 )
 
@@ -237,7 +239,7 @@ fun RatingScreen(
                                                         }
                                                     },
                                                     label = { Text(currentSem?.title ?: "Семестр") },
-                                                    trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) },
+                                                    trailingIcon = { Icon(Icons.Rounded.ArrowDropDown, contentDescription = null) },
                                                     shape = CircleShape
                                                 )
 
@@ -306,7 +308,7 @@ fun RatingScreen(
                                             horizontalAlignment = Alignment.CenterHorizontally
                                         ) {
                                             Icon(
-                                                Icons.Default.Info,
+                                                Icons.Rounded.Info,
                                                 contentDescription = null,
                                                 modifier = Modifier.size(44.dp),
                                                 tint = MaterialTheme.colorScheme.primary
@@ -328,30 +330,31 @@ fun RatingScreen(
                                     }
                                 }
                             } else {
-                                items(
-                                    items = subjects,
-                                    key = { it.title + it.detailUrl },
-                                    contentType = { "subject" }
-                                ) { subject ->
-                                    val isExpanded = expandedSubjectUrl == subject.detailUrl
-                                    val points = controlPointsMap[subject.detailUrl]
-                                    val isLoadingPoints = loadingPointsSet.contains(subject.detailUrl)
+                                item(key = "rating_subjects_group", contentType = "subjects_group") {
+                                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                        subjects.forEachIndexed { index, subject ->
+                                            val isExpanded = expandedSubjectUrl == subject.detailUrl
+                                            val points = controlPointsMap[subject.detailUrl]
+                                            val isLoadingPoints = loadingPointsSet.contains(subject.detailUrl)
 
-                                    SubjectScoreCard(
-                                        subject = subject,
-                                        isExpanded = isExpanded,
-                                        controlPoints = points,
-                                        isLoadingPoints = isLoadingPoints,
-                                        onClick = {
-                                            haptic.lightTick()
-                                            if (isExpanded) {
-                                                expandedSubjectUrl = null
-                                            } else {
-                                                expandedSubjectUrl = subject.detailUrl
-                                                viewModel.fetchControlPointsForSubject(subject)
-                                            }
+                                            SubjectScoreCard(
+                                                subject = subject,
+                                                isExpanded = isExpanded,
+                                                controlPoints = points,
+                                                isLoadingPoints = isLoadingPoints,
+                                                shape = ExpressiveShapes.segmentedItem(index, subjects.size),
+                                                onClick = {
+                                                    haptic.lightTick()
+                                                    if (isExpanded) {
+                                                        expandedSubjectUrl = null
+                                                    } else {
+                                                        expandedSubjectUrl = subject.detailUrl
+                                                        viewModel.fetchControlPointsForSubject(subject)
+                                                    }
+                                                }
+                                            )
                                         }
-                                    )
+                                    }
                                 }
                             }
                         }
@@ -387,7 +390,7 @@ fun StudentHeroRatingCard(
     val module2Str = remember(student?.module2) { formatScore(student?.module2) }
 
     Surface(
-        shape = RoundedCornerShape(28.dp),
+        shape = ExpressiveShapes.HeroCard,
         color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -409,7 +412,7 @@ fun StudentHeroRatingCard(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                         ) {
                             Icon(
-                                Icons.Default.Badge,
+                                Icons.Rounded.Badge,
                                 contentDescription = null,
                                 modifier = Modifier.size(16.dp),
                                 tint = MaterialTheme.colorScheme.primary
@@ -423,7 +426,7 @@ fun StudentHeroRatingCard(
                             )
                             if (studentsList.size > 1) {
                                 Icon(
-                                    Icons.Default.ArrowDropDown,
+                                    Icons.Rounded.ArrowDropDown,
                                     contentDescription = null,
                                     modifier = Modifier.size(18.dp),
                                     tint = MaterialTheme.colorScheme.onSurface
@@ -512,7 +515,7 @@ fun StudentHeroRatingCard(
 @Composable
 fun MetricPill(label: String, value: String, modifier: Modifier = Modifier) {
     Surface(
-        shape = RoundedCornerShape(16.dp),
+        shape = ExpressiveShapes.InnerCard,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         modifier = modifier
     ) {
@@ -538,6 +541,7 @@ fun SubjectScoreCard(
     isExpanded: Boolean,
     controlPoints: List<ControlPoint>?,
     isLoadingPoints: Boolean,
+    shape: Shape = ExpressiveShapes.Card,
     onClick: () -> Unit
 ) {
     val module1Str = remember(subject.module1) { formatScore(subject.module1) }
@@ -545,8 +549,8 @@ fun SubjectScoreCard(
     val totalScoreStr = remember(subject.totalScore) { formatScore(subject.totalScore) }
 
     Surface(
-        shape = RoundedCornerShape(22.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer,
+        shape = shape,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = Modifier.fillMaxWidth(),
         onClick = onClick
     ) {
@@ -602,7 +606,7 @@ fun SubjectScoreCard(
                     label = "subjectChevronRotation"
                 )
                 Icon(
-                    imageVector = Icons.Default.ExpandMore,
+                    imageVector = Icons.Rounded.ExpandMore,
                     contentDescription = if (isExpanded) "Свернуть" else "Подробности",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.graphicsLayer { rotationZ = chevronRotation }
@@ -635,9 +639,8 @@ fun SubjectScoreCard(
                                 .padding(vertical = 12.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp,
+                            ExpressiveLoadingIndicator(
+                                modifier = Modifier.size(24.dp),
                                 color = MaterialTheme.colorScheme.primary
                             )
                         }

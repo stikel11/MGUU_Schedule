@@ -14,7 +14,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -120,7 +120,7 @@ fun WeekCalendar(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Icon(
-                        Icons.Default.ArrowDropDown, 
+                        Icons.Rounded.ArrowDropDown, 
                         contentDescription = null, 
                         modifier = Modifier.size(22.dp),
                         tint = MaterialTheme.colorScheme.primary
@@ -145,7 +145,7 @@ fun WeekCalendar(
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            imageVector = if (unreadNotificationCount > 0) Icons.Default.NotificationsActive else Icons.Default.NotificationsNone,
+                            imageVector = if (unreadNotificationCount > 0) Icons.Rounded.NotificationsActive else Icons.Rounded.NotificationsNone,
                             contentDescription = "История уведомлений",
                             tint = if (unreadNotificationCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(20.dp)
@@ -175,7 +175,7 @@ fun WeekCalendar(
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            imageVector = Icons.Default.Share,
+                            imageVector = Icons.Rounded.Share,
                             contentDescription = "Поделиться расписанием дня",
                             tint = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(18.dp)
@@ -195,7 +195,7 @@ fun WeekCalendar(
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            imageVector = Icons.Default.Settings,
+                            imageVector = Icons.Rounded.Settings,
                             contentDescription = "Настройки",
                             tint = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(20.dp)

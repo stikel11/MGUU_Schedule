@@ -30,7 +30,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -259,7 +259,7 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
                                 } else null,
-                                shape = RoundedCornerShape(28.dp),
+                                shape = com.mguuschedule.ui.theme.ExpressiveShapes.Dialog,
                                 containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                             )
                         }
@@ -276,7 +276,7 @@ class MainActivity : ComponentActivity() {
                                 @OptIn(ExperimentalMaterial3Api::class)
                                 ModalBottomSheet(
                                     onDismissRequest = { showSheet = false },
-                                    shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+                                    shape = com.mguuschedule.ui.theme.ExpressiveShapes.BottomSheet,
                                     containerColor = MaterialTheme.colorScheme.surfaceContainerLow
                                 ) {
                                     Column(
@@ -720,7 +720,7 @@ fun MainAppScaffold(
                         shape = CircleShape,
                         color = MaterialTheme.colorScheme.surfaceContainerHigh,
                         shadowElevation = 3.dp,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
                         modifier = Modifier
                             .size(56.dp)
                             .graphicsLayer {
@@ -730,7 +730,7 @@ fun MainAppScaffold(
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
-                                imageVector = Icons.Default.Search,
+                                imageVector = Icons.Rounded.Search,
                                 contentDescription = "Поиск",
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(24.dp)

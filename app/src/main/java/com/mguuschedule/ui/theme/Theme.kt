@@ -11,12 +11,20 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+
+/**
+ * Текущий эффективный режим тёмной темы с учётом ручного выбора пользователя в настройках
+ * (0: Системная, 1: Светлая, 2: Тёмная).
+ */
+val LocalIsDarkTheme = compositionLocalOf { false }
 
 private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
@@ -37,6 +45,10 @@ private val DarkColorScheme = darkColorScheme(
     onTertiary = OnTertiaryDark,
     tertiaryContainer = TertiaryContainerDark,
     onTertiaryContainer = OnTertiaryContainerDark,
+    error = ErrorDark,
+    onError = OnErrorDark,
+    errorContainer = ErrorContainerDark,
+    onErrorContainer = OnErrorContainerDark,
     background = BackgroundDark,
     onBackground = OnBackgroundDark,
     surface = SurfaceDark,
@@ -67,6 +79,10 @@ private val LightColorScheme = lightColorScheme(
     onTertiary = OnTertiaryLight,
     tertiaryContainer = TertiaryContainerLight,
     onTertiaryContainer = OnTertiaryContainerLight,
+    error = ErrorLight,
+    onError = OnErrorLight,
+    errorContainer = ErrorContainerLight,
+    onErrorContainer = OnErrorContainerLight,
     background = BackgroundLight,
     onBackground = OnBackgroundLight,
     surface = SurfaceLight,
@@ -124,49 +140,25 @@ fun MGUUScheduleTheme(
     }
 
     val context = LocalContext.current
-    val colorScheme = remember(darkTheme, dynamicColor, context) {
+    val configuration = LocalConfiguration.current
+    // Используем чистую системную палитру Material You без ручных lerp/.copy искажений,
+    // с пересчётом при изменении системной конфигурации (смена обоев/палитры).
+    val colorScheme = remember(darkTheme, dynamicColor, context, configuration) {
         when {
-            darkTheme -> {
-                val baseDark = if (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    dynamicDarkColorScheme(context)
-                } else {
-                    DarkColorScheme
-                }
-                baseDark.copy(
-                    background = androidx.compose.ui.graphics.lerp(baseDark.background, Color.Black, 0.25f),
-                    surface = androidx.compose.ui.graphics.lerp(baseDark.surface, Color.Black, 0.25f),
-                    surfaceContainerLowest = androidx.compose.ui.graphics.lerp(baseDark.surfaceContainerLowest, Color.Black, 0.25f),
-                    surfaceContainerLow = androidx.compose.ui.graphics.lerp(baseDark.surfaceContainerLow, baseDark.primary, 0.05f),
-                    surfaceContainer = androidx.compose.ui.graphics.lerp(baseDark.surfaceContainer, baseDark.primary, 0.08f),
-                    surfaceContainerHigh = androidx.compose.ui.graphics.lerp(baseDark.surfaceContainerHigh, baseDark.primary, 0.11f),
-                    surfaceContainerHighest = androidx.compose.ui.graphics.lerp(baseDark.surfaceContainerHighest, baseDark.primary, 0.16f)
-                )
+            dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+                if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
             }
-            else -> {
-                val baseLight = if (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    dynamicLightColorScheme(context)
-                } else {
-                    LightColorScheme
-                }
-                val primaryTone = baseLight.primary
-                baseLight.copy(
-                    background = androidx.compose.ui.graphics.lerp(Color.White, primaryTone, 0.12f),
-                    surface = androidx.compose.ui.graphics.lerp(Color.White, primaryTone, 0.12f),
-                    surfaceContainerLowest = Color.White,
-                    surfaceContainerLow = Color.White,
-                    surfaceContainer = Color.White,
-                    surfaceContainerHigh = Color.White,
-                    surfaceContainerHighest = androidx.compose.ui.graphics.lerp(Color.White, primaryTone, 0.13f),
-                    outlineVariant = androidx.compose.ui.graphics.lerp(baseLight.onSurface, Color.White, 0.78f)
-                )
-            }
+            darkTheme -> DarkColorScheme
+            else -> LightColorScheme
         }
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = AppTypography,
-        shapes = AppShapes,
-        content = content
-    )
+    CompositionLocalProvider(LocalIsDarkTheme provides darkTheme) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = AppTypography,
+            shapes = AppShapes,
+            content = content
+        )
+    }
 }

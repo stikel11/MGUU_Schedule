@@ -113,7 +113,7 @@ fun CollapsibleScreenTitle(
     Text(
         text = title,
         style = MaterialTheme.typography.headlineLarge,
-        fontWeight = FontWeight.Bold,
+        fontWeight = FontWeight.ExtraBold,
         color = MaterialTheme.colorScheme.onSurface,
         modifier = modifier.padding(
             top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp,

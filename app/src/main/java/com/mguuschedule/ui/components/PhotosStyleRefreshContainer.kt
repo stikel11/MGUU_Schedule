@@ -155,9 +155,11 @@ fun PhotosStyleRefreshContainer(
     val isPullVisible by remember { derivedStateOf { offsetAnim.value > 2f } }
 
     val backgroundColor = MaterialTheme.colorScheme.background
-    val primaryColor = MaterialTheme.colorScheme.primary
-    val recessedWellColor = remember(backgroundColor, primaryColor) {
-        androidx.compose.ui.graphics.lerp(backgroundColor, primaryColor, 0.09f)
+    val isDarkTheme = com.mguuschedule.ui.theme.LocalIsDarkTheme.current
+    val recessedWellColor = if (isDarkTheme) {
+        MaterialTheme.colorScheme.surfaceContainerLowest
+    } else {
+        MaterialTheme.colorScheme.surfaceContainerHighest
     }
 
     Box(

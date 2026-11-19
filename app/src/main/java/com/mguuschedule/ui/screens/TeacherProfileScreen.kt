@@ -11,11 +11,11 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CloudOff
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.PersonOff
-import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.CloudOff
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.PersonOff
+import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -76,7 +76,7 @@ fun TeacherProfileScreen(
                         haptic.lightTick()
                         onBack()
                     }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Назад")
                     }
                 },
                 scrollBehavior = scrollBehavior,
@@ -124,7 +124,7 @@ fun TeacherProfileScreen(
                                 modifier = Modifier.padding(24.dp)
                             ) {
                                 Icon(
-                                    Icons.Default.CloudOff,
+                                    Icons.Rounded.CloudOff,
                                     contentDescription = null,
                                     modifier = Modifier.size(56.dp),
                                     tint = MaterialTheme.colorScheme.error
@@ -173,7 +173,7 @@ fun TeacherProfileScreen(
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
                                         Icon(
-                                            imageVector = Icons.Default.PersonOff,
+                                            imageVector = Icons.Rounded.PersonOff,
                                             contentDescription = null,
                                             modifier = Modifier.size(36.dp),
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant
@@ -280,7 +280,7 @@ fun TeacherProfileContent(
                             )
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
                                 Icon(
-                                    imageVector = Icons.Default.Star,
+                                    imageVector = Icons.Rounded.Star,
                                     contentDescription = null,
                                     tint = if (teacher.rating > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(32.dp)
@@ -459,7 +459,7 @@ fun TeacherProfileContent(
                 contentPadding = PaddingValues(16.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Default.Edit,
+                    imageVector = Icons.Rounded.Edit,
                     contentDescription = null,
                     modifier = Modifier.size(20.dp)
                 )

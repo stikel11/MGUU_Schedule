@@ -17,7 +17,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,26 +32,16 @@ import androidx.compose.ui.unit.dp
 import com.mguuschedule.model.EducationLevel
 import com.mguuschedule.model.Group
 import com.mguuschedule.ui.components.CollapsibleScreenTitle
+import com.mguuschedule.ui.components.ExpressiveLoadingIndicator
 import com.mguuschedule.ui.components.StatusBarBlurOverlay
+import com.mguuschedule.ui.theme.ExpressiveShapes
 import com.mguuschedule.util.rememberHapticFeedback
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
-private val SingleItemShape = RoundedCornerShape(24.dp)
-private val TopItemShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp, bottomStart = 6.dp, bottomEnd = 6.dp)
-private val BottomItemShape = RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp, bottomStart = 24.dp, bottomEnd = 24.dp)
-private val MiddleItemShape = RoundedCornerShape(6.dp)
-
-private fun getItemShape(index: Int, total: Int): Shape {
-    if (total <= 1) return SingleItemShape
-    return when (index) {
-        0 -> TopItemShape
-        total - 1 -> BottomItemShape
-        else -> MiddleItemShape
-    }
-}
+private fun getItemShape(index: Int, total: Int): Shape = ExpressiveShapes.segmentedItem(index, total)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -126,7 +116,7 @@ fun ProfileScreen(
                         }
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.CheckCircle, null, tint = MaterialTheme.colorScheme.primary)
+                            Icon(Icons.Rounded.CheckCircle, null, tint = MaterialTheme.colorScheme.primary)
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(data.visuals.message, fontWeight = FontWeight.Medium)
                         }
@@ -156,7 +146,7 @@ fun ProfileScreen(
                         SettingsClickItem(
                             title = "Моя группа",
                             subtitle = selectedGroup?.name ?: "Не выбрана",
-                            icon = Icons.Default.School,
+                            icon = Icons.Rounded.School,
                             shape = getItemShape(0, 2),
                             onClick = {
                                 haptic.lightTick()
@@ -168,7 +158,7 @@ fun ProfileScreen(
                         SettingsClickItem(
                             title = "Номер зачетной книжки",
                             subtitle = if (selectedZachetka.isNotBlank()) selectedZachetka else "Нажмите, чтобы выбрать зачетку",
-                            icon = Icons.Default.Badge,
+                            icon = Icons.Rounded.Badge,
                             shape = getItemShape(1, 2),
                             onClick = {
                                 haptic.lightTick()
@@ -186,7 +176,7 @@ fun ProfileScreen(
                         SettingsSwitchItem(
                             title = "Напоминания о парах",
                             subtitle = "Уведомление перед началом занятия",
-                            icon = Icons.Default.NotificationsActive,
+                            icon = Icons.Rounded.NotificationsActive,
                             checked = remindersEnabled,
                             shape = getItemShape(0, notifTotalCount),
                             onCheckedChange = {
@@ -208,7 +198,7 @@ fun ProfileScreen(
                             SettingsClickItem(
                                 title = "Время до начала",
                                 subtitle = "$reminderTime минут",
-                                icon = Icons.Default.AccessTime,
+                                icon = Icons.Rounded.AccessTime,
                                 shape = getItemShape(1, 4),
                                 onClick = {
                                     haptic.lightTick()
@@ -220,7 +210,7 @@ fun ProfileScreen(
                         SettingsSwitchItem(
                             title = "Оповещения об изменениях",
                             subtitle = "Проверка замен и переносов аудиторий",
-                            icon = Icons.Default.Update,
+                            icon = Icons.Rounded.Update,
                             checked = changesEnabled,
                             shape = getItemShape(if (remindersEnabled) 2 else 1, notifTotalCount),
                             onCheckedChange = {
@@ -235,7 +225,7 @@ fun ProfileScreen(
                         SettingsSwitchItem(
                             title = "Live Updates",
                             subtitle = "Интерактивное уведомление с таймером во время пары",
-                            icon = Icons.Default.Timer,
+                            icon = Icons.Rounded.Timer,
                             checked = viewModel.liveUpdatesEnabled,
                             shape = getItemShape(if (remindersEnabled) 3 else 2, notifTotalCount),
                             onCheckedChange = {
@@ -265,7 +255,7 @@ fun ProfileScreen(
                         SettingsClickItem(
                             title = "Тема оформления",
                             subtitle = themeSubtitle,
-                            icon = Icons.Default.Palette,
+                            icon = Icons.Rounded.Palette,
                             shape = getItemShape(0, appearanceTotal),
                             onClick = {
                                 haptic.lightTick()
@@ -277,7 +267,7 @@ fun ProfileScreen(
                             SettingsSwitchItem(
                                 title = "Динамические цвета (Material You)",
                                 subtitle = "Использовать цвета из обоев рабочего стола",
-                                icon = Icons.Default.ColorLens,
+                                icon = Icons.Rounded.ColorLens,
                                 checked = dynamicColorEnabled,
                                 shape = getItemShape(1, appearanceTotal),
                                 onCheckedChange = {
@@ -290,7 +280,7 @@ fun ProfileScreen(
                         SettingsClickItem(
                             title = "Стиль постера расписания",
                             subtitle = shareStyleSubtitle,
-                            icon = Icons.Default.Share,
+                            icon = Icons.Rounded.Share,
                             shape = getItemShape(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) 2 else 1, appearanceTotal),
                             onClick = {
                                 haptic.lightTick()
@@ -306,7 +296,7 @@ fun ProfileScreen(
                         SettingsClickItem(
                             title = "Расписание",
                             subtitle = if (isForcedLoading) "Обновление расписания..." else "${storageState.statusText} • Обновлено: ${storageState.lastUpdated}",
-                            icon = Icons.Default.Sync,
+                            icon = Icons.Rounded.Sync,
                             enabled = !isForcedLoading,
                             shape = getItemShape(0, 2),
                             onClick = {
@@ -321,7 +311,7 @@ fun ProfileScreen(
                         SettingsClickItem(
                             title = "Очистить данные расписания",
                             subtitle = "Удалит только сохраненные пары расписания",
-                            icon = Icons.Default.DeleteSweep,
+                            icon = Icons.Rounded.DeleteSweep,
                             enabled = !isForcedLoading && storageState.lessonsCount > 0,
                             isDestructive = true,
                             shape = getItemShape(1, 2),
@@ -351,10 +341,10 @@ fun ProfileScreen(
                     }
 
                     val updateIcon = when (updateState) {
-                        is UpdateUiState.UpdateAvailable, is UpdateUiState.Downloaded -> Icons.Default.DownloadForOffline
-                        is UpdateUiState.Downloading -> Icons.Default.CloudDownload
-                        is UpdateUiState.Error -> Icons.Default.ErrorOutline
-                        else -> Icons.Default.SystemUpdate
+                        is UpdateUiState.UpdateAvailable, is UpdateUiState.Downloaded -> Icons.Rounded.DownloadForOffline
+                        is UpdateUiState.Downloading -> Icons.Rounded.CloudDownload
+                        is UpdateUiState.Error -> Icons.Rounded.ErrorOutline
+                        else -> Icons.Rounded.SystemUpdate
                     }
 
                     SettingsContainer(title = "О приложении") {
@@ -385,7 +375,7 @@ fun ProfileScreen(
                         SettingsClickItem(
                             title = "Возможности приложения",
                             subtitle = "Показать интерактивное мини-обучение",
-                            icon = Icons.Default.AutoAwesome,
+                            icon = Icons.Rounded.AutoAwesome,
                             shape = getItemShape(1, 5),
                             onClick = {
                                 haptic.lightTick()
@@ -397,7 +387,7 @@ fun ProfileScreen(
                         SettingsClickItem(
                             title = "МГУУ Расписание",
                             subtitle = "Версия ${com.mguuschedule.BuildConfig.VERSION_NAME} beta",
-                            icon = Icons.Default.Info,
+                            icon = Icons.Rounded.Info,
                             shape = getItemShape(2, 5),
                             onClick = {
                                 val now = System.currentTimeMillis()
@@ -431,7 +421,7 @@ fun ProfileScreen(
                         SettingsClickItem(
                             title = "GitHub",
                             subtitle = "Исходный код проекта",
-                            icon = Icons.Default.Code,
+                            icon = Icons.Rounded.Code,
                             shape = getItemShape(3, 5),
                             onClick = {
                                 haptic.click()
@@ -450,7 +440,7 @@ fun ProfileScreen(
                         SettingsClickItem(
                             title = "Обратная связь",
                             subtitle = "Сообщить о проблеме или связаться с разработчиком",
-                            icon = Icons.Default.Feedback,
+                            icon = Icons.Rounded.Feedback,
                             shape = getItemShape(4, 5),
                             onClick = {
                                 haptic.click()
@@ -474,7 +464,7 @@ fun ProfileScreen(
                             SettingsClickItem(
                                 title = "Панель отладки",
                                 subtitle = "Инструменты тестирования и логи",
-                                icon = Icons.Default.BugReport,
+                                icon = Icons.Rounded.BugReport,
                                 shape = getItemShape(0, 1),
                                 onClick = {
                                     haptic.lightTick()
@@ -673,11 +663,11 @@ fun ZachetkaSelectionSheet(
                         .fillMaxWidth()
                         .padding(bottom = 12.dp),
                     placeholder = { Text("Поиск зачетки...") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
                             IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Default.Close, contentDescription = "Очистить")
+                                Icon(Icons.Rounded.Close, contentDescription = "Очистить")
                             }
                         }
                     },
@@ -734,7 +724,7 @@ fun ZachetkaSelectionSheet(
                                         ) {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                 Icon(
-                                                    Icons.Default.Badge,
+                                                    Icons.Rounded.Badge,
                                                     contentDescription = null,
                                                     tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary,
                                                     modifier = Modifier.size(20.dp)
@@ -750,7 +740,7 @@ fun ZachetkaSelectionSheet(
 
                                             if (isSelected) {
                                                 Icon(
-                                                    Icons.Default.Check,
+                                                    Icons.Rounded.Check,
                                                     contentDescription = null,
                                                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                                     modifier = Modifier.size(20.dp)
@@ -766,7 +756,10 @@ fun ZachetkaSelectionSheet(
                             is ZachetkasUiState.Loading -> {
                                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        CircularProgressIndicator()
+                                        ExpressiveLoadingIndicator(
+                                            modifier = Modifier.size(36.dp),
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
                                         Spacer(modifier = Modifier.height(12.dp))
                                         Text("Загрузка списка зачеток...", style = MaterialTheme.typography.bodyMedium)
                                     }
@@ -929,7 +922,7 @@ fun SettingsClickItem(
                 )
             }
             Icon(
-                imageVector = Icons.Default.ChevronRight,
+                imageVector = Icons.Rounded.ChevronRight,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = contentAlpha),
                 modifier = Modifier.size(20.dp)
@@ -1191,11 +1184,11 @@ fun GroupSelectionSheet(
                     .fillMaxWidth()
                     .padding(bottom = 16.dp),
                 placeholder = { Text("Поиск группы...") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
                         IconButton(onClick = { searchQuery = "" }) {
-                            Icon(Icons.Default.Close, contentDescription = "Очистить")
+                            Icon(Icons.Rounded.Close, contentDescription = "Очистить")
                         }
                     }
                 },
@@ -1211,7 +1204,10 @@ fun GroupSelectionSheet(
 
             Box(modifier = Modifier.heightIn(max = 500.dp)) {
                 when (uiState) {
-                    is GroupsUiState.Loading -> CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                    is GroupsUiState.Loading -> ExpressiveLoadingIndicator(
+                        modifier = Modifier.size(36.dp).align(Alignment.Center),
+                        color = MaterialTheme.colorScheme.primary
+                    )
                     is GroupsUiState.Error -> Text("Ошибка загрузки групп", modifier = Modifier.align(Alignment.Center))
                     is GroupsUiState.Success -> {
                         val filteredGroups = remember(uiState.groups, selectedLevelTab, searchQuery) {
@@ -1260,7 +1256,7 @@ fun GroupSelectionSheet(
                                                     fontWeight = FontWeight.Bold
                                                 )
                                                 Icon(
-                                                    if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                                    if (isExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
                                                     contentDescription = null
                                                 )
                                             }
@@ -1296,7 +1292,7 @@ fun GroupSelectionSheet(
                                                     },
                                                     leadingContent = {
                                                         Icon(
-                                                            Icons.Default.Group,
+                                                            Icons.Rounded.Group,
                                                             contentDescription = null,
                                                             modifier = Modifier.size(24.dp),
                                                             tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary
@@ -1305,7 +1301,7 @@ fun GroupSelectionSheet(
                                                     trailingContent = {
                                                         if (isSelected) {
                                                             Icon(
-                                                                Icons.Default.Check,
+                                                                Icons.Rounded.Check,
                                                                 contentDescription = null,
                                                                 tint = MaterialTheme.colorScheme.onPrimaryContainer
                                                             )

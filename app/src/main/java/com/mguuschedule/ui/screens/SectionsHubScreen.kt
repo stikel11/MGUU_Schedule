@@ -103,10 +103,10 @@ fun SectionsScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Единый заголовок экрана без подзаголовков (как в Расписании) + кнопка Настроек
+            // Единый заголовок экрана (выровнен по вертикали с CollapsibleScreenTitle в Расписании и Рейтинге) + кнопка Настроек
             item {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -138,63 +138,62 @@ fun SectionsScreen(
             }
 
             item {
-                SectionHubCard(
-                    title = "Учебный план",
-                    subtitle = "Дисциплины, даты консультаций, зачётов и экзаменов",
-                    badgeText = if (totalSubjectsCount > 0) "$totalSubjectsCount дисц." else "Семестр",
-                    icon = Icons.AutoMirrored.Rounded.MenuBook,
-                    iconContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                    iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    onClick = onOpenCurriculum
-                )
-            }
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    SectionHubCard(
+                        title = "Учебный план",
+                        subtitle = "Дисциплины, даты консультаций, зачётов и экзаменов",
+                        badgeText = if (totalSubjectsCount > 0) "$totalSubjectsCount дисц." else "Семестр",
+                        icon = Icons.AutoMirrored.Rounded.MenuBook,
+                        iconContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        shape = com.mguuschedule.ui.theme.ExpressiveShapes.segmentedItem(0, 5),
+                        onClick = onOpenCurriculum
+                    )
 
-            item {
-                SectionHubCard(
-                    title = "Материалы к парам",
-                    subtitle = "Прикрепленные файлы, презентации и ссылки по предметам",
-                    badgeText = "$totalMaterialsCount влож.",
-                    icon = Icons.Rounded.FolderCopy,
-                    iconContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
-                    onClick = onOpenMaterials
-                )
-            }
+                    SectionHubCard(
+                        title = "Материалы к парам",
+                        subtitle = "Прикрепленные файлы, презентации и ссылки по предметам",
+                        badgeText = "$totalMaterialsCount влож.",
+                        icon = Icons.Rounded.FolderCopy,
+                        iconContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        shape = com.mguuschedule.ui.theme.ExpressiveShapes.segmentedItem(1, 5),
+                        onClick = onOpenMaterials
+                    )
 
-            item {
-                SectionHubCard(
-                    title = "Посещаемость",
-                    subtitle = "Учёт посещённых и пропущенных занятий по предметам",
-                    badgeText = "$attendancePercent%",
-                    icon = Icons.Rounded.HowToReg,
-                    iconContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
-                    onClick = onOpenAttendance
-                )
-            }
+                    SectionHubCard(
+                        title = "Посещаемость",
+                        subtitle = "Учёт посещённых и пропущенных занятий по предметам",
+                        badgeText = "$attendancePercent%",
+                        icon = Icons.Rounded.HowToReg,
+                        iconContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        shape = com.mguuschedule.ui.theme.ExpressiveShapes.segmentedItem(2, 5),
+                        onClick = onOpenAttendance
+                    )
 
-            item {
-                SectionHubCard(
-                    title = "Свободные аудитории",
-                    subtitle = "Поиск свободных кабинетов на Сухаревской и Войковской",
-                    badgeText = "Кампус",
-                    icon = Icons.Rounded.MeetingRoom,
-                    iconContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                    iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
-                    onClick = onOpenFreeRooms
-                )
-            }
+                    SectionHubCard(
+                        title = "Свободные аудитории",
+                        subtitle = "Поиск свободных кабинетов на Сухаревской и Войковской",
+                        badgeText = "Кампус",
+                        icon = Icons.Rounded.MeetingRoom,
+                        iconContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                        iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
+                        shape = com.mguuschedule.ui.theme.ExpressiveShapes.segmentedItem(3, 5),
+                        onClick = onOpenFreeRooms
+                    )
 
-            item {
-                SectionHubCard(
-                    title = "СДО Moodle",
-                    subtitle = "Курсы, задания, оценки и веб-портал online.mguu.ru",
-                    badgeText = if (isMoodleConnected) "Онлайн" else "Вход",
-                    icon = Icons.Rounded.School,
-                    iconContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                    iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    onClick = onOpenMoodle
-                )
+                    SectionHubCard(
+                        title = "СДО Moodle",
+                        subtitle = "Курсы, задания, оценки и веб-портал online.mguu.ru",
+                        badgeText = if (isMoodleConnected) "Онлайн" else "Вход",
+                        icon = Icons.Rounded.School,
+                        iconContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        shape = com.mguuschedule.ui.theme.ExpressiveShapes.segmentedItem(4, 5),
+                        onClick = onOpenMoodle
+                    )
+                }
             }
         }
     }
@@ -208,11 +207,12 @@ private fun SectionHubCard(
     icon: ImageVector,
     iconContainerColor: Color,
     iconTint: Color,
+    shape: androidx.compose.ui.graphics.Shape = com.mguuschedule.ui.theme.ExpressiveShapes.Card,
     onClick: () -> Unit
 ) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(26.dp),
+        shape = shape,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         shadowElevation = 0.dp,
         modifier = Modifier.fillMaxWidth()
@@ -456,7 +456,7 @@ fun CurriculumScreen(
                         )
                     },
                     singleLine = true,
-                    shape = RoundedCornerShape(20.dp),
+                    shape = com.mguuschedule.ui.theme.ExpressiveShapes.SearchBar,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                         unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -730,7 +730,7 @@ fun MaterialsHubScreen(
                         )
                     },
                     singleLine = true,
-                    shape = RoundedCornerShape(22.dp),
+                    shape = com.mguuschedule.ui.theme.ExpressiveShapes.SearchBar,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                         unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -1149,7 +1149,7 @@ fun AttendanceScreen(
                         )
                     },
                     singleLine = true,
-                    shape = RoundedCornerShape(22.dp),
+                    shape = com.mguuschedule.ui.theme.ExpressiveShapes.SearchBar,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                         unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -1525,7 +1525,7 @@ fun FreeRoomsScreen(onBack: () -> Unit) {
                         )
                     },
                     singleLine = true,
-                    shape = RoundedCornerShape(22.dp),
+                    shape = com.mguuschedule.ui.theme.ExpressiveShapes.SearchBar,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                         unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -1564,7 +1564,10 @@ fun FreeRoomsScreen(onBack: () -> Unit) {
             if (isLoading) {
                 item {
                     Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
+                        com.mguuschedule.ui.components.ExpressiveLoadingIndicator(
+                            modifier = Modifier.size(36.dp),
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
             } else if (errorMsg != null) {
@@ -1711,7 +1714,10 @@ fun FreeRoomsScreen(onBack: () -> Unit) {
 
                 if (roomLoading) {
                     Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
+                        com.mguuschedule.ui.components.ExpressiveLoadingIndicator(
+                            modifier = Modifier.size(36.dp),
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
                 } else if (roomLessons.isNullOrEmpty()) {
                     Text("В ближайшую неделю занятий в этой аудитории нет.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 20.dp))

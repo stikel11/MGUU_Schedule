@@ -704,7 +704,10 @@ private fun MoodleCoursesTab(
     if (isLoading && courses.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                CircularProgressIndicator()
+                com.mguuschedule.ui.components.ExpressiveLoadingIndicator(
+                modifier = Modifier.size(36.dp),
+                color = MaterialTheme.colorScheme.primary
+            )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     text = "Загружаем курсы из СДО...",
@@ -923,7 +926,10 @@ private fun MoodleDeadlinesTab(
 ) {
     if (isLoading && deadlines.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
+            com.mguuschedule.ui.components.ExpressiveLoadingIndicator(
+                modifier = Modifier.size(36.dp),
+                color = MaterialTheme.colorScheme.primary
+            )
         }
         return
     }
@@ -1145,7 +1151,10 @@ private fun MoodleCourseDetailScreen(
 
             if (isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+                    com.mguuschedule.ui.components.ExpressiveLoadingIndicator(
+                modifier = Modifier.size(36.dp),
+                color = MaterialTheme.colorScheme.primary
+            )
                 }
                 return@Column
             }

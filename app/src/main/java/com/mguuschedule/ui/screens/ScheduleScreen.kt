@@ -5,7 +5,6 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -14,7 +13,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Notes
-import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -43,6 +41,8 @@ import com.mguuschedule.ui.components.StatusBarScrim
 import com.mguuschedule.ui.components.TopScrimProtection
 import com.mguuschedule.ui.components.WeekCalendar
 import com.mguuschedule.ui.theme.AppMotionScheme
+import com.mguuschedule.ui.theme.ExpressiveShapes
+import com.mguuschedule.ui.theme.LocalIsDarkTheme
 import com.mguuschedule.util.ScheduleImageRenderer
 import com.mguuschedule.util.formatClassroom
 import com.mguuschedule.util.rememberHapticFeedback
@@ -72,7 +72,7 @@ fun ScheduleScreen(
     val lessonControlPointsMap by viewModel.lessonControlPointsFlow.collectAsState()
     val haptic = rememberHapticFeedback()
     val context = LocalContext.current
-    val isDarkTheme = isSystemInDarkTheme()
+    val isDarkTheme = LocalIsDarkTheme.current
     
     val snackbarHostState = remember { SnackbarHostState() }
     
@@ -280,7 +280,7 @@ fun OfflineBanner() {
             horizontalArrangement = Arrangement.Center
         ) {
             Icon(
-                imageVector = Icons.Default.CloudOff,
+                imageVector = Icons.Rounded.CloudOff,
                 contentDescription = null,
                 modifier = Modifier.size(16.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
@@ -381,7 +381,7 @@ fun LessonItemWithBreak(
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Schedule,
+                            imageVector = Icons.Rounded.Schedule,
                             contentDescription = null,
                             modifier = Modifier.size(13.dp),
                             tint = MaterialTheme.colorScheme.primary
@@ -495,7 +495,7 @@ fun LessonRow(
                 .weight(1f)
                 .fillMaxWidth()
                 .animateContentSize(animationSpec = AppMotionScheme.defaultSpatialSpec()),
-            shape = RoundedCornerShape(24.dp),
+            shape = ExpressiveShapes.Card,
             color = containerColor,
             contentColor = contentColor,
             shadowElevation = 0.dp,
@@ -520,7 +520,7 @@ fun LessonRow(
                             color = MaterialTheme.colorScheme.primary
                         ) {
                             Icon(
-                                imageVector = Icons.Default.PlayArrow,
+                                imageVector = Icons.Rounded.PlayArrow,
                                 contentDescription = null,
                                 modifier = Modifier
                                     .padding(3.dp)
@@ -552,7 +552,7 @@ fun LessonRow(
                     Spacer(modifier = Modifier.height(12.dp))
                 }
 
-                // Top Badges Row: Type, Status
+                // Top Badges Row: Type (Secondary), Control Point (Tertiary)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -564,13 +564,21 @@ fun LessonRow(
                     ) {
                         Surface(
                             shape = CircleShape,
-                            color = if (status == LessonStatus.CURRENT) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.tertiaryContainer,
+                            color = if (status == LessonStatus.CURRENT) {
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                            } else {
+                                MaterialTheme.colorScheme.secondaryContainer
+                            },
                             modifier = Modifier.weight(1f, fill = false)
                         ) {
                             Text(
                                 text = typeName,
                                 style = MaterialTheme.typography.labelMedium,
-                                color = if (status == LessonStatus.CURRENT) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onTertiaryContainer,
+                                color = if (status == LessonStatus.CURRENT) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSecondaryContainer
+                                },
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,

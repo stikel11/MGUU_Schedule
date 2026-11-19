@@ -8,8 +8,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -159,7 +158,7 @@ fun NotificationHistoryScreen(
                             haptic.lightTick()
                             onBack()
                         }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Назад")
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
@@ -173,7 +172,7 @@ fun NotificationHistoryScreen(
                                 haptic.click()
                                 showClearDialog = true
                             }) {
-                                Icon(Icons.Default.DeleteSweep, contentDescription = "Очистить историю")
+                                Icon(Icons.Rounded.DeleteSweep, contentDescription = "Очистить историю")
                             }
                         }
                     }
@@ -255,7 +254,7 @@ fun NotificationHistoryScreen(
                                     ) {
                                         Box(contentAlignment = Alignment.Center) {
                                             Icon(
-                                                Icons.Default.NotificationsNone,
+                                                Icons.Rounded.NotificationsNone,
                                                 contentDescription = null,
                                                 modifier = Modifier.size(32.dp),
                                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
@@ -346,11 +345,11 @@ fun NotificationItemCard(item: NotificationEntity) {
 
     val (typeLabel, icon) = remember(item.type, isRating) {
         when {
-            isRating -> "Рейтинг БРС" to Icons.Default.Insights
-            item.type == "CHANGE" -> "Изменение" to Icons.Default.SwapHoriz
-            item.type == "REMINDER" -> "Напоминание" to Icons.Default.NotificationsActive
-            item.type == "LIVE_UPDATE" -> "Live Update" to Icons.Default.Timer
-            else -> "Системное" to Icons.Default.Info
+            isRating -> "Рейтинг БРС" to Icons.Rounded.Insights
+            item.type == "CHANGE" -> "Изменение" to Icons.Rounded.SwapHoriz
+            item.type == "REMINDER" -> "Напоминание" to Icons.Rounded.NotificationsActive
+            item.type == "LIVE_UPDATE" -> "Live Update" to Icons.Rounded.Timer
+            else -> "Системное" to Icons.Rounded.Info
         }
     }
 

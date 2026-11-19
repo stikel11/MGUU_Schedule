@@ -7,11 +7,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -63,7 +63,7 @@ fun TodoScreen(
                         haptic.click()
                         onBack()
                     }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Назад")
                     }
                 },
                 scrollBehavior = scrollBehavior,
@@ -118,7 +118,7 @@ fun TodoScreen(
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
-                                Icons.Default.Add,
+                                Icons.Rounded.Add,
                                 contentDescription = "Добавить",
                                 tint = MaterialTheme.colorScheme.onPrimary
                             )
@@ -211,7 +211,7 @@ fun TodoItemRow(
         ) {
             IconButton(onClick = onToggle, modifier = Modifier.size(32.dp)) {
                 Icon(
-                    imageVector = if (task.isCompleted) Icons.Default.CheckCircle else Icons.Default.Check,
+                    imageVector = if (task.isCompleted) Icons.Rounded.CheckCircle else Icons.Rounded.Check,
                     contentDescription = null,
                     tint = if (task.isCompleted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -226,7 +226,7 @@ fun TodoItemRow(
             )
             IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
                 Icon(
-                    imageVector = Icons.Default.Delete,
+                    imageVector = Icons.Rounded.Delete,
                     contentDescription = "Удалить",
                     tint = MaterialTheme.colorScheme.error
                 )

@@ -8,8 +8,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -200,7 +200,7 @@ fun DebugScreen(
                             haptic.lightTick()
                             onBack()
                         }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Назад")
                         }
                     },
                     scrollBehavior = scrollBehavior,
@@ -235,7 +235,7 @@ fun DebugScreen(
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.BugReport, null)
+                                    Icon(Icons.Rounded.BugReport, null)
                                     Spacer(Modifier.width(8.dp))
                                     Text("ОТЧЕТ О ПОСЛЕДНЕМ КРАШЕ", fontWeight = FontWeight.Bold)
                                 }
@@ -245,8 +245,8 @@ fun DebugScreen(
                                         .fillMaxWidth()
                                         .heightIn(max = 200.dp)
                                         .verticalScroll(rememberScrollState()),
-                                    color = Color.Black.copy(alpha = 0.2f),
-                                    shape = RoundedCornerShape(8.dp)
+                                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.12f),
+                                    shape = MaterialTheme.shapes.extraSmall
                                 ) {
                                     Text(
                                         text = crashTrace,
@@ -415,10 +415,10 @@ fun DebugScreen(
                             val allLogs = logs.joinToString("\n") { "[${it.time}] ${it.tag} ${it.level}: ${it.message}" }
                             clipboardManager.setText(AnnotatedString(allLogs))
                         }) {
-                            Icon(Icons.Default.ContentCopy, "Копировать все")
+                            Icon(Icons.Rounded.ContentCopy, "Копировать все")
                         }
                         IconButton(onClick = { AppLogger.clear() }) {
-                            Icon(Icons.Default.Delete, "Очистить")
+                            Icon(Icons.Rounded.Delete, "Очистить")
                         }
                     }
                 }

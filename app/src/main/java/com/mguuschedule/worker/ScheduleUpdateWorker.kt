@@ -11,12 +11,12 @@ import com.google.gson.reflect.TypeToken
 import com.mguuschedule.model.Lesson
 import com.mguuschedule.model.LessonEntity
 import com.mguuschedule.model.toLesson
+import com.mguuschedule.repository.AppDatabase
+import com.mguuschedule.repository.ScheduleRepository
 import com.mguuschedule.util.AppLogger
 import com.mguuschedule.util.NotificationHelper
-import com.mguuschedule.util.ScheduleParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.jsoup.Jsoup
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -55,14 +55,10 @@ class ScheduleUpdateWorker(
         AppLogger.d("WORKER", "Запуск фонового обновления для $groupId")
 
         try {
-            val url = "https://portal.mguu.ru/student/scheduler2.php?groupid=$groupId&startDate=01.09.2026&endDate=30.09.2027"
-            val response = Jsoup.connect(url)
-                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                .timeout(20000)
-                .get()
-            
-            val newLessons = ScheduleParser.parse(response.html())
-            AppLogger.d("WORKER", "Спарсено ${newLessons.size} пар")
+            val db = AppDatabase.getDatabase(applicationContext)
+            val repository = ScheduleRepository(applicationContext, db)
+            val newLessons = repository.fetchRemoteLessons(groupId = groupId)
+            AppLogger.d("WORKER", "Спарсено ${newLessons.size} пар с schedule.mguu.ru")
 
             // Защита от неполных/некорректных ответов сервера
             if (newLessons.isEmpty()) {
@@ -131,7 +127,6 @@ class ScheduleUpdateWorker(
             saveToCache(groupId, newLessons)
             
             // Синхронизируем базу данных, чтобы интерфейс увидел свежее расписание
-            val db = com.mguuschedule.repository.AppDatabase.getDatabase(applicationContext)
             db.scheduleDao().replaceAll(newLessons)
             val nowStr = java.time.LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))
             prefs.edit().putString("last_sync_time", nowStr).apply()

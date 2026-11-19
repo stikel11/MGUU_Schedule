@@ -1,27 +1,65 @@
 package com.mguuschedule.ui.screens
 
-import androidx.compose.animation.*
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.Group
+import androidx.compose.material.icons.rounded.School
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
 import com.mguuschedule.model.EducationLevel
 import com.mguuschedule.model.Group
+import com.mguuschedule.ui.components.ExpressiveLoadingIndicator
 import com.mguuschedule.ui.theme.AppMotionScheme
+import com.mguuschedule.ui.theme.ExpressiveShapes
 import com.mguuschedule.util.rememberHapticFeedback
 
 @Composable
@@ -36,7 +74,7 @@ fun OnboardingScreen(
 
     var searchQuery by remember { mutableStateOf("") }
     val expandedCourses = remember { mutableStateMapOf<String, Boolean>() }
-    
+
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { visible = true }
 
@@ -53,7 +91,6 @@ fun OnboardingScreen(
                 .padding(horizontal = 16.dp)
                 .padding(top = topInset + 12.dp)
         ) {
-            
             AnimatedVisibility(
                 visible = visible,
                 enter = fadeIn(animationSpec = AppMotionScheme.defaultEffectsSpec()) +
@@ -64,24 +101,33 @@ fun OnboardingScreen(
                         modifier = Modifier.padding(top = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            Icons.Default.School,
-                            contentDescription = null,
-                            modifier = Modifier.size(48.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
+                        Surface(
+                            shape = ExpressiveShapes.InnerCard,
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier.size(52.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Rounded.School,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(28.dp),
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
                         Spacer(modifier = Modifier.width(16.dp))
                         Text(
                             text = "Привет!",
                             style = MaterialTheme.typography.headlineLarge,
-                            fontWeight = FontWeight.ExtraBold
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
-                    
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
                     Text(
-                        text = "Выбери свою группу, чтобы увидеть расписание. Это можно будет изменить позже в профиле.",
+                        text = "Выбери свою группу, чтобы увидеть расписание. Это можно будет изменить позже в настройках.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -93,8 +139,20 @@ fun OnboardingScreen(
                         onValueChange = { searchQuery = it },
                         modifier = Modifier.fillMaxWidth(),
                         placeholder = { Text("Поиск группы...") },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                        shape = RoundedCornerShape(12.dp),
+                        leadingIcon = {
+                            Icon(
+                                Icons.Rounded.Search,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        },
+                        shape = ExpressiveShapes.SearchBar,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = Color.Transparent
+                        ),
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodyLarge
                     )
@@ -128,7 +186,10 @@ fun OnboardingContent(
     when (groupsUiState) {
         is GroupsUiState.Loading -> {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+                ExpressiveLoadingIndicator(
+                    modifier = Modifier.size(40.dp),
+                    color = MaterialTheme.colorScheme.primary
+                )
             }
         }
         is GroupsUiState.Error -> {
@@ -138,16 +199,16 @@ fun OnboardingContent(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Icon(
-                    Icons.Default.ErrorOutline, 
-                    contentDescription = null, 
+                    Icons.Rounded.ErrorOutline,
+                    contentDescription = null,
                     modifier = Modifier.size(64.dp),
                     tint = MaterialTheme.colorScheme.error
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = "Не удалось загрузить список", 
+                    text = "Не удалось загрузить список",
                     style = MaterialTheme.typography.titleMedium,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    textAlign = TextAlign.Center
                 )
                 Spacer(modifier = Modifier.height(24.dp))
                 Button(onClick = {
@@ -197,30 +258,39 @@ fun OnboardingContent(
 
                 if (filteredGroups.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("Ничего не найдено", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            "Ничего не найдено",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 } else {
                     val groupedGroups = remember(filteredGroups) {
                         filteredGroups.groupBy { it.course }
                     }
-                    
+
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        contentPadding = PaddingValues(bottom = 32.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
+                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                        contentPadding = PaddingValues(
+                            bottom = 32.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                        )
                     ) {
                         groupedGroups.forEach { (course, groups) ->
                             val isExpanded = expandedCourses[course] ?: (searchQuery.isNotEmpty())
-                            
+
                             item(key = "course_$course", contentType = "course_header") {
                                 Surface(
                                     onClick = {
                                         haptic.lightTick()
                                         expandedCourses[course] = !isExpanded
                                     },
-                                    color = if (isExpanded) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-                                    shape = RoundedCornerShape(16.dp),
-                                    modifier = Modifier.fillMaxWidth()
+                                    color = if (isExpanded) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer,
+                                    contentColor = if (isExpanded) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface,
+                                    shape = ExpressiveShapes.InnerCard,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 8.dp, bottom = 4.dp)
                                 ) {
                                     Row(
                                         modifier = Modifier
@@ -235,7 +305,7 @@ fun OnboardingContent(
                                             fontWeight = FontWeight.Bold
                                         )
                                         Icon(
-                                            if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                            if (isExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
                                             contentDescription = null
                                         )
                                     }
@@ -243,38 +313,35 @@ fun OnboardingContent(
                             }
 
                             if (isExpanded) {
-                                items(
+                                itemsIndexed(
                                     items = groups,
-                                    key = { it.id },
-                                    contentType = { "group" }
-                                ) { group ->
-                                    Card(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable {
-                                                haptic.success()
-                                                onGroupSelected(group)
-                                            },
-                                        shape = RoundedCornerShape(16.dp),
-                                        colors = CardDefaults.cardColors(
-                                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-                                        )
+                                    key = { _, group -> group.id },
+                                    contentType = { _, _ -> "group" }
+                                ) { index, group ->
+                                    Surface(
+                                        onClick = {
+                                            haptic.success()
+                                            onGroupSelected(group)
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = ExpressiveShapes.segmentedItem(index, groups.size),
+                                        color = MaterialTheme.colorScheme.surfaceContainerLow
                                     ) {
                                         ListItem(
-                                            headlineContent = { 
+                                            headlineContent = {
                                                 Text(
-                                                    group.name, 
+                                                    group.name,
                                                     style = MaterialTheme.typography.bodyLarge,
                                                     fontWeight = FontWeight.Medium
-                                                ) 
+                                                )
                                             },
-                                            leadingContent = { 
+                                            leadingContent = {
                                                 Icon(
-                                                    Icons.Default.Group, 
-                                                    contentDescription = null, 
-                                                    modifier = Modifier.size(24.dp),
+                                                    Icons.Rounded.Group,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(22.dp),
                                                     tint = MaterialTheme.colorScheme.primary
-                                                ) 
+                                                )
                                             },
                                             colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                                         )

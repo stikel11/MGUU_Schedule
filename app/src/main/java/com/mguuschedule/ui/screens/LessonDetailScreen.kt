@@ -13,9 +13,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Notes
-import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.ui.text.style.TextDecoration
 import java.time.format.TextStyle
@@ -299,7 +298,7 @@ fun FullscreenFloorMapDialog(
                 )
                 IconButton(onClick = onDismiss) {
                     Icon(
-                        imageVector = Icons.Default.Close,
+                        imageVector = Icons.Rounded.Close,
                         contentDescription = "Закрыть",
                         tint = Color.White
                     )
@@ -417,7 +416,7 @@ fun FullscreenImagePreviewDialog(
                 )
                 IconButton(onClick = onDismiss) {
                     Icon(
-                        imageVector = Icons.Default.Close,
+                        imageVector = Icons.Rounded.Close,
                         contentDescription = "Закрыть",
                         tint = Color.White
                     )
@@ -475,9 +474,9 @@ fun FullscreenImagePreviewDialog(
                     )
                 }
             } else {
-                CircularProgressIndicator(
+                com.mguuschedule.ui.components.ExpressiveLoadingIndicator(
                     color = Color.White,
-                    modifier = Modifier.align(Alignment.Center)
+                    modifier = Modifier.size(36.dp).align(Alignment.Center)
                 )
             }
             }
@@ -493,7 +492,7 @@ fun MaterialItemRow(
 ) {
     val isImage = remember(item) { isImageMaterial(item) }
     val thumbnailBitmap = if (isImage) rememberImageThumbnail(item.uriOrUrl, targetSizePx = 160) else null
-    val tintedBg = androidx.compose.ui.graphics.lerp(MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.primary, 0.07f)
+    val tintedBg = MaterialTheme.colorScheme.surfaceContainerHigh
 
     val metaText = remember(item) {
         if (item.type == "URL") {
@@ -507,7 +506,7 @@ fun MaterialItemRow(
 
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(18.dp),
+        shape = com.mguuschedule.ui.theme.ExpressiveShapes.InnerCard,
         color = tintedBg,
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -602,15 +601,15 @@ fun TaskItemRow(
         else task.deadlineEpoch < System.currentTimeMillis()
     }
 
-    val tintedBg = if (isOverdue) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
-    else androidx.compose.ui.graphics.lerp(MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.primary, 0.07f)
+    val tintedBg = if (isOverdue) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.45f)
+    else MaterialTheme.colorScheme.surfaceContainerHigh
 
     val formattedTitle = remember(task.title) {
         task.title.replaceFirstChar { it.uppercase() }
     }
 
     Surface(
-        shape = RoundedCornerShape(18.dp),
+        shape = com.mguuschedule.ui.theme.ExpressiveShapes.InnerCard,
         color = tintedBg,
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -787,7 +786,7 @@ fun LessonDetailScreen(
                         haptic.click()
                         onBack()
                     }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Назад")
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
@@ -927,7 +926,7 @@ fun LessonDetailScreen(
                             modifier = Modifier.padding(bottom = 12.dp)
                         ) {
                             Icon(
-                                Icons.Default.TaskAlt,
+                                Icons.Rounded.TaskAlt,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(20.dp)
@@ -1039,7 +1038,7 @@ fun LessonDetailScreen(
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
-                                    imageVector = if (noteEntity?.text.isNullOrBlank()) Icons.Default.Add else Icons.Default.Edit,
+                                    imageVector = if (noteEntity?.text.isNullOrBlank()) Icons.Rounded.Add else Icons.Rounded.Edit,
                                     contentDescription = "Редактировать заметку",
                                     modifier = Modifier.size(18.dp),
                                     tint = MaterialTheme.colorScheme.primary
@@ -1048,11 +1047,7 @@ fun LessonDetailScreen(
                         }
                     }
 
-                    val tintedBg = androidx.compose.ui.graphics.lerp(
-                        MaterialTheme.colorScheme.surface,
-                        MaterialTheme.colorScheme.primary,
-                        0.07f
-                    )
+                    val tintedBg = MaterialTheme.colorScheme.surfaceContainerHigh
 
                     Spacer(modifier = Modifier.height(10.dp))
 
@@ -1061,7 +1056,7 @@ fun LessonDetailScreen(
                             haptic.lightTick()
                             showNoteDialog = true
                         },
-                        shape = RoundedCornerShape(18.dp),
+                        shape = com.mguuschedule.ui.theme.ExpressiveShapes.InnerCard,
                         color = tintedBg,
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -1133,7 +1128,7 @@ fun LessonDetailScreen(
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
-                                    Icons.Default.Add,
+                                    Icons.Rounded.Add,
                                     contentDescription = "Добавить задачу",
                                     modifier = Modifier.size(20.dp),
                                     tint = MaterialTheme.colorScheme.primary
@@ -1362,7 +1357,7 @@ fun LessonDetailScreen(
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
-                                        imageVector = Icons.Default.ZoomIn,
+                                        imageVector = Icons.Rounded.ZoomIn,
                                         contentDescription = "Увеличить схему",
                                         tint = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.size(18.dp)
@@ -1431,7 +1426,7 @@ fun LessonDetailScreen(
                     trailingIcon = {
                         if (textValue.isNotEmpty()) {
                             IconButton(onClick = { textValue = "" }) {
-                                Icon(Icons.Default.Close, contentDescription = "Очистить")
+                                Icon(Icons.Rounded.Close, contentDescription = "Очистить")
                             }
                         }
                     },
@@ -1558,7 +1553,7 @@ fun LessonDetailScreen(
                             showDatePicker = true
                         },
                         label = { Text(customLabel) },
-                        leadingIcon = { Icon(Icons.Default.CalendarToday, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                        leadingIcon = { Icon(Icons.Rounded.CalendarToday, contentDescription = null, modifier = Modifier.size(16.dp)) },
                         shape = CircleShape
                     )
                 }
@@ -1662,7 +1657,7 @@ fun LessonDetailScreen(
                     trailingIcon = {
                         if (urlValue.isNotEmpty()) {
                             IconButton(onClick = { urlValue = "" }) {
-                                Icon(Icons.Default.Close, contentDescription = "Очистить")
+                                Icon(Icons.Rounded.Close, contentDescription = "Очистить")
                             }
                         }
                     },
@@ -1681,7 +1676,7 @@ fun LessonDetailScreen(
                     label = { Text("Вставить из буфера") },
                     leadingIcon = {
                         Icon(
-                            imageVector = Icons.Default.ContentPaste,
+                            imageVector = Icons.Rounded.ContentPaste,
                             contentDescription = null,
                             modifier = Modifier.size(16.dp)
                         )
